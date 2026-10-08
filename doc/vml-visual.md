@@ -88,6 +88,10 @@ dimensions are measured by ui2. Text height is remeasured at its allocated width
 With wrapping, an omitted cross-axis dimension includes every wrapped line: a Row
 measures its height and a Column measures its width, including padding and line gaps.
 A positive inherited dimension remains the offered size for nested containers.
+An unconstrained main axis uses the natural dimension that the returned frame will have
+when measuring wrapping. Explicit dimensions and width-pass allocations retain zero.
+A padded Grid measures child heights at its chosen natural, inherited or allocated width;
+invalid explicit dimensions still produce ui2 layout errors.
 
 Children can read an earlier sibling's geometry and typed `computed` properties,
 including ids declared in its descendants. These references are resolved in declaration
@@ -136,7 +140,8 @@ V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -d ui2_custom_rendering run
 
 The fixtures compare styles and geometry with ui2's public API and runtime conversion,
 check independent layout coordinates and exercise typed actions and UTF-8 bindings.
-Focused regression fixtures cover vertical wrapping, nested sibling scopes, generated
+Focused regression fixtures cover unoffered Row/Column wrapping, padded Grid axes,
+explicit zero dimensions, nested sibling scopes, generated
 source growth and property-evaluation counts at increasing layout depths. Renderer-profile
 classification tests exercise target preferences without executing foreign platforms.
 `TextInput` is the current input API; choose `multiline: false` for a single-line field.

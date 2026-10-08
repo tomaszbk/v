@@ -33,6 +33,13 @@ fn vml_measured_axis(placement VmlPlacement, offered string, measured string) st
 	}
 }
 
+// Select the same dimension for measurement allocation and the returned frame.
+// A width pass is allocated even at zero; explicit properties also keep zero.
+fn vml_layout_measured_axis(placement VmlPlacement, properties map[string]string, input string, declared_frame string, axis string, measured string) string {
+	if placement == .width_preferred && axis == 'width' { return input + '.width' }
+	return vml_prop(properties, axis, vml_measured_axis(placement, declared_frame + '.' + axis, measured))
+}
+
 fn vml_visual_base_property(name string) string {
 	for prefix in ['hover_', 'focus_', 'pressed_', 'disabled_'] {
 		if name.starts_with(prefix) {
@@ -608,7 +615,8 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	first := 'vml_first_frames_${suffix}'
 	if grid && preferred_mode {
 		c.out.writeln('\tvml_grid_natural_${suffix} := ui2.grid_preferred_size(${initial}, ${items}.map(it.frame)) or { panic(err) }')
-		c.out.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${probe}.width, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
+		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', 'vml_grid_natural_${suffix}.width')
+		c.out.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${width}, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
 	} else {
 		c.out.writeln('\t${first} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(${initial}${if grid {
 			', ' + items + '.len'
@@ -657,25 +665,25 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 			'vml_preferred_height_' + suffix
 		}
 		if !grid {
+			width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', preferred_width)
+			height := vml_layout_measured_axis(placement, properties, input, declared_frame, 'height', preferred_height)
 			c.out.writeln('\tmut ${preferred_width} := ${preferred}.width')
 			c.out.writeln('\tmut ${preferred_height} := ${preferred}.height')
 			c.out.writeln('\tif ${measured}.wrap && ${measured}.orientation == .horizontal {')
-			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, ${probe}.width, 0)}) or { panic(err) }')
+			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, ${width}, 0)}) or { panic(err) }')
 			c.out.writeln('\t\t${preferred_height} = ${measured}.padding.top')
 			c.out.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.y + child_frame.height > ${preferred_height} { ${preferred_height} = child_frame.y + child_frame.height } }')
 			c.out.writeln('\t\t${preferred_height} += ${measured}.padding.bottom')
 			c.out.writeln('\t} else if ${measured}.wrap && ${measured}.orientation == .vertical {')
-			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, 0, ${probe}.height)}) or { panic(err) }')
+			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, 0, ${height})}) or { panic(err) }')
 			c.out.writeln('\t\t${preferred_width} = ${measured}.padding.left')
 			c.out.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.x + child_frame.width > ${preferred_width} { ${preferred_width} = child_frame.x + child_frame.width } }')
 			c.out.writeln('\t\t${preferred_width} += ${measured}.padding.right')
 			c.out.writeln('\t}')
 		}
-		c.out.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${if placement == .width_preferred {
-			input + '.width'
-		} else {
-			vml_prop(properties, 'width', vml_measured_axis(placement, declared_frame + '.width', preferred_width))
-		}}, ${vml_prop(properties, 'height', vml_measured_axis(placement, declared_frame + '.height', preferred_height))})')
+		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', preferred_width)
+		height := vml_layout_measured_axis(placement, properties, input, declared_frame, 'height', preferred_height)
+		c.out.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${width}, ${height})')
 	}
 	frames := 'vml_frames_${suffix}'
 	c.out.writeln('\t${frames} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(ui2.${if grid {

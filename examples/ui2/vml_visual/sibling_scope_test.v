@@ -806,3 +806,193 @@ fn main() {
     assert fresh.children[0].children[1].key == input.key
 }')
 }
+
+fn test_auto_grid_natural_padding_and_following_descendant_refs() {
+	run_bounded_layout_fixture('auto_grid_natural', 'Row {
+    width: 300 height: 100 align_items: .start
+    View { id: shell
+        Grid { id: cells columns: 2 padding: 10
+            Label { id: cell width: 20 height: 20 }
+        }
+    }
+    Label { width: cells.width height: shell.height font_size: cell.width }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    shell := tree.children[0]
+    grid := shell.children[0]
+    assert shell.frame == ui2.rect(0, 0, 60, 40)
+    assert grid.frame == ui2.rect(0, 0, 60, 40)
+    assert grid.children[0].frame == ui2.rect(10, 10, 20, 20)
+    assert tree.children[1].frame == ui2.rect(60, 0, 60, 40)
+    assert tree.children[1].text_style.size == 20
+    println("auto padded Grid natural axes and descendant references PASS")
+}')
+}
+
+fn test_auto_grid_constraint_axes_fractional_tracks_and_width_remeasurement() {
+	run_bounded_layout_fixture('auto_grid_constraints', 'Absolute {
+    width: 300 height: 300
+    View { width: 100 height: 60
+        Grid { id: inherited columns: 2 padding: 1.25 spacing_x: 2.5
+            Label { width: 20.5 height: 10 }
+        }
+    }
+    View {
+        Grid { width: 80 height: 30 columns: 2 padding: 1.25 spacing_x: 2.5
+            Label { width: 20.5 height: 10 }
+        }
+    }
+    Row { width: 100 height: 60 align_items: .start
+        Grid { columns: 2 padding: 1.25 spacing_x: 2.5 flex_grow: 1
+            Label { width: 20.5 height: 10 }
+        }
+    }
+    Row { width: 100 height: 200 align_items: .start
+        Grid { columns: 2 padding: 5 flex_grow: 1
+            Label { text: "WW WW WW WW WW WW" lines: 10 }
+        }
+    }
+    Label { x: inherited.width width: inherited.height height: 20 }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    inherited := tree.children[0].children[0]
+    assert inherited.frame == ui2.rect(0, 0, 100, 60)
+    assert inherited.children[0].frame == ui2.rect(1.25, 1.25, 47.5, 57.5)
+    explicit := tree.children[1].children[0]
+    assert tree.children[1].frame == ui2.rect(0, 0, 80, 30)
+    assert explicit.frame == ui2.rect(0, 0, 80, 30)
+    assert explicit.children[0].frame == ui2.rect(1.25, 1.25, 37.5, 27.5)
+    allocated := tree.children[2].children[0]
+    assert allocated.frame == ui2.rect(0, 0, 100, 12.5)
+    assert allocated.children[0].frame == ui2.rect(1.25, 1.25, 47.5, 10)
+    size := ui2.measure_layout_text("WW WW WW WW WW WW", ui2.TextStyle{lines: 10}, 45) or { panic(err) }
+    text_grid := tree.children[3].children[0]
+    assert text_grid.frame == ui2.rect(0, 0, 100, size.height + 10)
+    assert text_grid.children[0].frame == ui2.rect(5, 5, 45, size.height)
+    assert tree.children[4].frame == ui2.rect(100, 0, 60, 20)
+    println("padded Grid inherited, explicit, allocated and fractional constraints PASS")
+}')
+}
+
+fn test_auto_wrap_unoffered_main_axes_and_following_sibling_refs() {
+	for tag, expected in {
+		'Row':    '65, 20'
+		'Column': '30, 45'
+	} {
+		run_bounded_layout_fixture('auto_wrap_${tag}', 'Absolute {
+    View { id: shell
+        ${tag} { id: flow wrap: true gap: 5 align_items: .start
+            Label { id: first width: 30 height: 20 }
+            Label { width: first.width height: first.height }
+        }
+    }
+    Label { x: flow.width y: shell.height width: shell.width height: flow.height }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    shell := tree.children[0]
+    flow := shell.children[0]
+    assert shell.frame == ui2.rect(0, 0, ${expected})
+    assert flow.frame == shell.frame
+    assert flow.children[0].frame == ui2.rect(0, 0, 30, 20)
+    assert flow.children[1].frame == ${if tag == 'Row' { 'ui2.rect(35, 0, 30, 20)' } else { 'ui2.rect(0, 25, 30, 20)' }}
+    assert tree.children[1].frame == ui2.rect(flow.frame.width, shell.frame.height, shell.frame.width, flow.frame.height)
+    println("auto ${tag} chosen main axis and following references PASS")
+}')
+	}
+}
+
+fn test_auto_wrap_fractional_padding_gaps_and_explicit_constraints() {
+	run_bounded_layout_fixture('auto_wrap_fractional', 'Absolute {
+    View { Row { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
+        padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
+        Label { width: 30.5 height: 21.25 }
+        Label { width: 30.5 height: 21.25 }
+    } }
+    View { Column { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
+        padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
+        Label { width: 30.5 height: 21.25 }
+        Label { width: 30.5 height: 21.25 }
+    } }
+    View { width: 36.25
+        Row { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
+            padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
+            Label { width: 30.5 height: 21.25 }
+            Label { width: 30.5 height: 21.25 }
+        }
+    }
+    View { height: 25.25
+        Column { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
+            padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
+            Label { width: 30.5 height: 21.25 }
+            Label { width: 30.5 height: 21.25 }
+        }
+    }
+    View { Row { width: 30 height: 70 wrap: true gap: 5 align_items: .start
+        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
+    } }
+    View { Column { width: 70 height: 20 wrap: true gap: 5 align_items: .start
+        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
+    } }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    assert tree.children[0].frame == ui2.rect(0, 0, 71, 25.25)
+    assert tree.children[0].children[0].children.map(it.frame) == [ui2.rect(2.5, 1.5, 30.5, 21.25), ui2.rect(37.25, 1.5, 30.5, 21.25)]
+    assert tree.children[1].frame == ui2.rect(0, 0, 36.25, 50.75)
+    assert tree.children[1].children[0].children.map(it.frame) == [ui2.rect(2.5, 1.5, 30.5, 21.25), ui2.rect(2.5, 27, 30.5, 21.25)]
+    assert tree.children[2].frame == ui2.rect(0, 0, 36.25, 53.25)
+    assert tree.children[2].children[0].children[1].frame == ui2.rect(2.5, 29.5, 30.5, 21.25)
+    assert tree.children[3].frame == ui2.rect(0, 0, 73.5, 25.25)
+    assert tree.children[3].children[0].children[1].frame == ui2.rect(39.75, 1.5, 30.5, 21.25)
+    assert tree.children[4].frame == ui2.rect(0, 0, 30, 70)
+    assert tree.children[5].frame == ui2.rect(0, 0, 70, 20)
+    println("auto wrapping fractional natural and fixed dimensions PASS")
+}')
+}
+
+fn test_auto_wrap_and_grid_explicit_and_allocated_zero_are_not_natural_axes() {
+	run_bounded_layout_fixture('auto_axes_zero', 'Absolute {
+    View { Row { id: row width: 0 wrap: true gap: 5 align_items: .start
+        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
+    } }
+    View { Column { id: column height: 0 wrap: true gap: 5 align_items: .start
+        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
+    } }
+    Row { width: 0 height: 50 align_items: .start
+        Row { wrap: true gap: 5 align_items: .start
+            Label { width: 30 height: 20 } Label { width: 30 height: 20 }
+        }
+    }
+    View { Grid { width: 0 columns: 2 Label { width: 20 height: 20 } } }
+    Row { width: 0 height: 50 align_items: .start
+        Grid { columns: 2 Label { width: 20 height: 20 } }
+    }
+    Label { x: row.width width: column.height height: 20 }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    assert tree.children[0].children[0].frame == ui2.rect(0, 0, 0, 45)
+    assert tree.children[1].children[0].frame == ui2.rect(0, 0, 65, 0)
+    assert tree.children[2].children[0].frame == ui2.rect(0, 0, 0, 45)
+    assert tree.children[3].children[0].frame == ui2.rect(0, 0, 0, 20)
+    assert tree.children[4].children[0].frame == ui2.rect(0, 0, 0, 20)
+    assert tree.children[5].frame == ui2.rect(0, 0, 0, 20)
+    println("explicit and width-pass allocated zero dimensions PASS")
+}')
+	root := sibling_fixture_root('auto_grid_invalid_zero')
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute { View { Grid { width: 0 columns: 2 padding: 10 Label { width: 20 height: 20 } } } }')!
+	os.write_file(os.join_path(root, 'main.v'), 'import ui2\nfn main() { _ = $vml("view.vml") }')!
+	build := compile_sibling_fixture(root)
+	assert build.exit_code == 0, build.output
+	result := os.exec([os.join_path(root, 'app')])
+	os.write_file(os.join_path(root, 'runtime.log'), result.output)!
+	os.write_file(os.join_path(root, 'runtime-exit.txt'), result.exit_code.str())!
+	assert result.exit_code != 0
+	assert result.output.contains('grid dimensions must be finite and non-negative'), result.output
+}
