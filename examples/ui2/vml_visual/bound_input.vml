@@ -1,0 +1,8 @@
+TextInput {
+    width: 180
+    height: 40
+    multiline: false
+    password: true
+    keyboard: 1
+    bind.text: app.name
+}

@@ -33,16 +33,18 @@ enum VmlTokenKind {
 }
 
 struct VmlToken {
-	kind VmlTokenKind
-	text string
-	line int
+	kind   VmlTokenKind
+	text   string
+	line   int
+	column int
 }
 
 struct VmlLexer {
 	source string
 mut:
-	pos  int
-	line int = 1
+	pos        int
+	line       int = 1
+	line_start int
 }
 
 fn (mut l VmlLexer) advance() u8 {
@@ -50,6 +52,7 @@ fn (mut l VmlLexer) advance() u8 {
 	l.pos++
 	if c == `\n` {
 		l.line++
+		l.line_start = l.pos
 	}
 	return c
 }
@@ -79,7 +82,7 @@ fn (mut l VmlLexer) read_name() VmlToken {
 	for l.pos < l.source.len && vml_is_name_char(l.source[l.pos]) {
 		l.pos++
 	}
-	return VmlToken{.name, l.source[start..l.pos], line}
+	return VmlToken{ kind: .name, text: l.source[start..l.pos], line: line, column: start - l.line_start + 1 }
 }
 
 fn (mut l VmlLexer) read_number() VmlToken {
@@ -97,11 +100,12 @@ fn (mut l VmlLexer) read_number() VmlToken {
 			break
 		}
 	}
-	return VmlToken{.number, l.source[start..l.pos], line}
+	return VmlToken{ kind: .number, text: l.source[start..l.pos], line: line, column: start - l.line_start + 1 }
 }
 
 fn (mut l VmlLexer) read_string() !VmlToken {
 	line := l.line
+	column := l.pos - l.line_start + 1
 	quote := l.advance()
 	mut value := []u8{}
 	for l.pos < l.source.len {
@@ -117,7 +121,7 @@ fn (mut l VmlLexer) read_string() !VmlToken {
 				else { value << next }
 			}
 		} else if c == quote {
-			return VmlToken{.string_, value.bytestr(), line}
+			return VmlToken{ kind: .string_, text: value.bytestr(), line: line, column: column }
 		} else {
 			value << c
 		}
@@ -131,30 +135,31 @@ fn tokenize_vml(source string) ![]VmlToken {
 	for {
 		lexer.skip_space()
 		if lexer.pos >= source.len {
-			tokens << VmlToken{.eof, '', lexer.line}
+			tokens << VmlToken{ kind: .eof, line: lexer.line, column: lexer.pos - lexer.line_start + 1 }
 			return tokens
 		}
 		line := lexer.line
+		column := lexer.pos - lexer.line_start + 1
 		c := source[lexer.pos]
 		match c {
-			`{` { tokens << VmlToken{.lbrace, '{', line} }
-			`}` { tokens << VmlToken{.rbrace, '}', line} }
-			`:` { tokens << VmlToken{.colon, ':', line} }
-			`(` { tokens << VmlToken{.lpar, '(', line} }
-			`)` { tokens << VmlToken{.rpar, ')', line} }
-			`,` { tokens << VmlToken{.comma, ',', line} }
-			`?` { tokens << VmlToken{.question, '?', line} }
-			`+` { tokens << VmlToken{.plus, '+', line} }
-			`-` { tokens << VmlToken{.minus, '-', line} }
-			`*` { tokens << VmlToken{.mul, '*', line} }
-			`/` { tokens << VmlToken{.div, '/', line} }
-			`%` { tokens << VmlToken{.mod, '%', line} }
+			`{` { tokens << VmlToken{ kind: .lbrace, text: '{', line: line, column: column } }
+			`}` { tokens << VmlToken{ kind: .rbrace, text: '}', line: line, column: column } }
+			`:` { tokens << VmlToken{ kind: .colon, text: ':', line: line, column: column } }
+			`(` { tokens << VmlToken{ kind: .lpar, text: '(', line: line, column: column } }
+			`)` { tokens << VmlToken{ kind: .rpar, text: ')', line: line, column: column } }
+			`,` { tokens << VmlToken{ kind: .comma, text: ',', line: line, column: column } }
+			`?` { tokens << VmlToken{ kind: .question, text: '?', line: line, column: column } }
+			`+` { tokens << VmlToken{ kind: .plus, text: '+', line: line, column: column } }
+			`-` { tokens << VmlToken{ kind: .minus, text: '-', line: line, column: column } }
+			`*` { tokens << VmlToken{ kind: .mul, text: '*', line: line, column: column } }
+			`/` { tokens << VmlToken{ kind: .div, text: '/', line: line, column: column } }
+			`%` { tokens << VmlToken{ kind: .mod, text: '%', line: line, column: column } }
 			`!` {
 				lexer.pos++
 				if lexer.pos < source.len && source[lexer.pos] == `=` {
-					tokens << VmlToken{.ne, '!=', line}
+					tokens << VmlToken{ kind: .ne, text: '!=', line: line, column: column }
 				} else {
-					tokens << VmlToken{.not, '!', line}
+					tokens << VmlToken{ kind: .not, text: '!', line: line, column: column }
 					continue
 				}
 			}
@@ -163,23 +168,23 @@ fn tokenize_vml(source string) ![]VmlToken {
 				if lexer.pos >= source.len || source[lexer.pos] != `=` {
 					return error('expected `==` at line ${line}')
 				}
-				tokens << VmlToken{.eq, '==', line}
+				tokens << VmlToken{ kind: .eq, text: '==', line: line, column: column }
 			}
 			`<` {
 				lexer.pos++
 				if lexer.pos < source.len && source[lexer.pos] == `=` {
-					tokens << VmlToken{.le, '<=', line}
+					tokens << VmlToken{ kind: .le, text: '<=', line: line, column: column }
 				} else {
-					tokens << VmlToken{.lt, '<', line}
+					tokens << VmlToken{ kind: .lt, text: '<', line: line, column: column }
 					continue
 				}
 			}
 			`>` {
 				lexer.pos++
 				if lexer.pos < source.len && source[lexer.pos] == `=` {
-					tokens << VmlToken{.ge, '>=', line}
+					tokens << VmlToken{ kind: .ge, text: '>=', line: line, column: column }
 				} else {
-					tokens << VmlToken{.gt, '>', line}
+					tokens << VmlToken{ kind: .gt, text: '>', line: line, column: column }
 					continue
 				}
 			}
@@ -188,14 +193,14 @@ fn tokenize_vml(source string) ![]VmlToken {
 				if lexer.pos >= source.len || source[lexer.pos] != `&` {
 					return error('expected `&&` at line ${line}')
 				}
-				tokens << VmlToken{.and, '&&', line}
+				tokens << VmlToken{ kind: .and, text: '&&', line: line, column: column }
 			}
 			`|` {
 				lexer.pos++
 				if lexer.pos >= source.len || source[lexer.pos] != `|` {
 					return error('expected `||` at line ${line}')
 				}
-				tokens << VmlToken{.or, '||', line}
+				tokens << VmlToken{ kind: .or, text: '||', line: line, column: column }
 			}
 			`"`, `'` {
 				tokens << lexer.read_string()!
@@ -252,12 +257,15 @@ struct VmlExpr {
 struct VmlProperty {
 	name          string
 	declared_type string
+	line          int
+	column        int
 	expr          &VmlExpr
 }
 
 struct VmlNode {
-	tag  string
-	line int
+	tag    string
+	line   int
+	column int
 mut:
 	id         string
 	properties []VmlProperty
@@ -271,7 +279,7 @@ mut:
 }
 
 fn (p &VmlSourceParser) at() VmlToken {
-	return if p.pos < p.tokens.len { p.tokens[p.pos] } else { VmlToken{.eof, '', 0} }
+	return if p.pos < p.tokens.len { p.tokens[p.pos] } else { VmlToken{ kind: .eof } }
 }
 
 fn (mut p VmlSourceParser) take(kind VmlTokenKind) !VmlToken {
@@ -286,17 +294,19 @@ fn (mut p VmlSourceParser) take(kind VmlTokenKind) !VmlToken {
 fn (mut p VmlSourceParser) parse_node() !&VmlNode {
 	tag := p.take(.name)!
 	p.take(.lbrace)!
-	mut node := &VmlNode{ tag: tag.text, line: tag.line }
+	mut node := &VmlNode{ tag: tag.text, line: tag.line, column: tag.column }
 	for p.at().kind !in [.rbrace, .eof] {
 		if p.at().kind != .name {
 			return error('unexpected token `${p.at().text}` at line ${p.at().line}')
 		}
 		if p.at().text == 'property' {
+			return error('property has been removed; use computed at line ${p.at().line}, column ${p.at().column}')
+		} else if p.at().text == 'computed' {
 			p.pos++
 			typ := p.take(.name)!
 			name := p.take(.name)!
 			p.take(.colon)!
-			node.properties << VmlProperty{ name: name.text, declared_type: typ.text, expr: p.parse_expression()! }
+			node.properties << VmlProperty{ name: name.text, line: name.line, column: name.column, declared_type: typ.text, expr: p.parse_expression()! }
 		} else if p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .lbrace {
 			node.children << p.parse_node()!
 		} else if p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .colon {
@@ -309,7 +319,7 @@ fn (mut p VmlSourceParser) parse_node() !&VmlNode {
 				}
 				node.id = expr.value
 			}
-			node.properties << VmlProperty{ name: name.text, expr: expr }
+			node.properties << VmlProperty{ name: name.text, line: name.line, column: name.column, expr: expr }
 		} else {
 			return error('unexpected token `${p.at().text}` at line ${p.at().line}')
 		}
@@ -552,6 +562,7 @@ fn parse_vml_source(source string) !&VmlNode {
 	mut parser := VmlSourceParser{ tokens: tokens }
 	root := parser.parse_node()!
 	parser.take(.eof)!
+	validate_compiled_vml_visual(root, '')!
 	validate_compiled_vml_node(root)!
 	return root
 }
@@ -649,8 +660,16 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		return p.add_val_id(5, '')
 	}
 	root := parse_vml_source(source) or {
-		p.record_diagnostic('${path}: ${err.msg()}', call_start)
+		p.record_vml_diagnostic(path, source, err.msg(), call_start)
 		return p.add_val_id(5, '')
+	}
+	custom := p.prefs.normalized_target_os() in ['linux', 'android']
+		|| 'ui2_custom_rendering' in p.prefs.user_defines || 'ui2_headless' in p.prefs.user_defines
+	if !custom {
+		validate_vml_native_visual(root) or {
+			p.record_vml_diagnostic(path, source, err.msg(), call_start)
+			return p.add_val_id(5, '')
+		}
 	}
 	mut compiler := VmlCompiler{
 		uses_app: vml_node_uses_path(root, 'app')
@@ -660,10 +679,13 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		value: path
 		pos:   p.span_to(call_start)
 	}
-	return p.parse_veb_template_replacement_expr(generated, template, []TemplateSourceLine{}) or {
+	first_node := p.a.nodes.len
+	result := p.parse_veb_template_replacement_expr(generated, template, [TemplateSourceLine{ path: path, line: 1 }]) or {
 		p.record_diagnostic('could not lower VML file `${path}`', call_start)
 		p.add_val_id(5, '')
 	}
+	p.remap_vml_visual_positions(first_node, path, source, generated, compiler.property_positions, template.pos)
+	return result
 }
 
 fn vml_node_uses_path(node &VmlNode, base string) bool {
@@ -720,19 +742,20 @@ mut:
 struct VmlCompiler {
 	uses_app bool
 mut:
-	out strings.Builder
+	out                strings.Builder
+	property_positions map[string]VmlProperty
 }
 
 fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	c.out = strings.new_builder(4096)
-	capture := if c.uses_app { '[app] ' } else { '' }
+	capture := if c.uses_app { '[mut app] ' } else { '' }
 	c.out.writeln('(fn ${capture}() ui2.Element {')
 	c.out.writeln('\tvml_input_0 := ui2.bounds()')
 	scope := VmlScope{
 		ids:     map[string]VmlNamedValue{}
 		special: map[string]string{}
 	}
-	c.compile_node(root, '0', 'vml_input_0', scope, '')
+	c.compile_node(root, '0', 'vml_input_0', scope, '', .normal)
 	c.out.writeln('\treturn vml_element_0')
 	c.out.write_string('}())')
 	return c.out.str()
@@ -755,15 +778,6 @@ fn vml_quote(value string) string {
 
 fn vml_interpolation_text(value string) string {
 	return value.replace('\\', '\\\\').replace("'", "\\'").replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t').replace(r'$', r'\$')
-}
-
-fn vml_stringify(expression string) string {
-	return "'" + r'$' + '{' + expression + "}'"
-}
-
-fn vml_color_call(expression string) string {
-	value := vml_stringify(expression)
-	return "(if typeof(${expression}).name == 'string' { ui2.parse_hex_color(${value}) } else { u32(${value}.u64()) })"
 }
 
 fn vml_numeric_cast(type_name string, expression string) string {
@@ -791,11 +805,12 @@ fn vml_property_use(property VmlProperty) VmlExprUse {
 			else { .raw }
 		}
 	}
+	if use := vml_visual_property_use(property.name) { return use }
 	if property.name in ['x', 'y', 'width', 'height', 'padding', 'spacing', 'corner_radius', 'radius',
 		'rotation', 'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor',
 		'lines', 'pad_left', 'dialog_width', 'dialog_height', 'border_width', 'border_left',
 		'border_top', 'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width',
-		'thumb_size'] {
+		'thumb_size', 'keyboard'] {
 		return .number
 	}
 	if property.name in ['background', 'color', 'background_color', 'border_color', 'value_track_color',
@@ -864,30 +879,24 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 				return vml_quote(expr.value)
 			}
 			return match use {
-				.string_ { vml_quote(expr.value) }
+				.string_ { expr.value }
 				.number { 'f64(${expr.value})' }
 				else { expr.value }
 			}
 		}
 		.path {
-			resolved, known := c.resolve_path(expr.value, scope)
+			resolved, _ := c.resolve_path(expr.value, scope)
 			if use == .color {
 				if expr.value.starts_with('#') && expr.value.len == 7 {
 					return 'u32(0x${expr.value[1..]})'
 				}
-				if !known {
-					return 'u32(0xffffff)'
-				}
-				return vml_color_call(resolved)
+				return 'ui2.TextStyle{color: ${resolved}}.color'
 			}
 			if use == .string_ {
-				if !known {
-					return vml_quote(expr.value)
-				}
-				return vml_stringify(resolved)
+				return resolved
 			}
 			if use == .number {
-				return 'f64(${resolved})'
+				return 'ui2.LayoutSize{width: ${resolved}}.width'
 			}
 			return resolved
 		}
@@ -896,14 +905,14 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 			resolved, _ := c.resolve_path(expr.value, scope)
 			call := '${resolved}(${args})'
 			return match use {
-				.string_ { vml_stringify(call) }
-				.number { 'f64(${call})' }
-				.color { vml_color_call(call) }
+				.string_ { call }
+				.number { 'ui2.LayoutSize{width: ${call}}.width' }
+				.color { 'ui2.TextStyle{color: ${call}}.color' }
 				else { call }
 			}
 		}
 		.unary {
-			operand_use := if use in [.raw, .string_] {
+			operand_use := if use in [.raw, .string_, .color] {
 				VmlExprUse.raw
 			} else if expr.value == '!' {
 				VmlExprUse.bool_
@@ -911,12 +920,12 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 				VmlExprUse.number
 			}
 			result := '(${expr.value}${c.expr(expr.left, scope, operand_use)})'
-			return if use == .string_ { vml_stringify(result) } else { result }
+			return result
 		}
 		.binary {
 			if expr.value in ['&&', '||'] {
 				result := '(${c.expr(expr.left, scope, .bool_)} ${expr.value} ${c.expr(expr.right, scope, .bool_)})'
-				return if use == .string_ { vml_stringify(result) } else { result }
+				return result
 			}
 			if expr.value in ['==', '!=', '<', '<=', '>', '>='] {
 				operand_use := if vml_expr_is_string(expr.left) || vml_expr_is_string(expr.right) {
@@ -925,19 +934,10 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 					VmlExprUse.raw
 				}
 				result := '(${c.expr(expr.left, scope, operand_use)} ${expr.value} ${c.expr(expr.right, scope, operand_use)})'
-				return if use == .string_ { vml_stringify(result) } else { result }
+				return result
 			}
-			if use == .raw {
+			if use in [.raw, .string_, .color] {
 				return '(${c.expr(expr.left, scope, .raw)} ${expr.value} ${c.expr(expr.right, scope, .raw)})'
-			}
-			if expr.value == '+' && use == .string_ {
-				if vml_expr_is_string(expr.left) || vml_expr_is_string(expr.right) {
-					return '(${c.expr(expr.left, scope, .string_)} + ${c.expr(expr.right, scope, .string_)})'
-				}
-				return vml_stringify('(${c.expr(expr.left, scope, .raw)} + ${c.expr(expr.right, scope, .raw)})')
-			}
-			if use == .string_ && expr.value in ['-', '*', '/', '%'] {
-				return vml_stringify('(${c.expr(expr.left, scope, .raw)} ${expr.value} ${c.expr(expr.right, scope, .raw)})')
 			}
 			if expr.value == '%' {
 				return 'f64(int(${c.expr(expr.left, scope, .number)}) % int(${c.expr(expr.right, scope, .number)}))'
@@ -1012,7 +1012,7 @@ fn vml_order_properties_by_dependencies(properties []VmlProperty, node_id string
 	return ordered
 }
 
-fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, incoming VmlScope, default_key string) VmlScope {
+fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
 	suffix := vml_var(path)
 	c.out.writeln('\t_ = ${input}')
 	mut scope := vml_clone_scope(incoming)
@@ -1041,15 +1041,7 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 		}
 		name := 'vml_property_${suffix}_${vml_var(property.name)}'
 		property_use := vml_property_use(property)
-		value := if property.declared_type == 'int' {
-			numeric_value := c.expr(property.expr, scope, .raw)
-			vml_numeric_cast(property.declared_type, numeric_value)
-		} else if property.declared_type == 'f32' {
-			numeric_value := c.expr(property.expr, scope, .number)
-			vml_numeric_cast(property.declared_type, numeric_value)
-		} else {
-			c.expr(property.expr, scope, property_use)
-		}
+		value := c.visual_property_value(node, property, property.expr, scope)
 		if property.declared_type.len == 0 && property_use == .color
 			&& property.expr.kind in [.literal, .path]
 			&& property.expr.value.starts_with('#') && property.expr.value.len == 7 {
@@ -1058,6 +1050,8 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 			continue
 		}
 		c.out.writeln('\t${name} := ${value}')
+		c.property_positions[name] = property
+		c.out.writeln('\t_ = ${name}')
 		properties[property.name] = name
 		if property.declared_type.len == 0 && vml_property_is_geometry(property) {
 			named_props[property.name] = name
@@ -1067,15 +1061,34 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 		}
 	}
 	frame := 'vml_frame_${suffix}'
-	c.out.writeln('\t${frame} := ui2.rect(${vml_prop(properties, 'x', input + '.x')}, ${vml_prop(properties, 'y', input + '.y')}, ${vml_prop(properties, 'width', input + '.width')}, ${vml_prop(properties, 'height', input + '.height')})')
+	if placement == .allocated {
+		c.out.writeln('\t${frame} := ${input}')
+	} else {
+		preferred_mode := placement in [.preferred, .width_preferred]
+		width := if placement == .width_preferred {
+			input + '.width'
+		} else {
+			vml_prop(properties, 'width', if preferred_mode { 'f64(0)' } else { input + '.width' })
+		}
+		height := vml_prop(properties, 'height', if preferred_mode {
+			'f64(0)'
+		} else {
+			input + '.height'
+		})
+		c.out.writeln('\t${frame} := ui2.rect(${vml_prop(properties, 'x', input + '.x')}, ${vml_prop(properties, 'y', input + '.y')}, ${width}, ${height})')
+	}
+	c.out.writeln('\t_ = ${frame}')
 	if node.id.len > 0 {
 		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named_props.clone() }
 	}
 	c.write_action_type_checks(node, suffix, scope)
+	if node.tag in ['Flex', 'Row', 'Column', 'Grid'] {
+		return c.compile_visual_layout(node, path, input, frame, properties, scope, placement, default_key)
+	}
 	children := 'vml_children_${suffix}'
-	container := node.tag in ['Screen', 'View', 'Rectangle', 'Column', 'Row', 'Scroll']
-		|| node.tag !in ['Label', 'Image', 'Button', 'MessageBox', 'Checkbox', 'Dropdown', 'TextArea',
-			'TextField', 'ProgressBar', 'Slider', 'Switch', 'Spinner']
+	container := node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll']
+		|| node.tag !in ['Label', 'Image', 'Button', 'MessageBox', 'Checkbox', 'Dropdown', 'TextInput',
+			'ProgressBar', 'Slider', 'Switch', 'Spinner']
 	visible_children := if container {
 		node.children.filter(it.tag !in ['MenuItem', 'Option'])
 	} else {
@@ -1084,17 +1097,14 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 	if container {
 		c.out.writeln('\tmut ${children} := []ui2.Element{cap: ${visible_children.len}}')
 	}
-	mut cursor := ''
-	if container && node.tag in ['Column', 'Row'] {
-		cursor = 'vml_cursor_${suffix}'
-		c.out.writeln('\tmut ${cursor} := ${vml_prop(properties, 'padding', 'f64(0)')}')
-	}
+	cursor := ''
 	for child_index, child in node.children {
 		child_path := '${path}.${child_index}'
 		if child.tag == 'MenuItem' {
 			c.write_action_type_checks(child, '${vml_var(child_path)}_menu_action', scope)
 			continue
 		}
+		if child.tag == 'Run' { continue }
 		if !container || child.tag == 'Option' {
 			continue
 		}
@@ -1103,15 +1113,39 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 			continue
 		}
 		child_input := 'vml_input_${vml_var(child_path)}'
-		c.out.writeln('\t${child_input} := ${vml_child_input(node.tag, frame, properties, cursor)}')
-		child_scope := c.compile_node(child, child_path, child_input, scope, '')
+		c.out.writeln('\t${child_input} := ${if node.tag == 'ScaledContent' {
+			'ui2.rect(0, 0, ' + vml_prop(properties, 'content_width', 'f64(0)') + ', ' + vml_prop(properties, 'content_height', 'f64(0)') + ')'
+		} else {
+			vml_child_input(node.tag, frame, properties, cursor)
+		}}')
+		child_scope := c.compile_node(child, child_path, child_input, scope, '', if node.tag == 'Absolute' {
+			.preferred
+		} else {
+			.normal
+		})
 		for id, named in child_scope.ids {
 			scope.ids[id] = named
 		}
 		c.out.writeln('\t${children} << vml_element_${vml_var(child_path)}')
-		vml_advance_cursor(mut c.out, node.tag, cursor, child_path, properties)
 	}
-	c.compile_element(node, suffix, frame, children, properties, scope, default_key)
+	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
+		c.prepare_visual_runs(node, suffix, mut properties, scope)
+	}
+	base_suffix := if placement in [.preferred, .width_preferred] {
+		suffix + '_base'
+	} else {
+		suffix
+	}
+	c.compile_element(node, base_suffix, frame, children, properties, scope, default_key)
+	if placement in [.preferred, .width_preferred] {
+		c.out.writeln('\tvml_measured_${suffix} := ui2.measure_layout_element(vml_element_${base_suffix}, ui2.LayoutConstraints{}, ui2.measure_layout_text) or { panic(err) }')
+		c.out.writeln('\t_ = vml_measured_${suffix}')
+		c.out.writeln('\tvml_element_${suffix} := ui2.Element{...vml_element_${base_suffix}, frame: ui2.rect(${frame}.x, ${frame}.y, ${if placement == .width_preferred {
+			input + '.width'
+		} else {
+			vml_prop(properties, 'width', 'vml_measured_' + suffix + '.width')
+		}}, ${vml_prop(properties, 'height', 'vml_measured_' + suffix + '.height')})}')
+	}
 	return scope
 }
 
@@ -1122,7 +1156,7 @@ fn (mut c VmlCompiler) write_action_type_checks(node &VmlNode, suffix string, sc
 		}
 		method_name := property.expr.value.all_after('app.')
 		check_name := 'vml_action_check_${suffix}_${vml_var(property.name)}'
-		arguments := property.expr.args.map(c.expr(it, scope, .raw)).join(', ')
+		action_arguments := property.expr.args.map(c.expr(it, scope, .raw)).join(', ')
 		// The branch is never taken, but V still checks that the method exists and
 		// that its argument has the declared type.
 		c.out.writeln('\tif false {')
@@ -1136,31 +1170,16 @@ fn (mut c VmlCompiler) write_action_type_checks(node &VmlNode, suffix string, sc
 		c.out.writeln('\t\t\t\t}')
 		c.out.writeln('\t\t\t}')
 		c.out.writeln('\t\t}')
-		c.out.writeln('\t\t${check_name}.${method_name}(${arguments})')
+		c.out.writeln('\t\t${check_name}.${method_name}(${action_arguments})')
 		c.out.writeln('\t}')
 	}
 }
 
 fn vml_child_input(tag string, frame string, properties map[string]string, cursor string) string {
-	padding := vml_prop(properties, 'padding', 'f64(0)')
-	return match tag {
-		'Column' {
-			'ui2.rect(${padding}, ${cursor}, ${frame}.width - ${padding} * f64(2), f64(32))'
-		}
-		'Row' {
-			'ui2.rect(${cursor}, ${padding}, f64(80), ${frame}.height - ${padding} * f64(2))'
-		}
-		else { 'ui2.rect(f64(0), f64(0), ${frame}.width, ${frame}.height)' }
-	}
-}
-
-fn vml_advance_cursor(mut out strings.Builder, tag string, cursor string, child_path string, properties map[string]string) {
-	spacing := vml_prop(properties, 'spacing', 'f64(0)')
-	if tag == 'Column' {
-		out.writeln('\t${cursor} += vml_frame_${vml_var(child_path)}.height + ${spacing}')
-	} else if tag == 'Row' {
-		out.writeln('\t${cursor} += vml_frame_${vml_var(child_path)}.width + ${spacing}')
-	}
+	_ = tag
+	_ = properties
+	_ = cursor
+	return 'ui2.rect(f64(0), f64(0), ${frame}.width, ${frame}.height)'
 }
 
 fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame string, parent_tag string, parent_properties map[string]string, cursor string, incoming VmlScope, output string, outer_key string) {
@@ -1200,12 +1219,11 @@ fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame
 		} else {
 			"'" + r'$' + '{' + key_name + '}' + ':${visible_index}' + "'"
 		}
-		child_scope := c.compile_node(child, child_path, child_input, scope, default_key)
+		child_scope := c.compile_node(child, child_path, child_input, scope, default_key, .normal)
 		for id, named in child_scope.ids {
 			scope.ids[id] = named
 		}
 		c.out.writeln('\t\t${output} << vml_element_${vml_var(child_path)}')
-		vml_advance_cursor(mut c.out, parent_tag, cursor, child_path, parent_properties)
 		visible_index++
 	}
 	c.out.writeln('\t}')
@@ -1228,6 +1246,9 @@ fn vml_binding_for_event(node &VmlNode, event_name string) ?VmlProperty {
 		if binding := vml_find_property(node, 'bind.value') {
 			return binding
 		}
+		if binding := vml_find_property(node, 'bind.active') {
+			return binding
+		}
 		return vml_find_property(node, 'bind.text')
 	}
 	if event_name == 'on_tap' {
@@ -1243,66 +1264,49 @@ fn vml_binding_for_event(node &VmlNode, event_name string) ?VmlProperty {
 }
 
 fn (c &VmlCompiler) compiled_event_value(node &VmlNode, event_name string, scope VmlScope, control string) string {
+	_ = control
 	action := vml_find_property(node, event_name)
 	binding := vml_binding_for_event(node, event_name)
-	if action == none && binding == none {
-		return "''"
+	if action == none && binding == none { return 'unsafe { nil }' }
+	mut fields := []string{}
+	if property := binding {
+		fields << 'binding_property: ${vml_quote(property.name.all_after('bind.'))}'
+		fields << 'binding_target: ${vml_quote(vml_expr_text(property.expr))}'
 	}
 	if property := action {
-		if property.expr.kind != .call && binding == none {
-			return c.expr(property.expr, scope, .string_)
-		}
-	}
-	binding_property := if property := binding { property.name.all_after('bind.') } else { '' }
-	binding_target := if property := binding { vml_expr_text(property.expr) } else { '' }
-	mut action_name := ''
-	mut arguments := []string{}
-	if property := action {
-		if property.expr.kind == .call {
-			action_name = property.expr.value.all_after('app.')
-			for argument in property.expr.args {
-				arguments << vml_stringify(c.expr(argument, scope, .raw))
+		fields << 'action_name: ${vml_quote(property.expr.value.all_after('app.'))}'
+		if property.expr.args.len > 0 {
+			argument := property.expr.args[0]
+			if argument.kind == .path && argument.value.starts_with('app.') {
+				fields << 'argument_path: ${vml_quote(argument.value)}'
+			} else {
+				fields << 'arguments: [ui2.CompiledVmlArgument(${c.expr(argument, scope, .raw)})]'
 			}
 		}
 	}
-	if arguments.len == 0 {
-		return 'ui2.compiled_vml_event(${control}, ${vml_quote(binding_property)}, ${vml_quote(binding_target)}, ${vml_quote(action_name)})'
-	}
-	if property := action {
-		argument := property.expr.args[0]
-		if argument.kind == .path && argument.value.starts_with('app.') {
-			return 'ui2.compiled_vml_event_arg_path(${control}, ${vml_quote(binding_property)}, ${vml_quote(binding_target)}, ${vml_quote(action_name)}, ${vml_quote(argument.value)})'
-		}
-	}
-	return 'ui2.compiled_vml_event_arg(${control}, ${vml_quote(binding_property)}, ${vml_quote(binding_target)}, ${vml_quote(action_name)}, ${arguments[0]})'
+	return 'ui2.compiled_vml_callback(mut app, ui2.CompiledVmlCallbackConfig{${fields.join(', ')}})'
 }
 
 fn (c &VmlCompiler) box_style(properties map[string]string) string {
-	border_width := vml_prop(properties, 'border_width', 'f64(0)')
-	return 'ui2.BoxStyle{bg: ${vml_prop(properties, 'background', 'u32(0xffffff)')}, radius: ${vml_value(properties, 'corner_radius', 'radius', 'f64(0)')}, border_color: ${vml_prop(properties, 'border_color', 'u32(0)')}, border_left: ${vml_prop(properties, 'border_left', border_width)}, border_top: ${vml_prop(properties, 'border_top', border_width)}, border_right: ${vml_prop(properties, 'border_right', border_width)}, border_bottom: ${vml_prop(properties, 'border_bottom', border_width)}}'
+	return c.visual_box_style(properties, '', false)
 }
 
 fn (c &VmlCompiler) text_style(properties map[string]string) string {
-	align := vml_prop(properties, 'align', "''")
-	fields := [
-		'color: ${vml_prop(properties, 'color', 'u32(0x111111)')}',
-		'background_color: ${vml_prop(properties, 'background_color', 'u32(0)')}',
-		'size: ${vml_value(properties, 'font_size', 'size', 'f64(15)')}',
-		'font_family: ${vml_prop(properties, 'font_family', "''")}',
-		'bold: ${vml_prop(properties, 'bold', 'false')}',
-		'italic: ${vml_prop(properties, 'italic', 'false')}',
-		'underline: ${vml_prop(properties, 'underline', 'false')}',
-		'strikethrough: ${vml_prop(properties, 'strikethrough', 'false')}',
-		'shadow: ${vml_prop(properties, 'shadow', 'false')}',
-		'outline: ${vml_prop(properties, 'outline', 'false')}',
-		'vertical_align: ${vml_prop(properties, 'vertical_align', "''")}',
-		'link: ${vml_prop(properties, 'link', "''")}',
-		"align: match ${align} { 'center' { .center } 'right' { .right } else { .left } }",
-		'head_indent: ${vml_prop(properties, 'head_indent', 'f64(0)')}',
-		'first_line_indent: ${vml_prop(properties, 'first_line_indent', 'f64(0)')}',
-		'hyphenation_factor: ${vml_prop(properties, 'hyphenation_factor', 'f64(0)')}',
-		'lines: int(${vml_prop(properties, 'lines', 'f64(1)')})',
-	]
+	mut fields := []string{}
+	for name in vml_text_properties {
+		if value := properties[name] {
+			field := match name {
+				'font_size', 'size' { 'size' }
+				else { name }
+			}
+			if name == 'size' && 'font_size' in properties { continue }
+			fields << '${field}: ${if name in ['weight', 'lines'] {
+				'int(' + value + ')'
+			} else {
+				value
+			}}'
+		}
+	}
 	return 'ui2.TextStyle{${fields.join(', ')}}'
 }
 
@@ -1318,7 +1322,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, scope VmlScope) string {
 			} else {
 				"''"
 			}
-			entries << 'ui2.MenuEntry{id: if ${id}.len > 0 { ${id} } else { ${fallback_id} }, title: ${text}}'
+			entries << 'ui2.MenuEntry{id: ${fallback_id}, on_select: ${id}, title: ${text}}'
 		}
 		return vml_array_literal('ui2.MenuEntry', entries)
 	}
@@ -1374,23 +1378,10 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 		"''"
 	}
 	key := vml_prop(properties, 'key', if default_key.len > 0 { default_key } else { "''" })
-	on_tap := c.compiled_event_value(node, 'on_tap', scope, id)
-	on_change := c.compiled_event_value(node, 'on_change', scope, id)
-	on_active := c.compiled_event_value(node, 'on_active', scope, id)
-	on_text := c.compiled_event_value(node, 'on_text', scope, id)
-	on_submit := c.compiled_event_value(node, 'on_submit', scope, id)
-	text_action := if vml_find_property(node, 'on_text') != none { on_text } else { on_change }
-	action := match node.tag {
-		'Button', 'Checkbox' { on_tap }
-		'Dropdown', 'Slider' { 'if ${on_change}.len > 0 { ${on_change} } else { ${on_tap} }' }
-		'Switch' {
-			'if ${on_active}.len > 0 { ${on_active} } else if ${on_change}.len > 0 { ${on_change} } else { ${on_tap} }'
-		}
-		'Spinner' {
-			'if ${on_text}.len > 0 { ${on_text} } else if ${on_change}.len > 0 { ${on_change} } else { ${on_tap} }'
-		}
-		'TextArea', 'TextField' { text_action }
-		else { on_tap }
+	action := c.compiled_node_callback(node, scope)
+	if node.tag == 'TextInput' {
+		c.compile_text_input(node, suffix, frame, properties, scope, id, key, action)
+		return
 	}
 	if node.tag == 'MessageBox' {
 		c.compile_message_box(node, suffix, frame, properties, scope, key, action)
@@ -1419,22 +1410,22 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 		'Button' { 'button' }
 		'Checkbox' { 'checkbox' }
 		'Dropdown' { 'dropdown' }
-		'TextField' { 'text_field' }
-		'TextArea' { 'text_area' }
+		'TextInput' { 'text_area' }
 		'Scroll' { 'scroll' }
 		else { 'view' }
 	}
 	c.out.writeln('\tvml_element_${suffix} := ui2.Element{')
 	c.out.writeln('\t\tkind: .${kind}')
-	if node.tag != 'Screen' {
-		c.out.writeln('\t\tid: ${id}')
-		c.out.writeln('\t\tframe: ${frame}')
-	}
-	c.out.writeln('\t\taction_id: ${action}')
-	c.out.writeln('\t\tsubmit_id: ${on_submit}')
+	c.out.writeln('\t\tid: ${id}')
+	if node.tag != 'Screen' { c.out.writeln('\t\tframe: ${frame}') }
+	c.out.writeln('\t\ton_event: ${action}')
 	c.out.writeln('\t\tkey: ${key}')
-	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextField', 'TextArea'] {
-		c.out.writeln('\t\ttext: ${vml_value(properties, 'text', 'bind.text', "''")}')
+	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput'] {
+		c.out.writeln('\t\ttext: ${if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
+			vml_prop(properties, '@run_text', "''")
+		} else {
+			vml_value(properties, 'text', 'bind.text', "''")
+		}}')
 	}
 	if node.tag == 'Checkbox' {
 		c.out.writeln('\t\tchecked: ${vml_value(properties, 'checked', 'bind.checked', 'false')}')
@@ -1442,31 +1433,26 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 	if node.tag == 'Image' {
 		c.out.writeln('\t\timage_path: ${vml_value(properties, 'source', 'path', "''")}')
 	}
-	if node.tag == 'TextField' {
-		c.out.writeln('\t\tplaceholder: ${vml_prop(properties, 'placeholder', "''")}')
-		keyboard := vml_prop(properties, 'keyboard', "''")
-		c.out.writeln("\t\tkeyboard: if ${keyboard} in ['decimal', 'numeric', 'number'] { ui2.keyboard_decimal } else { ui2.keyboard_default }")
-		c.out.writeln('\t\temit_change: ${vml_prop(properties, 'emit_change', 'false')} || ${text_action}.len > 0')
-	}
-	if node.tag == 'TextArea' {
-		c.out.writeln('\t\treadonly: ${vml_prop(properties, 'editable', 'true')} == false')
-		c.out.writeln('\t\temit_change: ${text_action}.len > 0')
-	}
 	if node.tag == 'Screen' {
-		c.out.writeln('\t\tbox: ui2.BoxStyle{bg: ${vml_prop(properties, 'background', 'u32(0xffffff)')}}')
+		c.out.writeln('\t\tbox: ${c.box_style(properties)}')
 	} else if node.tag == 'Scroll' {
 		c.out.writeln('\t\tbox: ${c.box_style(properties)}')
 		c.out.writeln('\t\tpersistent_scrollbars: ${vml_prop(properties, 'persistent', 'false')}')
 	} else if node.tag == 'Checkbox' {
 		c.out.writeln('\t\tbox: ui2.BoxStyle{transparent: true}')
-	} else if node.tag in ['View', 'Rectangle', 'Column', 'Row', 'Button', 'Dropdown', 'TextField',
-		'TextArea'] || kind == 'view' {
+	} else if node.tag in ['View', 'ScaledContent', 'Button', 'Dropdown', 'Label'] || kind == 'view' {
 		c.out.writeln('\t\tbox: ${c.box_style(properties)}')
 	}
-	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextField', 'TextArea'] {
+	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput'] {
 		c.out.writeln('\t\ttext_style: ${c.text_style(properties)}')
 	}
-	if node.tag in ['Screen', 'View', 'Rectangle', 'Column', 'Row', 'Scroll'] || kind == 'view' {
+	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
+		c.out.writeln('\t\ttext_runs: ${vml_prop(properties, '@runs', '[]ui2.TextRun{}')}')
+	}
+	if node.tag == 'ScaledContent' {
+		c.out.writeln('\t\tcontent_size: ui2.LayoutSize{width: ${vml_prop(properties, 'content_width', 'f64(0)')}, height: ${vml_prop(properties, 'content_height', 'f64(0)')}}')
+	}
+	if node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll'] || kind == 'view' {
 		c.out.writeln('\t\tchildren: ${children}')
 	}
 	role_default := if node.tag == 'Checkbox' { "'checkbox'" } else { "''" }
@@ -1485,6 +1471,8 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 }
 
 fn (mut c VmlCompiler) write_common_fields(node &VmlNode, properties map[string]string, scope VmlScope, role_default string, label_default string, value_default string) {
+	c.out.writeln('\t\tinteraction_style: ${c.interaction_style(properties)}')
+	c.out.writeln('\t\tbutton_behavior: ${vml_prop(properties, 'button_behavior', 'false')}')
 	c.out.writeln('\t\tmenu: ${c.menu_value(node, scope)}')
 	c.out.writeln('\t\tsecure: ${vml_prop(properties, 'secure', 'false')}')
 	c.out.writeln('\t\tclickable: ${vml_prop(properties, 'clickable', 'false')}')
@@ -1501,7 +1489,7 @@ fn (mut c VmlCompiler) write_common_fields(node &VmlNode, properties map[string]
 	c.out.writeln('\t\taccessibility_value: ${vml_prop(properties, 'accessibility_value', value_default)}')
 	c.out.writeln('\t\tnative_style: ${vml_prop(properties, 'native', 'false')}')
 	c.out.writeln('\t\tautocorrect: ${vml_prop(properties, 'autocorrect', 'true')}')
-	c.out.writeln('\t\tpadding_left: ${vml_prop(properties, 'pad_left', 'f64(12)')}')
+	c.out.writeln('\t\tpadding_left: ${vml_value(properties, 'padding_left', 'pad_left', 'f64(12)')}')
 }
 
 fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
@@ -1517,7 +1505,7 @@ fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame 
 	c.out.writeln('\t)')
 	c.out.writeln('\tvml_element_${suffix} := ui2.Element{')
 	c.out.writeln('\t\t...${base}')
-	c.out.writeln('\t\taction_id: ${action}')
+	c.out.writeln('\t\ton_event: ${action}')
 	c.out.writeln('\t\tkey: ${key}')
 	c.write_common_fields(node, properties, scope, '${base}.accessibility_role', '${base}.accessibility_label', '${base}.accessibility_value')
 	c.out.writeln('\t}')
@@ -1527,7 +1515,7 @@ fn (mut c VmlCompiler) compile_slider(node &VmlNode, suffix string, frame string
 	base := 'vml_slider_${suffix}'
 	style := '${base}_style'
 	orientation_value := '${base}_orientation'
-	orientation := vml_prop(properties, 'orientation', "''")
+	orientation := vml_prop(properties, 'orientation', 'ui2.Orientation.horizontal')
 	c.out.writeln('\t${style} := ui2.SliderStyle{')
 	c.out.writeln('\t\ttrack_color: ${vml_prop(properties, 'background', 'u32(0xcbd5e1)')}')
 	c.out.writeln('\t\tvalue_track_color: ${vml_value(properties, 'value_track_color', 'color', 'u32(0x93c5fd)')}')
@@ -1535,10 +1523,10 @@ fn (mut c VmlCompiler) compile_slider(node &VmlNode, suffix string, frame string
 	c.out.writeln('\t\ttrack_width: ${vml_prop(properties, 'track_width', 'f64(4)')}')
 	c.out.writeln('\t\tthumb_size: ${vml_prop(properties, 'thumb_size', 'f64(20)')}')
 	c.out.writeln('\t}')
-	c.out.writeln("\t${orientation_value} := if ${orientation} == 'vertical' { ui2.Orientation.vertical } else { ui2.Orientation.horizontal }")
+	c.out.writeln('\t${orientation_value} := ${orientation}')
 	c.out.writeln('\t${base} := ui2.slider(')
 	c.out.writeln('\t\tid: ${vml_quote(node.id)}')
-	c.out.writeln('\t\taction_id: ${action}')
+	c.out.writeln('\t\ton_event: ${action}')
 	c.out.writeln('\t\tframe: ${frame}')
 	c.out.writeln('\t\tmin: ${vml_prop(properties, 'min', 'f64(0)')}')
 	c.out.writeln('\t\tmax: ${vml_prop(properties, 'max', 'f64(100)')}')
@@ -1568,7 +1556,7 @@ fn (mut c VmlCompiler) compile_switch(node &VmlNode, suffix string, frame string
 	c.out.writeln('\t}')
 	c.out.writeln('\t${base} := ui2.switch_control(')
 	c.out.writeln('\t\tid: ${vml_quote(node.id)}')
-	c.out.writeln('\t\taction_id: ${action}')
+	c.out.writeln('\t\ton_event: ${action}')
 	c.out.writeln('\t\tframe: ${frame}')
 	c.out.writeln('\t\tactive: ${vml_value(properties, 'active', 'bind.active', 'false')}')
 	c.out.writeln('\t\tstyle: ${style}')
@@ -1588,7 +1576,7 @@ fn (mut c VmlCompiler) compile_spinner(node &VmlNode, suffix string, frame strin
 	c.out.writeln('\t${text_style} := ${c.text_style(properties)}')
 	c.out.writeln('\t${base} := ui2.spinner(')
 	c.out.writeln('\t\tid: ${vml_quote(node.id)}')
-	c.out.writeln('\t\taction_id: ${action}')
+	c.out.writeln('\t\ton_event: ${action}')
 	c.out.writeln('\t\tframe: ${frame}')
 	c.out.writeln('\t\ttext: ${vml_value(properties, 'text', 'bind.text', "''")}')
 	c.out.writeln('\t\tvalues: ${c.option_values(node, scope)}')
@@ -1617,7 +1605,7 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 		} else {
 			"''"
 		}
-		actions << 'ui2.MessageBoxAction{id: ${vml_quote(child.id)}, action_id: ${child_action}, title: ${text}}'
+		actions << 'ui2.MessageBoxAction{id: ${vml_quote(child.id)}, on_event: ${child_action}, title: ${text}}'
 	}
 	c.out.writeln('\tvml_message_box_${suffix} := ui2.custom_message_box(')
 	c.out.writeln('\t\tid: ${vml_quote(node.id)}')
@@ -1631,7 +1619,7 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 	c.out.writeln('\t)')
 	c.out.writeln('\tvml_element_${suffix} := ui2.Element{')
 	c.out.writeln('\t\t...vml_message_box_${suffix}')
-	c.out.writeln('\t\taction_id: ${action}')
+	c.out.writeln('\t\ton_event: ${action}')
 	c.out.writeln('\t\tkey: ${key}')
 	c.write_common_fields(node, properties, scope, "''", "''", "''")
 	c.out.writeln('\t}')
