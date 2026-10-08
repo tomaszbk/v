@@ -86,6 +86,13 @@ Children accept `flex_basis`, `flex_grow`, `flex_shrink`, `min_width`, `min_heig
 `ui2.LayoutAlignment`. Explicit dimensions supply preferred sizes; omitted leaf
 dimensions are measured by ui2. Text height is remeasured at its allocated width.
 
+Children can read an earlier sibling's geometry and typed `computed` properties,
+including ids declared in its descendants. These references are resolved in declaration
+order during preferred measurement, width measurement and final allocation. A child
+with explicit height keeps its preferred bindings when width measurement skips it.
+References to omitted dimensions use the sibling's measured size for that phase.
+Later siblings remain unavailable; final builders expose the allocated sibling scope.
+
 `Grid` accepts `columns` (or `cols`), `rows`, `auto_columns_min_width`, `max_columns`,
 `padding` and per-side padding, `spacing` (or `spacing_x`/`spacing_y`),
 `col_default_width`, `row_default_height`, `col_force_default`, `row_force_default`

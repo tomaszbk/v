@@ -1,0 +1,547 @@
+module main
+
+import os
+
+fn sibling_fixture_root(name string) string {
+	root := os.join_path(os.vtmp_dir(), 'vml_siblings_${name}_${os.getpid()}')
+	os.mkdir_all(root) or { panic(err) }
+	return root
+}
+
+fn compile_sibling_fixture(root string) os.Result {
+	args := [@VEXE, '-new-compiler', '-nocache', '-path', '@vlib:@vmodules', '-cc', 'clang',
+		'-no-retry-compilation', '-d', 'ui2_custom_rendering', '-o', os.join_path(root, 'app'),
+		os.join_path(root, 'main.v')]
+	os.write_file(os.join_path(root, 'compile-command.txt'), args.join('\n')) or { panic(err) }
+	mut environment := []string{}
+	for key in ['VFLAGS', 'VMODULES', 'V_MACOS_V3_NO_FALLBACK', 'VJOBS', 'PATH', 'VTMP', 'TMPDIR'] {
+		environment << '${key}=${os.getenv(key)}'
+	}
+	os.write_file(os.join_path(root, 'compile-env.txt'), environment.join('\n')) or { panic(err) }
+	result := os.exec(args)
+	os.write_file(os.join_path(root, 'compile.log'), result.output) or { panic(err) }
+	os.write_file(os.join_path(root, 'compile-exit.txt'), result.exit_code.str()) or { panic(err) }
+	return result
+}
+
+fn run_sibling_geometry(tag string, config string, expected string, inner_x int, inner_y int) {
+	root := sibling_fixture_root(tag)
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute {
+    width: 400 height: 400
+    ${tag} {
+        id: layout
+        x: 10 y: 15 width: 200 height: 80
+        ${config}
+        Label {
+            id: first
+            computed f64 unit: app.geometry.width
+            computed string caption: app.name
+            computed bool strong: app.strong
+            computed color ink: app.ink
+            width: first.unit height: 20
+            text: first.caption bold: first.strong color: first.ink
+            on_tap: app.accept(app.argument)
+        }
+        Column {
+            id: middle
+            computed f64 half: first.unit / 2
+            width: first.width
+            align_items: .start
+            Label {
+                id: inner
+                width: middle.half height: first.height
+                font_size: 18
+                Run { text: first.caption bold: first.strong color: first.ink }
+            }
+        }
+        TextInput {
+            width: middle.half height: inner.height
+            bind.text: app.name
+            on_submit: app.submit(app.name)
+        }
+    }
+    Label {
+        x: middle.x y: inner.y
+        width: middle.half height: inner.height
+        text: first.caption
+    }
+}') or { panic(err) }
+	os.write_file(os.join_path(root, 'main.v'), 'module main
+import ui2
+@[heap]
+struct State {
+pub mut:
+    geometry &ui2.LayoutSize = &ui2.LayoutSize{width: 40}
+    name string = "niñez"
+    strong bool = true
+    ink u32 = 0x123456
+    argument int = 40
+    received int
+    submitted string
+}
+// accept records the callback argument.
+pub fn (mut app State) accept(value int) { app.received = value }
+// submit records the current bound text.
+pub fn (mut app State) submit(value string) { app.submitted = value }
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    mut app := &State{}
+    tree := build(mut app)
+    layout := tree.children[0]
+    assert layout.children.map(it.frame) == ${expected}
+    inner := layout.children[1].children[0]
+    assert inner.frame == ui2.rect(${inner_x}, ${inner_y}, 20, 20)
+    assert inner.text_runs[0].text == "niñez"
+    assert inner.text_runs[0].style.bold
+    assert inner.text_runs[0].style.size == 18
+    assert inner.text_runs[0].style.color == 0x123456
+    assert tree.children[1].frame == ui2.rect(layout.children[1].frame.x, ${inner_y}, 20, 20)
+    assert tree.children[1].text == "niñez"
+    first := layout.children[0]
+    assert app.received == 0 && app.submitted == ""
+    app.geometry = &ui2.LayoutSize{width: 55}
+    app.argument = 55
+    first.on_event(ui2.ElementEvent{kind: .tap, id: first.id})
+    assert app.received == 55
+    input := layout.children[2]
+    assert input.id.len > 0
+    input.on_event(ui2.ElementEvent{kind: .change, id: input.id, text: "canción"})
+    assert app.name == "canción"
+    input.on_event(ui2.ElementEvent{kind: .submit, id: input.id, text: app.name})
+    assert app.submitted == "canción"
+    fresh := build(mut app)
+    assert fresh.children[0].children[0].text == "canción"
+    assert fresh.children[0].children[2].id == input.id
+    assert fresh.children[0].children[2].key == input.key
+    assert fresh.children[1].frame.width == 27.5
+    println("${tag} sibling geometry and live callbacks PASS")
+}') or { panic(err) }
+	build := compile_sibling_fixture(root)
+	assert build.exit_code == 0, build.output
+	result := os.exec([os.join_path(root, 'app')])
+	os.write_file(os.join_path(root, 'runtime.log'), result.output) or { panic(err) }
+	os.write_file(os.join_path(root, 'runtime-exit.txt'), result.exit_code.str()) or { panic(err) }
+	assert result.exit_code == 0, result.output
+	assert result.output.contains('PASS'), result.output
+}
+
+fn test_row_sibling_scopes_with_skipped_height_and_nested_computed_properties() {
+	run_sibling_geometry('Row', 'padding: 4 gap: 6 align_items: .start',
+		'[ui2.rect(4, 4, 40, 20), ui2.rect(50, 4, 40, 20), ui2.rect(96, 4, 20, 20)]', 0, 0)
+}
+
+fn test_column_sibling_scopes_with_typed_model_reference_and_bindings() {
+	run_sibling_geometry('Column', 'padding: 4 gap: 6 align_items: .start',
+		'[ui2.rect(4, 4, 40, 20), ui2.rect(4, 30, 40, 20), ui2.rect(4, 56, 20, 20)]', 0, 0)
+}
+
+fn test_flex_sibling_scopes_with_independent_offsets() {
+	run_sibling_geometry('Flex', 'orientation: .horizontal padding: 4 gap: 6 align_items: .start',
+		'[ui2.rect(4, 4, 40, 20), ui2.rect(50, 4, 40, 20), ui2.rect(96, 4, 20, 20)]', 0, 0)
+}
+
+fn test_grid_sibling_scopes_and_final_allocated_coordinates() {
+	run_sibling_geometry('Grid', 'columns: 2 rows: 2 padding: 4 spacing: 6',
+		'[ui2.rect(4, 4, 93, 33), ui2.rect(103, 4, 93, 33), ui2.rect(4, 43, 93, 33)]', 0, 0)
+}
+
+fn test_width_measurement_skips_only_the_current_child_scope() {
+	root := sibling_fixture_root('width')
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute {
+    width: 300 height: 200
+    Column {
+        width: 300 height: 200 align_items: .start
+    Row {
+        id: row width: 300 gap: 5 align_items: .start
+        Label { id: fixed width: 40 height: 20 text: "Fixed" }
+        Column {
+            id: measured
+            computed f64 offered: measured.width
+            width: fixed.width align_items: .start
+            Label { id: descendant width: 40 height: 20 text: "Nested" }
+        }
+        Label { width: descendant.width height: 20 text: "Skipped" }
+        Column {
+            width: fixed.width align_items: .start
+            Label { width: 40 height: measured.offered text: "Last" }
+        }
+    }
+    }
+    Label { x: measured.x width: descendant.width height: row.height text: "Final" }
+}') or { panic(err) }
+	os.write_file(os.join_path(root, 'main.v'), 'import ui2
+fn main() {
+    root := $vml("view.vml")
+    row := root.children[0].children[0]
+    assert row.frame == ui2.rect(0, 0, 300, 40)
+    assert row.children.map(it.frame) == [ui2.rect(0, 0, 40, 20), ui2.rect(45, 0, 40, 20), ui2.rect(90, 0, 40, 20), ui2.rect(135, 0, 40, 40)]
+    assert root.children[1].frame == ui2.rect(45, 0, 40, 40)
+}') or { panic(err) }
+	build := compile_sibling_fixture(root)
+	assert build.exit_code == 0, build.output
+	result := os.exec([os.join_path(root, 'app')])
+	os.write_file(os.join_path(root, 'runtime.log'), result.output) or { panic(err) }
+	os.write_file(os.join_path(root, 'runtime-exit.txt'), result.exit_code.str()) or { panic(err) }
+	assert result.exit_code == 0, result.output
+}
+
+fn test_invalid_sibling_references_keep_vml_positions_and_call_sites() {
+	root := sibling_fixture_root('invalid')
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	view := os.join_path(root, 'view.vml')
+	source := os.join_path(root, 'main.v')
+	os.write_file(source, 'import ui2\nfn main() { _ = $vml("view.vml") }') or { panic(err) }
+	for index, entry in [
+		[
+			'Row {\n    Label { id: first width: later.width height: 20 }\n    Label { id: later width: 40 height: 20 }\n}',
+			'2:23',
+			'undefined variable: `later`',
+		],
+		[
+			'Column {\n    Label { id: first computed string caption: "bad" width: 40 height: 20 }\n    Label { width: first.caption height: 20 }\n}',
+			'3:13',
+			'cannot assign to field `width`: expected `f64`, not `string`',
+		],
+		[
+			'Flex {\n    Label { id: first width: 40 height: 20 }\n    Label { width: missing.width }\n}',
+			'3:13',
+			'undefined variable: `missing`',
+		],
+		[
+			'Grid { columns: 2\n    Label { id: first width: 40 height: 20 }\n    Label { width: first.absent }\n}',
+			'3:13',
+			'undefined variable: `first`',
+		],
+		[
+			'Row {\n    Label { id: first computed bool flag: true width: 40 height: 20 }\n    Label { width: first.flag }\n}',
+			'3:13',
+			'cannot assign to field `width`: expected `f64`, not `bool`',
+		],
+		[
+			'Row {\n    View { Label { id: inner computed string caption: "bad" text: "WWW" } }\n    Label { width: inner.caption height: 20 }\n}',
+			'3:13',
+			'cannot assign to field `width`: expected `f64`, not `string`',
+		],
+	] {
+		os.write_file(view, entry[0]) or { panic(err) }
+		result := compile_sibling_fixture(root)
+		for name in ['view.vml', 'compile.log', 'compile-exit.txt'] {
+			os.cp(os.join_path(root, name), os.join_path(root, '${index}_${name}')) or { panic(err) }
+		}
+		assert result.exit_code != 0, result.output
+		assert result.output.contains('${view}:${entry[1]}: error: ${entry[2]}'), result.output
+		assert result.output.contains('called from ${source}'), result.output
+	}
+}
+
+fn run_intrinsic_sibling_fixture(name string, view string, program string) {
+	root := sibling_fixture_root(name)
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	os.write_file(os.join_path(root, 'view.vml'), view) or { panic(err) }
+	os.write_file(os.join_path(root, 'main.v'), program) or { panic(err) }
+	build := compile_sibling_fixture(root)
+	assert build.exit_code == 0, build.output
+	result := os.exec([os.join_path(root, 'app')])
+	os.write_file(os.join_path(root, 'runtime.log'), result.output) or { panic(err) }
+	os.write_file(os.join_path(root, 'runtime-exit.txt'), result.exit_code.str()) or { panic(err) }
+	assert result.exit_code == 0, result.output
+}
+
+fn test_intrinsic_width_survives_explicit_height_skipped_sibling() {
+	run_intrinsic_sibling_fixture('intrinsic_skipped', 'Column {
+    width: 300 height: 100 gap: 7 align_items: .start
+    Label { id: first text: "WWW" height: 20 }
+    Label { text: "Copy" width: first.width height: 20 }
+}', 'import ui2
+fn main() {
+    size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
+    assert size.width > 0
+    tree := $vml("view.vml")
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, size.width, 20), ui2.rect(0, 27, size.width, 20)]
+}')
+}
+
+fn test_intrinsic_leaf_and_unsized_nested_layout_expose_measured_geometry() {
+	run_intrinsic_sibling_fixture('intrinsic_nested', 'Absolute {
+    width: 300 height: 300
+    Column {
+        id: block gap: 7 align_items: .start
+        Label { id: first text: "WWW" }
+        Label { text: "Copy" width: first.width height: first.height }
+    }
+    Label { x: block.width y: block.height width: block.width height: block.height text: "Final" }
+}', 'import ui2
+fn main() {
+    size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
+    assert size.width > 0 && size.height > 0
+    tree := $vml("view.vml")
+    block := tree.children[0]
+    height := size.height * 2 + 7
+    assert block.frame == ui2.rect(0, 0, size.width, height)
+    assert block.children.map(it.frame) == [ui2.rect(0, 0, size.width, size.height), ui2.rect(0, size.height + 7, size.width, size.height)]
+    assert tree.children[1].frame == ui2.rect(size.width, height, size.width, height)
+}')
+}
+
+fn test_width_pass_sibling_height_uses_wrapped_leaf_measurement() {
+	run_intrinsic_sibling_fixture('intrinsic_width_pass', 'Row {
+    width: 80 height: 200 align_items: .start
+    Label { id: first text: "WW WW WW WW" lines: 10 flex_basis: 40 flex_shrink: 0 }
+    Label {
+        id: second
+        computed f64 seen_height: first.height
+        width: first.width
+        line_height: second.seen_height
+        text: "Copy" flex_basis: 40 flex_shrink: 0
+    }
+}', 'import ui2
+fn main() {
+    style := ui2.TextStyle{lines: 10}
+    natural := ui2.measure_layout_text("WW WW WW WW", style, -1) or { panic(err) }
+    wrapped := ui2.measure_layout_text("WW WW WW WW", style, 40) or { panic(err) }
+    assert natural.width > 40 && wrapped.height > natural.height
+    tree := $vml("view.vml")
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, 40, wrapped.height), ui2.rect(40, 0, 40, wrapped.height)]
+    assert tree.children[1].text_style.line_height == wrapped.height
+}')
+}
+
+fn test_intrinsic_sibling_sizes_determine_wrapped_flex_autoheight() {
+	run_intrinsic_sibling_fixture('intrinsic_wrap', 'Absolute {
+    width: 300 height: 300
+    Flex {
+        id: flow width: app.width wrap: true gap: 5 line_gap: 9 align_items: .start
+        Label { id: first text: "WWW" }
+        Label { text: "Copy" width: first.width height: first.height }
+        Label { text: "Last" width: first.width height: first.height }
+    }
+    Label { x: flow.width y: flow.height width: first.width height: first.height text: "Final" }
+}', 'import ui2
+struct State { width f64 }
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
+    assert size.width > 0 && size.height > 0
+    width := size.width * 2 + 5
+    height := size.height * 2 + 9
+    mut app := State{width: width}
+    tree := build(mut app)
+    flow := tree.children[0]
+    assert flow.frame == ui2.rect(0, 0, width, height)
+    assert flow.children.map(it.frame) == [ui2.rect(0, 0, size.width, size.height), ui2.rect(size.width + 5, 0, size.width, size.height), ui2.rect(0, size.height + 9, size.width, size.height)]
+    assert tree.children[1].frame == ui2.rect(width, height, size.width, size.height)
+}')
+}
+
+fn test_nested_grid_width_measurement_keeps_explicit_height_descendant_ids() {
+	root := sibling_fixture_root('grid_width')
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute {
+    width: 300 height: 200
+    Column {
+        width: 200 height: 120 align_items: .start
+        Grid {
+            id: grid width: 200 columns: 2
+            View {
+                width: 50 height: 20
+                Label { id: seed width: 50 height: 20 text: "Seed" }
+            }
+            Column {
+                id: sized
+                computed f64 offered: sized.width
+                width: seed.width align_items: .start
+                Label { width: seed.width height: sized.offered text: "Sized" }
+            }
+        }
+    }
+    Label { x: sized.x width: seed.width height: grid.height text: "Final" }
+}') or { panic(err) }
+	os.write_file(os.join_path(root, 'main.v'), 'import ui2
+fn main() {
+    root := $vml("view.vml")
+    grid := root.children[0].children[0]
+    assert grid.frame == ui2.rect(0, 0, 200, 100)
+    assert grid.children.map(it.frame) == [ui2.rect(0, 0, 100, 100), ui2.rect(100, 0, 100, 100)]
+    assert grid.children[0].children[0].frame == ui2.rect(0, 0, 50, 20)
+    assert grid.children[1].children[0].frame == ui2.rect(0, 0, 50, 100)
+    assert root.children[1].frame == ui2.rect(100, 0, 50, 100)
+}') or { panic(err) }
+	build := compile_sibling_fixture(root)
+	assert build.exit_code == 0, build.output
+	result := os.exec([os.join_path(root, 'app')])
+	os.write_file(os.join_path(root, 'runtime.log'), result.output) or { panic(err) }
+	os.write_file(os.join_path(root, 'runtime-exit.txt'), result.exit_code.str()) or { panic(err) }
+	assert result.exit_code == 0, result.output
+}
+
+fn test_auto_view_descendant_height_is_visible_to_following_sibling() {
+	run_intrinsic_sibling_fixture('descendant_auto', 'Row {
+    width: 300 height: 80 align_items: .start
+    View { Label { id: inner text: "WWW" } }
+    Label { width: 40 height: inner.height text: "Copy" }
+}', 'import ui2
+fn main() {
+    size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
+    assert size.height > 0
+    tree := $vml("view.vml")
+    assert tree.children[0].frame == ui2.rect(0, 0, size.width, size.height)
+    assert tree.children[0].children[0].frame == ui2.rect(0, 0, size.width, size.height)
+    assert tree.children[1].frame == ui2.rect(size.width, 0, 40, size.height)
+}')
+}
+
+fn test_nested_view_autoheight_keeps_offered_width_for_wrapping() {
+	run_intrinsic_sibling_fixture('descendant_fixed_width', 'Row {
+    width: 300 height: 200 align_items: .start
+    View { width: 120 View { Label { id: inner text: "WW WW WW WW WW WW" lines: 10 } } }
+    Label { width: 40 height: inner.height text: "Copy" }
+}', 'import ui2
+fn main() {
+    text := "WW WW WW WW WW WW"
+    style := ui2.TextStyle{lines: 10}
+    natural := ui2.measure_layout_text(text, style, -1) or { panic(err) }
+    size := ui2.measure_layout_text(text, style, 120) or { panic(err) }
+    assert size.height > natural.height
+    tree := $vml("view.vml")
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, 120, size.height), ui2.rect(120, 0, 40, size.height)]
+    assert tree.children[0].children[0].frame == ui2.rect(0, 0, 120, size.height)
+    assert tree.children[0].children[0].children[0].frame == ui2.rect(0, 0, 120, size.height)
+}')
+}
+
+fn test_nested_view_autowidth_keeps_inherited_fixed_height() {
+	run_intrinsic_sibling_fixture('descendant_fixed_height', 'Column {
+    width: 300 height: 100 align_items: .start
+    View { height: 30 View { Label { id: inner text: "WWW" } } }
+    Label { width: inner.width height: 20 text: "Copy" }
+}', 'import ui2
+fn main() {
+    size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
+    assert size.width > 0
+    tree := $vml("view.vml")
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, size.width, 30), ui2.rect(0, 30, size.width, 20)]
+    assert tree.children[0].children[0].children[0].frame == ui2.rect(0, 0, size.width, 30)
+}')
+}
+
+fn test_view_measures_nested_layout_ids_with_inherited_width() {
+	run_intrinsic_sibling_fixture('descendant_layouts', 'Row {
+    width: 300 height: 100 align_items: .start
+    View { width: 100
+        Row { id: nested padding: 5 gap: 7 align_items: .start
+            Label { width: 20 height: 10 text: "A" }
+            Label { width: 30 height: 15 text: "B" }
+        }
+    }
+    Label { width: 40 height: nested.height text: "Copy" }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, 100, 25), ui2.rect(100, 0, 40, 25)]
+    nested := tree.children[0].children[0]
+    assert nested.frame == ui2.rect(0, 0, 100, 25)
+    assert nested.children.map(it.frame) == [ui2.rect(5, 5, 20, 10), ui2.rect(32, 5, 30, 15)]
+}')
+	run_intrinsic_sibling_fixture('descendant_grid', 'Row {
+    width: 300 height: 100 align_items: .start
+    View { width: 100
+        Grid { id: nested columns: 2
+            Label { width: 20 height: 10 text: "A" }
+            Label { width: 30 height: 15 text: "B" }
+        }
+    }
+    Label { width: 40 height: nested.height text: "Copy" }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, 100, 15), ui2.rect(100, 0, 40, 15)]
+    nested := tree.children[0].children[0]
+    assert nested.frame == ui2.rect(0, 0, 100, 15)
+    assert nested.children.map(it.frame) == [ui2.rect(0, 0, 50, 15), ui2.rect(50, 0, 50, 15)]
+}')
+}
+
+fn test_generic_normal_containers_keep_fixed_axes_and_absolute_auto_axes() {
+	run_intrinsic_sibling_fixture('descendant_normal', 'View {
+    width: 400 height: 400
+    View { width: 120 height: 30 View { Label { text: "WWW" } } }
+    Scroll { width: 120 height: 30 View { Label { text: "WWW" } } }
+    Screen { width: 120 height: 30 View { Label { text: "WWW" } } }
+    ScaledContent { width: 120 height: 30 content_width: 70 content_height: 25
+        View { Label { text: "WWW" } }
+    }
+    Absolute { width: 120 height: 30 View { Label { text: "WWW" } } }
+    View { width: 0 height: 0 Label { width: 0 height: 0 hidden: false text: "Zero" } }
+}', 'import ui2
+fn main() {
+    size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
+    tree := $vml("view.vml")
+    for i in 0 .. 3 {
+        assert tree.children[i].children[0].frame == ui2.rect(0, 0, 120, 30)
+        assert tree.children[i].children[0].children[0].frame == ui2.rect(0, 0, 120, 30)
+    }
+    assert tree.children[2].frame == ui2.Rect{}
+    assert tree.children[3].frame == ui2.rect(0, 0, 120, 30)
+    assert tree.children[3].children[0].children[0].frame == ui2.rect(0, 0, 70, 25)
+    assert tree.children[4].frame == ui2.rect(0, 0, 120, 30)
+    assert tree.children[4].children[0].children[0].frame == ui2.rect(0, 0, size.width, size.height)
+    assert tree.children[5].children[0].frame == ui2.Rect{}
+    assert !tree.children[5].children[0].hidden
+}')
+}
+
+fn test_measured_view_keeps_explicit_zero_and_live_bindings_callbacks() {
+	run_intrinsic_sibling_fixture('descendant_live', 'Row {
+    width: 300 height: 80 align_items: .start
+    View { width: 80 height: 30
+        Label { id: inner width: 0 height: 0 hidden: false on_tap: app.accept(app.argument) }
+        TextInput { width: 40 height: 20 bind.text: app.name on_submit: app.submit(app.name) }
+    }
+    Label { width: inner.width height: inner.height text: "Copy" }
+}', 'import ui2
+@[heap]
+struct State {
+pub mut:
+    argument int = 40
+    received int
+    name string = "niñez"
+    submitted string
+}
+// accept records the live action argument.
+pub fn (mut app State) accept(value int) { app.received = value }
+// submit records the bound value when the event fires.
+pub fn (mut app State) submit(value string) { app.submitted = value }
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    mut app := &State{}
+    tree := build(mut app)
+    assert tree.children.map(it.frame) == [ui2.rect(0, 0, 80, 30), ui2.rect(80, 0, 0, 0)]
+    inner := tree.children[0].children[0]
+    assert inner.frame == ui2.Rect{} && !inner.hidden
+    assert app.received == 0 && app.submitted == ""
+    app.argument = 55
+    inner.on_event(ui2.ElementEvent{kind: .tap, id: inner.id})
+    assert app.received == 55
+    input := tree.children[0].children[1]
+    input.on_event(ui2.ElementEvent{kind: .change, id: input.id, text: "canción"})
+    assert app.name == "canción"
+    input.on_event(ui2.ElementEvent{kind: .submit, id: input.id, text: app.name})
+    assert app.submitted == "canción"
+    fresh := build(mut app)
+    assert fresh.children[0].children[1].text == "canción"
+    assert fresh.children[0].children[1].id == input.id
+    assert fresh.children[0].children[1].key == input.key
+}')
+}

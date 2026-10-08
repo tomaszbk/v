@@ -1014,6 +1014,7 @@ fn vml_order_properties_by_dependencies(properties []VmlProperty, node_id string
 
 fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
 	suffix := vml_var(path)
+	measure_mode := placement in [.preferred, .width_preferred, .inherited_preferred]
 	c.out.writeln('\t_ = ${input}')
 	mut scope := vml_clone_scope(incoming)
 	mut named_props := map[string]string{}
@@ -1120,6 +1121,9 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 		}}')
 		child_scope := c.compile_node(child, child_path, child_input, scope, '', if node.tag == 'Absolute' {
 			.preferred
+		} else if measure_mode {
+			// Generic containers offer their fixed axes; only zero auto axes need measurement.
+			.inherited_preferred
 		} else {
 			.normal
 		})
@@ -1131,20 +1135,27 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
 		c.prepare_visual_runs(node, suffix, mut properties, scope)
 	}
-	base_suffix := if placement in [.preferred, .width_preferred] {
+	base_suffix := if measure_mode {
 		suffix + '_base'
 	} else {
 		suffix
 	}
 	c.compile_element(node, base_suffix, frame, children, properties, scope, default_key)
-	if placement in [.preferred, .width_preferred] {
+	if measure_mode {
 		c.out.writeln('\tvml_measured_${suffix} := ui2.measure_layout_element(vml_element_${base_suffix}, ui2.LayoutConstraints{}, ui2.measure_layout_text) or { panic(err) }')
 		c.out.writeln('\t_ = vml_measured_${suffix}')
 		c.out.writeln('\tvml_element_${suffix} := ui2.Element{...vml_element_${base_suffix}, frame: ui2.rect(${frame}.x, ${frame}.y, ${if placement == .width_preferred {
 			input + '.width'
 		} else {
-			vml_prop(properties, 'width', 'vml_measured_' + suffix + '.width')
-		}}, ${vml_prop(properties, 'height', 'vml_measured_' + suffix + '.height')})}')
+			vml_prop(properties, 'width', vml_measured_axis(placement, frame + '.width', 'vml_measured_' + suffix + '.width'))
+		}}, ${vml_prop(properties, 'height', vml_measured_axis(placement, frame + '.height', 'vml_measured_' + suffix + '.height'))})}')
+		if node.id.len > 0 {
+			// Later siblings use this pass's measured frame; declared props keep precedence.
+			scope.ids[node.id] = VmlNamedValue{
+				frame: 'vml_element_${suffix}.frame'
+				props: named_props.clone()
+			}
+		}
 	}
 	return scope
 }

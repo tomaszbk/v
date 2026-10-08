@@ -21,7 +21,16 @@ enum VmlPlacement {
 	normal
 	preferred
 	width_preferred
+	inherited_preferred
 	allocated
+}
+
+fn vml_measured_axis(placement VmlPlacement, offered string, measured string) string {
+	return if placement == .inherited_preferred {
+		'if ${offered} > 0 { ${offered} } else { ${measured} }'
+	} else {
+		measured
+	}
 }
 
 fn vml_visual_base_property(name string) string {
@@ -563,11 +572,22 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	spans := 'vml_spans_${suffix}'
 	c.out.writeln('\tmut ${items} := []ui2.${if grid { 'Element' } else { 'FlexChild' }}{}')
 	if grid { c.out.writeln('\tmut ${spans} := []ui2.GridSpan{}') }
+	mut preferred_scope := vml_clone_scope(incoming)
+	mut preferred_child_ids := []map[string]VmlNamedValue{cap: visible.len}
 	for index, child in visible {
 		child_path := '${path}_measure.${index}'
 		child_input := 'vml_input_${vml_var(child_path)}'
 		c.out.writeln('\t${child_input} := ${probe}')
-		c.compile_node(child, child_path, child_input, scope, '', .preferred)
+		child_scope := c.compile_node(child, child_path, child_input, preferred_scope, '', .preferred)
+		mut child_ids := map[string]VmlNamedValue{}
+		for id, named in child_scope.ids {
+			if previous := preferred_scope.ids[id] {
+				if previous.frame == named.frame { continue }
+			}
+			child_ids[id] = named
+		}
+		preferred_child_ids << child_ids
+		preferred_scope = child_scope
 		child_properties := c.visual_child_properties(child, child_path)
 		element := 'vml_element_${vml_var(child_path)}'
 		c.out.writeln('\t${items} << ${if grid {
@@ -581,7 +601,7 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	}
 	config := 'vml_config_${suffix}'
 	c.out.writeln('\t${config} := ${c.visual_layout_config(node, probe, properties, items, spans)}')
-	preferred_mode := placement in [.preferred, .width_preferred]
+	preferred_mode := placement in [.preferred, .width_preferred, .inherited_preferred]
 	available := if preferred_mode { probe } else { declared_frame }
 	initial := 'vml_initial_${suffix}'
 	c.out.writeln('\t${initial} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${config}, frame: ${available}}')
@@ -598,12 +618,19 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	}
 	c.out.writeln('\t_ = ${first}')
 	if !grid || preferred_mode {
+		// Each pass sees only preceding siblings, using that pass's emitted names.
+		mut width_scope := vml_clone_scope(incoming)
 		for index, child in visible {
-			if vml_find_property(child, 'height') != none { continue }
+			if vml_find_property(child, 'height') != none {
+				// This child is not rebuilt. Carry its own preferred ids (including
+				// descendants), without overwriting earlier width-pass siblings.
+				for id, named in preferred_child_ids[index] { width_scope.ids[id] = named }
+				continue
+			}
 			child_path := '${path}_width.${index}'
 			child_input := 'vml_input_${vml_var(child_path)}'
 			c.out.writeln('\t${child_input} := ui2.rect(0, 0, ${first}[${index}].width, ${probe}.height)')
-			c.compile_node(child, child_path, child_input, scope, '', .width_preferred)
+			width_scope = c.compile_node(child, child_path, child_input, width_scope, '', .width_preferred)
 			measurement := 'vml_element_${vml_var(child_path)}'
 			if grid {
 				c.out.writeln('\t${items}[${index}] = ui2.Element{...${items}[${index}], frame: ui2.rect(0, 0, ${items}[${index}].frame.width, ${measurement}.frame.height)}')
@@ -640,8 +667,8 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		c.out.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${if placement == .width_preferred {
 			input + '.width'
 		} else {
-			vml_prop(properties, 'width', preferred + '.width')
-		}}, ${vml_prop(properties, 'height', preferred_height)})')
+			vml_prop(properties, 'width', vml_measured_axis(placement, declared_frame + '.width', preferred + '.width'))
+		}}, ${vml_prop(properties, 'height', vml_measured_axis(placement, declared_frame + '.height', preferred_height))})')
 	}
 	frames := 'vml_frames_${suffix}'
 	c.out.writeln('\t${frames} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(ui2.${if grid {
@@ -650,6 +677,10 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		'FlexConfig'
 	}}{...${measured}, frame: ${frame}}${if grid { ', ' + items + '.len' } else { '' }}) or { panic(err) }')
 	children := 'vml_children_${suffix}'
+	if node.id.len > 0 {
+		named := scope.ids[node.id] or { VmlNamedValue{} }
+		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named.props }
+	}
 	c.out.writeln('\tmut ${children} := []ui2.Element{}')
 	for index, child in visible {
 		child_path := '${path}.${index}'
@@ -703,13 +734,20 @@ fn (mut p Parser) remap_vml_visual_positions(first_node int, path string, source
 		// The checker reads a struct initializer's type name from its source.
 		// Keep synthetic ui2 types in generated V; map their field/value errors.
 		if node.kind == .struct_init { continue }
-		property := properties[node.value] or {
-			generated_file := p.a.source_files[node.pos.id] or { continue }
-			if generated_file.name != '<veb-template>' { continue }
+		generated_file := p.a.source_files[node.pos.id] or { continue }
+		property := if generated_file.name == '<veb-template>' {
 			position := generated_file.position(node.pos)
 			if position.line < 1 || position.line > lines.len { continue }
 			line := lines[position.line - 1].trim_space()
-			properties[line] or { properties[line.all_before(' := ')] or { continue } }
+			// A sibling local's use belongs to the receiving property, not its
+			// declaration. Prefer the generated statement's source position.
+			properties[line] or {
+				properties[line.all_before(' := ')] or {
+					properties[node.value] or { continue }
+				}
+			}
+		} else {
+			properties[node.value] or { continue }
 		}
 		start := file.line_start(property.line) + property.column - 1
 		p.a.nodes[index] = flat.Node{
