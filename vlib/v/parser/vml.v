@@ -1287,10 +1287,10 @@ fn vml_binding_for_event(node &VmlNode, event_name string) ?VmlProperty {
 		if binding := vml_find_property(node, 'bind.active') {
 			return binding
 		}
+		if binding := vml_find_property(node, 'bind.checked') {
+			return binding
+		}
 		return vml_find_property(node, 'bind.text')
-	}
-	if event_name == 'on_tap' {
-		return vml_find_property(node, 'bind.checked')
 	}
 	if event_name == 'on_active' {
 		return vml_find_property(node, 'bind.active')

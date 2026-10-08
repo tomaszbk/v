@@ -2,6 +2,96 @@ module main
 
 import os
 
+fn test_checkbox_binding_uses_change_checked_payload_in_both_directions() {
+	run_bounded_layout_fixture('checkbox_binding', 'Checkbox {
+    id: consent width: 100 height: 24 bind.checked: app.checked
+}', 'import ui2
+@[heap]
+struct State {
+pub mut:
+    checked bool
+}
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    mut app := &State{}
+    checkbox := build(mut app)
+    assert checkbox.kind == .checkbox && checkbox.id == "consent"
+    assert !checkbox.checked
+    // Synthetic typed events use the payload emitted by UI31 custom and AppKit checkboxes.
+    checkbox.on_event(ui2.ElementEvent{ kind: .change, id: checkbox.id, checked: true })
+    assert app.checked
+    fresh := build(mut app)
+    assert fresh.id == checkbox.id && fresh.checked
+    fresh.on_event(ui2.ElementEvent{ kind: .change, id: fresh.id, checked: false })
+    assert !app.checked && !build(mut app).checked
+    checkbox.on_event(ui2.ElementEvent{ kind: .tap, id: checkbox.id, checked: true })
+    checkbox.on_event(ui2.ElementEvent{ kind: .submit, id: checkbox.id, checked: true })
+    assert !app.checked
+    println("checkbox change true/false and unrelated events PASS")
+}')
+}
+
+fn test_checkbox_change_binds_before_action_and_keeps_tap_and_sibling_actions_separate() {
+	run_bounded_layout_fixture('checkbox_actions', 'Row {
+    width: 200 height: 30 align_items: .start
+    View {
+        width: 100 height: 24
+        Checkbox {
+            id: consent width: 100 height: 24 bind.checked: app.checked
+            computed string caption: "Consent ñ"
+            on_change: app.changed(app.note)
+            on_tap: app.tapped()
+        }
+    }
+    Button { width: consent.width height: 24 text: consent.caption on_tap: app.accept("Consent ñ") }
+}', 'import ui2
+@[heap]
+struct State {
+pub mut:
+    checked bool
+    note string = "construction"
+    observations []bool
+    notes []string
+    taps int
+    accepted string
+}
+// changed records the bound state and the live action argument.
+pub fn (mut app State) changed(note string) {
+    app.observations << app.checked
+    app.notes << note
+}
+// tapped records the independent tap action.
+pub fn (mut app State) tapped() { app.taps++ }
+// accept records the independent sibling action argument.
+pub fn (mut app State) accept(caption string) { app.accepted = caption }
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    mut app := &State{}
+    tree := build(mut app)
+    checkbox := tree.children[0].children[0]
+    button := tree.children[1]
+    assert checkbox.frame == ui2.rect(0, 0, 100, 24)
+    assert button.frame == ui2.rect(100, 0, 100, 24)
+    assert button.text == "Consent ñ"
+    app.note = "live true"
+    checkbox.on_event(ui2.ElementEvent{ kind: .change, id: checkbox.id, checked: true })
+    assert app.checked && app.observations == [true] && app.notes == ["live true"]
+    assert app.taps == 0 && app.accepted == ""
+    app.note = "live false"
+    checkbox.on_event(ui2.ElementEvent{ kind: .change, id: checkbox.id, checked: false })
+    assert !app.checked && app.observations == [true, false]
+    assert app.notes == ["live true", "live false"] && app.taps == 0
+    checkbox.on_event(ui2.ElementEvent{ kind: .tap, id: checkbox.id, checked: true })
+    assert app.taps == 1 && !app.checked && app.observations.len == 2
+    checkbox.on_event(ui2.ElementEvent{ kind: .submit, id: checkbox.id, checked: true })
+    button.on_event(ui2.ElementEvent{ kind: .change, id: button.id, checked: true })
+    assert app.taps == 1 && !app.checked && app.observations.len == 2 && app.accepted == ""
+    button.on_event(ui2.ElementEvent{ kind: .tap, id: button.id })
+    assert app.accepted == "Consent ñ" && !app.checked && app.observations.len == 2
+    println("checkbox binding-before-action, live argument and descendant reads PASS")
+}')
+}
+
 fn run_bounded_layout_fixture(name string, view string, program string) {
 	root := sibling_fixture_root(name)
 	defer {

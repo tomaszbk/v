@@ -76,6 +76,25 @@ Button {
 }
 ```
 
+## Bindings and actions
+
+`Checkbox { bind.checked: app.checked }` reads the application's bool when the
+element is built. Its typed `.change` callback writes `event.checked` back to that
+field, including false. An explicit `on_change` action runs after the binding, so
+it observes the committed state. Action arguments written as `app.field` read the
+live application field when the event is handled.
+
+```vml
+Checkbox {
+    bind.checked: app.checked
+    on_change: app.changed()
+}
+```
+
+`on_tap` remains an independent tap action; it does not apply the checkbox binding.
+Unrelated event kinds do not run the change binding or action. Callbacks belong to
+their element declarations; an event id does not select another element's action.
+
 ## Flex and Grid
 
 `Flex` uses `orientation: .horizontal` or `.vertical`. `Row` and `Column` select
