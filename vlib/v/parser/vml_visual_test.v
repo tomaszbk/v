@@ -3,6 +3,29 @@ module parser
 import os
 import v.pref
 
+fn test_selected_auto_grid_measurement_keeps_shared_nested_child_source() {
+	root := parse_vml_source('Absolute {
+        width: 300 height: 300
+        Grid { auto_columns_min_width: 100
+            View { View { Label { width: app.leaf_width() height: 20 text: "selected_grid_leaf" } } }
+            View { View { Label { width: app.leaf_width() height: 20 text: "selected_grid_leaf" } } }
+            View { View { Label { width: app.leaf_width() height: 20 text: "selected_grid_leaf" } } }
+            View { View { Label { width: app.leaf_width() height: 20 text: "selected_grid_leaf" } } }
+            View { View { Label { width: app.leaf_width() height: 20 text: "selected_grid_leaf" } } }
+        }
+    }')!
+	mut compiler := VmlCompiler{}
+	generated := compiler.compile(root)
+	// Each of the five leaves is shared across at most five placement phases.
+	assert generated.count('selected_grid_leaf') <= 25
+	assert generated.count('app.leaf_width()') <= 25
+	assert generated.len <= 40000 * 17
+	println('selected_grid generated_bytes=${generated.len} leaf_copies=${generated.count('selected_grid_leaf')} expression_copies=${generated.count('app.leaf_width()')}')
+	if os.getenv('VML_SIBLING_KEEP_FIXTURES') == '1' {
+		os.write_file(os.join_path(os.vtmp_dir(), 'selected_grid.generated.v'), generated)!
+	}
+}
+
 fn test_vml_visual_errors_include_the_property_location_and_check_inactive_arms() {
 	for entry in [
 		['Label {\n  tracking: 2\n}', 'unsupported property `tracking` on Label', '2', '3'],

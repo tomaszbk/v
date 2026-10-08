@@ -111,6 +111,15 @@ An unconstrained main axis uses the natural dimension that the returned frame wi
 when measuring wrapping. Explicit dimensions and width-pass allocations retain zero.
 A padded Grid measures child heights at its chosen natural, inherited or allocated width;
 invalid explicit dimensions still produce ui2 layout errors.
+Grid selects its width once. A width-measurement pass uses its allocated width, even at
+zero. Other preferred passes use an authored width when present, then a positive
+inherited width when available.
+Otherwise, ui2's first preferred measurement supplies the natural width. The second
+preferred measurement uses that selected width to resolve automatic columns and the
+omitted height; it does not select another width. Padding and gaps remain part of the
+natural extent. For example, five 20-by-20 children offered width 300 with
+`auto_columns_min_width: 100` select width 60, then measure five rows and height 100.
+Authored heights and allocated frames retain their dimensions, including zero.
 
 Children can read an earlier sibling's geometry and typed `computed` properties,
 including ids declared in its descendants. These references are resolved in declaration
@@ -160,6 +169,7 @@ V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -d ui2_custom_rendering run
 The fixtures compare styles and geometry with ui2's public API and runtime conversion,
 check independent layout coordinates and exercise typed actions and UTF-8 bindings.
 Focused regression fixtures cover unoffered Row/Column wrapping, padded Grid axes,
+automatic columns at the selected width and its fractional thresholds,
 explicit zero dimensions, nested sibling scopes, generated
 source growth and property-evaluation counts at increasing layout depths. Renderer-profile
 classification tests exercise target preferences without executing foreign platforms.

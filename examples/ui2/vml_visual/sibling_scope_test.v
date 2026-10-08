@@ -897,6 +897,204 @@ fn main() {
 }')
 }
 
+fn test_selected_auto_grid_width_remeasures_five_rows_and_exports_final_geometry() {
+	run_bounded_layout_fixture('selected_auto_grid_five', 'Absolute {
+    width: 300 height: 300
+    Grid { id: cells auto_columns_min_width: 100
+        Label { id: first width: 20 height: 20 computed string caption: "five rows ñ" }
+        Label { width: 20 height: 20 }
+        Label { width: 20 height: 20 }
+        Label { width: 20 height: 20 }
+        Label { id: last width: 20 height: 20 }
+    }
+    Label { x: cells.width y: cells.height width: last.width height: last.height text: first.caption }
+}', 'import ui2
+fn main() {
+    sizes := [ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20)]
+    config := ui2.GridConfig{frame: ui2.rect(0, 0, 300, 300), auto_columns_min_width: 100}
+    // Public API controls have literal expectations independent of the lowering.
+    assert ui2.grid_preferred_size(config, sizes)! == ui2.rect(0, 0, 60, 40)
+    assert ui2.grid_preferred_size(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 60, 300)}, sizes)! == ui2.rect(0, 0, 20, 100)
+    one_column := [ui2.rect(0, 0, 60, 20), ui2.rect(0, 20, 60, 20), ui2.rect(0, 40, 60, 20), ui2.rect(0, 60, 60, 20), ui2.rect(0, 80, 60, 20)]
+    assert ui2.grid_frames(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 60, 100)}, 5)! == one_column
+    assert ui2.grid_preferred_size(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 60, 300), auto_columns_min_width: 20}, sizes)! == ui2.rect(0, 0, 60, 40)
+    assert ui2.grid_frames(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 60, 40), auto_columns_min_width: 20}, 5)! == [ui2.rect(0, 0, 20, 20), ui2.rect(20, 0, 20, 20), ui2.rect(40, 0, 20, 20), ui2.rect(0, 20, 20, 20), ui2.rect(20, 20, 20, 20)]
+    tree := $vml("view.vml")
+    assert tree.children[0].frame == ui2.rect(0, 0, 60, 100)
+    assert tree.children[0].children.map(it.frame) == one_column
+    // Authored child dimensions remain property references; cells exposes its measured axes.
+    assert tree.children[1].frame == ui2.rect(60, 100, 20, 20)
+    assert tree.children[1].text == "five rows ñ"
+    println("selected width 60, one column, five rows of 20, height 100 PASS")
+}')
+}
+
+fn test_selected_auto_grid_width_thresholds_keep_natural_width_and_child_heights() {
+	run_bounded_layout_fixture('selected_auto_grid_thresholds', 'Absolute {
+    width: 300 height: 300
+    Grid { auto_columns_min_width: app.minimum
+        Label { width: app.child_width height: 20 }
+        Label { width: app.child_width height: 20 }
+        Label { width: app.child_width height: 20 }
+        Label { width: app.child_width height: 20 }
+        Label { width: app.child_width height: 20 }
+    }
+}', 'import ui2
+@[heap]
+struct State {
+pub mut:
+    minimum f64 = 30
+    child_width f64 = 11.9375
+}
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    mut app := &State{}
+    below := build(mut app).children[0]
+    assert below.frame == ui2.rect(0, 0, 59.6875, 100)
+    assert below.children.map(it.frame) == [ui2.rect(0, 0, 59.6875, 20), ui2.rect(0, 20, 59.6875, 20), ui2.rect(0, 40, 59.6875, 20), ui2.rect(0, 60, 59.6875, 20), ui2.rect(0, 80, 59.6875, 20)]
+    app.child_width = 12
+    boundary := build(mut app).children[0]
+    assert boundary.frame == ui2.rect(0, 0, 60, 60)
+    assert boundary.children.map(it.frame) == [ui2.rect(0, 0, 30, 20), ui2.rect(30, 0, 30, 20), ui2.rect(0, 20, 30, 20), ui2.rect(30, 20, 30, 20), ui2.rect(0, 40, 30, 20)]
+    app.child_width = 12.0625
+    above := build(mut app).children[0]
+    assert above.frame == ui2.rect(0, 0, 60.3125, 60)
+    assert above.children.map(it.frame) == [ui2.rect(0, 0, 30.15625, 20), ui2.rect(30.15625, 0, 30.15625, 20), ui2.rect(0, 20, 30.15625, 20), ui2.rect(30.15625, 20, 30.15625, 20), ui2.rect(0, 40, 30.15625, 20)]
+    app.minimum = 12.0625
+    five_columns := build(mut app).children[0]
+    assert five_columns.frame == ui2.rect(0, 0, 60.3125, 20)
+    assert five_columns.children.map(it.frame) == [ui2.rect(0, 0, 12.0625, 20), ui2.rect(12.0625, 0, 12.0625, 20), ui2.rect(24.125, 0, 12.0625, 20), ui2.rect(36.1875, 0, 12.0625, 20), ui2.rect(48.25, 0, 12.0625, 20)]
+    sizes := [ui2.rect(0, 0, 12, 20), ui2.rect(0, 0, 12, 20), ui2.rect(0, 0, 12, 20), ui2.rect(0, 0, 12, 20), ui2.rect(0, 0, 12, 20)]
+    assert ui2.grid_preferred_size(ui2.GridConfig{frame: ui2.rect(0, 0, 59.6875, 300), auto_columns_min_width: 30}, sizes)! == ui2.rect(0, 0, 12, 100)
+    assert ui2.grid_preferred_size(ui2.GridConfig{frame: ui2.rect(0, 0, 60, 300), auto_columns_min_width: 30}, sizes)! == ui2.rect(0, 0, 24, 60)
+    assert ui2.grid_preferred_size(ui2.GridConfig{frame: ui2.rect(0, 0, 60.3125, 300), auto_columns_min_width: 30}, sizes)! == ui2.rect(0, 0, 24, 60)
+    println("selected widths below, at and above 60; live minimum control PASS")
+}')
+}
+
+fn test_selected_auto_grid_fractional_padding_spacing_and_column_cap() {
+	run_bounded_layout_fixture('selected_auto_grid_fractional', 'Absolute {
+    width: 300 height: 300
+    Grid { auto_columns_min_width: app.minimum max_columns: app.cap
+        padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
+        spacing_x: 2.5 spacing_y: 1.25
+        Label { width: 20.5 height: 10.25 }
+        Label { width: 20.5 height: 10.25 }
+        Label { width: 20.5 height: 10.25 }
+        Label { width: 20.5 height: 10.25 }
+        Label { width: 20.5 height: 10.25 }
+    }
+}', 'import ui2
+@[heap]
+struct State {
+pub mut:
+    minimum f64 = 100
+    cap int
+}
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    sizes := [ui2.rect(0, 0, 20.5, 10.25), ui2.rect(0, 0, 20.5, 10.25), ui2.rect(0, 0, 20.5, 10.25), ui2.rect(0, 0, 20.5, 10.25), ui2.rect(0, 0, 20.5, 10.25)]
+    config := ui2.GridConfig{frame: ui2.rect(0, 0, 300, 300), auto_columns_min_width: 100, padding: ui2.GridPadding{left: 2.5, right: 3.25, top: 1.5, bottom: 2.5}, spacing: ui2.GridSpacing{horizontal: 2.5, vertical: 1.25}}
+    assert ui2.grid_preferred_size(config, sizes)! == ui2.rect(0, 0, 49.25, 37.25)
+    assert ui2.grid_preferred_size(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 49.25, 300)}, sizes)! == ui2.rect(0, 0, 26.25, 60.25)
+    one_column := [ui2.rect(2.5, 1.5, 43.5, 10.25), ui2.rect(2.5, 13, 43.5, 10.25), ui2.rect(2.5, 24.5, 43.5, 10.25), ui2.rect(2.5, 36, 43.5, 10.25), ui2.rect(2.5, 47.5, 43.5, 10.25)]
+    assert ui2.grid_frames(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 49.25, 60.25)}, 5)! == one_column
+    assert ui2.grid_preferred_size(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 49, 300), auto_columns_min_width: 20.5}, sizes)! == ui2.rect(0, 0, 26.25, 60.25)
+    assert ui2.grid_preferred_size(ui2.GridConfig{...config, frame: ui2.rect(0, 0, 49.25, 300), auto_columns_min_width: 20.5}, sizes)! == ui2.rect(0, 0, 49.25, 37.25)
+    mut app := &State{}
+    narrow := build(mut app).children[0]
+    assert narrow.frame == ui2.rect(0, 0, 49.25, 60.25)
+    assert narrow.children.map(it.frame) == one_column
+    app.minimum = 20.5
+    app.cap = 2
+    capped := build(mut app).children[0]
+    assert capped.frame == ui2.rect(0, 0, 49.25, 37.25)
+    assert capped.children.map(it.frame) == [ui2.rect(2.5, 1.5, 20.5, 10.25), ui2.rect(25.5, 1.5, 20.5, 10.25), ui2.rect(2.5, 13, 20.5, 10.25), ui2.rect(25.5, 13, 20.5, 10.25), ui2.rect(2.5, 24.5, 20.5, 10.25)]
+    println("fractional padding/gaps, selected-width threshold and max_columns PASS")
+}')
+}
+
+fn test_selected_auto_grid_nested_height_measurement_has_bounded_fresh_child_builds() {
+	run_bounded_layout_fixture('selected_auto_grid_nested', 'Absolute {
+    width: 300 height: 300
+    Grid { auto_columns_min_width: 100
+        View { View { Label { width: app.leaf_width() height: 20 } } }
+        View { View { Label { width: app.leaf_width() height: 20 } } }
+        View { View { Label { width: app.leaf_width() height: 20 } } }
+        View { View { Label { width: app.leaf_width() height: 20 } } }
+        View { View { Label { width: app.leaf_width() height: 20 } } }
+    }
+}', 'import ui2
+@[heap]
+struct State {
+pub mut:
+    evaluations int
+    value f64 = 20
+}
+// leaf_width counts property evaluation while returning a stable construction value.
+pub fn (mut app State) leaf_width() f64 { app.evaluations++; return app.value }
+fn build(mut app State) ui2.Element { return $vml("view.vml") }
+fn main() {
+    mut app := &State{}
+    first := build(mut app).children[0]
+    assert first.frame == ui2.rect(0, 0, 60, 100)
+    assert first.children.map(it.frame) == [ui2.rect(0, 0, 60, 20), ui2.rect(0, 20, 60, 20), ui2.rect(0, 40, 60, 20), ui2.rect(0, 60, 60, 20), ui2.rect(0, 80, 60, 20)]
+    for child in first.children {
+        assert child.children[0].frame == ui2.rect(0, 0, 60, 20)
+        assert child.children[0].children[0].frame == ui2.rect(0, 0, 20, 20)
+    }
+    assert app.evaluations > 0 && app.evaluations <= 20, app.evaluations.str()
+    previous := app.evaluations
+    app.value = 25
+    second := build(mut app).children[0]
+    assert second.frame == ui2.rect(0, 0, 75, 100)
+    assert second.children.map(it.frame) == [ui2.rect(0, 0, 75, 20), ui2.rect(0, 20, 75, 20), ui2.rect(0, 40, 75, 20), ui2.rect(0, 60, 75, 20), ui2.rect(0, 80, 75, 20)]
+    for child in second.children { assert child.children[0].children[0].frame == ui2.rect(0, 0, 25, 20) }
+    assert app.evaluations > previous && app.evaluations - previous <= 20, app.evaluations.str()
+    println("nested five-child selected Grid evaluations: first=" + previous.str() + " second=" + (app.evaluations - previous).str())
+}')
+}
+
+fn test_selected_auto_grid_preserves_authored_inherited_and_allocated_zero_axes() {
+	run_bounded_layout_fixture('selected_auto_grid_axes', 'Absolute {
+    width: 300 height: 300
+    Grid { width: 0 height: 0 auto_columns_min_width: 100 padding: 1.25
+        Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+    }
+    Row { width: 0 height: 120 align_items: .start
+        Grid { auto_columns_min_width: 100 padding: 1.25
+            Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+        }
+    }
+    View { width: 60 height: 40
+        Grid { auto_columns_min_width: 100
+            Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+            Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+            Label { width: 20 height: 20 }
+        }
+    }
+    Grid { height: 0 auto_columns_min_width: 100
+        Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+    }
+}', 'import ui2
+fn main() {
+    tree := $vml("view.vml")
+    zero := tree.children[0]
+    assert zero.frame == ui2.rect(0, 0, 0, 0)
+    assert zero.children.map(it.frame) == [ui2.rect(0, 0, 0, 0), ui2.rect(0, 0, 0, 0)]
+    allocated := tree.children[1].children[0]
+    assert allocated.frame == ui2.rect(0, 0, 0, 42.5)
+    assert allocated.children.map(it.frame) == [ui2.rect(0, 1.25, 0, 20), ui2.rect(0, 21.25, 0, 20)]
+    inherited := tree.children[2].children[0]
+    assert inherited.frame == ui2.rect(0, 0, 60, 40)
+    assert inherited.children.map(it.frame) == [ui2.rect(0, 0, 60, 8), ui2.rect(0, 8, 60, 8), ui2.rect(0, 16, 60, 8), ui2.rect(0, 24, 60, 8), ui2.rect(0, 32, 60, 8)]
+    height_zero := tree.children[3]
+    assert height_zero.frame == ui2.rect(0, 0, 40, 0)
+    assert height_zero.children.map(it.frame) == [ui2.rect(0, 0, 40, 0), ui2.rect(0, 0, 40, 0)]
+    println("authored/inherited height, explicit/allocated zero and fitted padding PASS")
+}')
+}
+
 fn test_auto_grid_natural_padding_and_following_descendant_refs() {
 	run_bounded_layout_fixture('auto_grid_natural', 'Row {
     width: 300 height: 100 align_items: .start

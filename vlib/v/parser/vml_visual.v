@@ -613,10 +613,12 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	initial := 'vml_initial_${suffix}'
 	c.out.writeln('\t${initial} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${config}, frame: ${available}}')
 	first := 'vml_first_frames_${suffix}'
+	grid_width := 'vml_grid_width_${suffix}'
 	if grid && preferred_mode {
 		c.out.writeln('\tvml_grid_natural_${suffix} := ui2.grid_preferred_size(${initial}, ${items}.map(it.frame)) or { panic(err) }')
 		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', 'vml_grid_natural_${suffix}.width')
-		c.out.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${width}, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
+		c.out.writeln('\t${grid_width} := ${width}')
+		c.out.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${grid_width}, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
 	} else {
 		c.out.writeln('\t${first} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(${initial}${if grid {
 			', ' + items + '.len'
@@ -648,7 +650,14 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		}
 	}
 	measured := 'vml_measured_config_${suffix}'
-	c.out.writeln('\t${measured} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${initial}, children: ${items}}')
+	// Natural width is selected once. Automatic columns and preferred rows must
+	// use that width after child-height measurement, just as final allocation does.
+	measurement_frame := if grid && preferred_mode {
+		', frame: ui2.rect(0, 0, ${grid_width}, ${initial}.frame.height)'
+	} else {
+		''
+	}
+	c.out.writeln('\t${measured} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${initial}, children: ${items}${measurement_frame}}')
 	frame := if preferred_mode { 'vml_preferred_frame_${suffix}' } else { declared_frame }
 	if preferred_mode {
 		preferred := 'vml_preferred_size_${suffix}'
@@ -658,7 +667,7 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 			c.out.writeln('\t${preferred} := ui2.flex_preferred_size(${measured}) or { panic(err) }')
 		}
 		c.out.writeln('\t_ = ${preferred}')
-		preferred_width := if grid { preferred + '.width' } else { 'vml_preferred_width_' + suffix }
+		preferred_width := if grid { grid_width } else { 'vml_preferred_width_' + suffix }
 		preferred_height := if grid {
 			preferred + '.height'
 		} else {
