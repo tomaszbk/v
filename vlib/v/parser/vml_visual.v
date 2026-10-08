@@ -650,24 +650,31 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 			c.out.writeln('\t${preferred} := ui2.flex_preferred_size(${measured}) or { panic(err) }')
 		}
 		c.out.writeln('\t_ = ${preferred}')
+		preferred_width := if grid { preferred + '.width' } else { 'vml_preferred_width_' + suffix }
 		preferred_height := if grid {
 			preferred + '.height'
 		} else {
 			'vml_preferred_height_' + suffix
 		}
 		if !grid {
+			c.out.writeln('\tmut ${preferred_width} := ${preferred}.width')
 			c.out.writeln('\tmut ${preferred_height} := ${preferred}.height')
 			c.out.writeln('\tif ${measured}.wrap && ${measured}.orientation == .horizontal {')
 			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, ${probe}.width, 0)}) or { panic(err) }')
 			c.out.writeln('\t\t${preferred_height} = ${measured}.padding.top')
 			c.out.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.y + child_frame.height > ${preferred_height} { ${preferred_height} = child_frame.y + child_frame.height } }')
 			c.out.writeln('\t\t${preferred_height} += ${measured}.padding.bottom')
+			c.out.writeln('\t} else if ${measured}.wrap && ${measured}.orientation == .vertical {')
+			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, 0, ${probe}.height)}) or { panic(err) }')
+			c.out.writeln('\t\t${preferred_width} = ${measured}.padding.left')
+			c.out.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.x + child_frame.width > ${preferred_width} { ${preferred_width} = child_frame.x + child_frame.width } }')
+			c.out.writeln('\t\t${preferred_width} += ${measured}.padding.right')
 			c.out.writeln('\t}')
 		}
 		c.out.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${if placement == .width_preferred {
 			input + '.width'
 		} else {
-			vml_prop(properties, 'width', vml_measured_axis(placement, declared_frame + '.width', preferred + '.width'))
+			vml_prop(properties, 'width', vml_measured_axis(placement, declared_frame + '.width', preferred_width))
 		}}, ${vml_prop(properties, 'height', vml_measured_axis(placement, declared_frame + '.height', preferred_height))})')
 	}
 	frames := 'vml_frames_${suffix}'
@@ -679,7 +686,7 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	children := 'vml_children_${suffix}'
 	if node.id.len > 0 {
 		named := scope.ids[node.id] or { VmlNamedValue{} }
-		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named.props }
+		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named.props, prop_types: named.prop_types }
 	}
 	c.out.writeln('\tmut ${children} := []ui2.Element{}')
 	for index, child in visible {

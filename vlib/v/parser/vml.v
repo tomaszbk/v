@@ -663,8 +663,10 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		p.record_vml_diagnostic(path, source, err.msg(), call_start)
 		return p.add_val_id(5, '')
 	}
-	custom := p.prefs.normalized_target_os() in ['linux', 'android']
-		|| 'ui2_custom_rendering' in p.prefs.user_defines || 'ui2_headless' in p.prefs.user_defines
+	target_os := p.prefs.normalized_target_os()
+	custom := target_os in ['linux', 'android']
+		|| (target_os in ['macos', 'windows'] && 'ui2_custom_rendering' in p.prefs.user_defines)
+		|| 'ui2_headless' in p.prefs.user_defines
 	if !custom {
 		validate_vml_native_visual(root) or {
 			p.record_vml_diagnostic(path, source, err.msg(), call_start)
@@ -729,8 +731,9 @@ fn vml_expr_uses_path(expr &VmlExpr, base string) bool {
 }
 
 struct VmlNamedValue {
-	frame string
-	props map[string]string
+	frame      string
+	props      map[string]string
+	prop_types map[string]string
 }
 
 struct VmlScope {
@@ -742,14 +745,25 @@ mut:
 struct VmlCompiler {
 	uses_app bool
 mut:
-	out                strings.Builder
-	property_positions map[string]VmlProperty
+	out                  strings.Builder
+	property_positions   map[string]VmlProperty
+	builders             map[string]VmlBuilder
+	builder_declarations []string
+	builder_dependencies map[string][]string
+	active_builder       string
+	share_nodes          bool
+	reference_readers    map[string][]string
 }
 
 fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	c.out = strings.new_builder(4096)
+	c.share_nodes = vml_has_visual_layout(root)
+	c.builders = map[string]VmlBuilder{}
+	c.builder_declarations = []string{}
+	c.builder_dependencies = map[string][]string{}
+	c.reference_readers = map[string][]string{}
+	c.collect_builder_references(root, '0')
 	capture := if c.uses_app { '[mut app] ' } else { '' }
-	c.out.writeln('(fn ${capture}() ui2.Element {')
 	c.out.writeln('\tvml_input_0 := ui2.bounds()')
 	scope := VmlScope{
 		ids:     map[string]VmlNamedValue{}
@@ -758,7 +772,7 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	c.compile_node(root, '0', 'vml_input_0', scope, '', .normal)
 	c.out.writeln('\treturn vml_element_0')
 	c.out.write_string('}())')
-	return c.out.str()
+	return '(fn ${capture}() ui2.Element {\n' + c.builder_declarations.join('\n') + '\n' + c.out.str()
 }
 
 fn vml_clone_scope(scope VmlScope) VmlScope {
@@ -1013,21 +1027,32 @@ fn vml_order_properties_by_dependencies(properties []VmlProperty, node_id string
 }
 
 fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
+	// Repeater locals have types supplied by structural lowering. Keep its one
+	// existing emitter until integration; static visual trees share typed builders.
+	if c.share_nodes && incoming.special.len == 0 && default_key.len == 0 {
+		return c.compile_shared_node(node, path, input, incoming, placement)
+	}
+	return c.compile_node_body(node, path, input, incoming, default_key, placement)
+}
+
+fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
 	suffix := vml_var(path)
 	measure_mode := placement in [.preferred, .width_preferred, .inherited_preferred]
 	c.out.writeln('\t_ = ${input}')
 	mut scope := vml_clone_scope(incoming)
 	mut named_props := map[string]string{}
+	mut named_types := map[string]string{}
 	// Declared properties are visible before expressions are resolved. Geometry
 	// bindings are added after they are emitted below, so self-geometry can use an
 	// earlier computed binding while declared properties can still read the input.
 	for property in node.properties {
 		if property.declared_type.len > 0 {
 			named_props[property.name] = 'vml_property_${suffix}_${vml_var(property.name)}'
+			named_types[property.name] = vml_builder_property_type(node, property)
 		}
 	}
 	if node.id.len > 0 {
-		scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone() }
+		scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	mut properties := map[string]string{}
 	mut ordered_properties := vml_order_properties_by_dependencies(node.properties.filter(it.declared_type.len > 0), node.id)
@@ -1056,8 +1081,9 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 		properties[property.name] = name
 		if property.declared_type.len == 0 && vml_property_is_geometry(property) {
 			named_props[property.name] = name
+			named_types[property.name] = vml_builder_property_type(node, property)
 			if node.id.len > 0 {
-				scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone() }
+				scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
 			}
 		}
 	}
@@ -1080,7 +1106,7 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 	}
 	c.out.writeln('\t_ = ${frame}')
 	if node.id.len > 0 {
-		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named_props.clone() }
+		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	c.write_action_type_checks(node, suffix, scope)
 	if node.tag in ['Flex', 'Row', 'Column', 'Grid'] {
@@ -1152,8 +1178,9 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 		if node.id.len > 0 {
 			// Later siblings use this pass's measured frame; declared props keep precedence.
 			scope.ids[node.id] = VmlNamedValue{
-				frame: 'vml_element_${suffix}.frame'
-				props: named_props.clone()
+				frame:      'vml_element_${suffix}.frame'
+				props:      named_props.clone()
+				prop_types: named_types.clone()
 			}
 		}
 	}

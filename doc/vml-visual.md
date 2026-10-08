@@ -85,6 +85,9 @@ Children accept `flex_basis`, `flex_grow`, `flex_shrink`, `min_width`, `min_heig
 `max_width`, `max_height` and `align_self`. Enum values match `ui2.FlexJustify` and
 `ui2.LayoutAlignment`. Explicit dimensions supply preferred sizes; omitted leaf
 dimensions are measured by ui2. Text height is remeasured at its allocated width.
+With wrapping, an omitted cross-axis dimension includes every wrapped line: a Row
+measures its height and a Column measures its width, including padding and line gaps.
+A positive inherited dimension remains the offered size for nested containers.
 
 Children can read an earlier sibling's geometry and typed `computed` properties,
 including ids declared in its descendants. These references are resolved in declaration
@@ -92,6 +95,14 @@ order during preferred measurement, width measurement and final allocation. A ch
 with explicit height keeps its preferred bindings when width measurement skips it.
 References to omitted dimensions use the sibling's measured size for that phase.
 Later siblings remain unavailable; final builders expose the allocated sibling scope.
+
+Static visual trees use shared typed builders for each node and placement phase.
+Repeated calls with identical offered geometry and visible references share their result
+within one `$vml` construction. The next construction starts fresh. Property expressions
+should read stable application state during construction; event callbacks retain the live
+application capture. This bounds generated subtree copies without moving layout or text
+measurement out of ui2. Runtime work also depends on the number of distinct measurement
+inputs; shared builders do not promise a linear bound for arbitrary responsive expressions.
 
 `Grid` accepts `columns` (or `cols`), `rows`, `auto_columns_min_width`, `max_columns`,
 `padding` and per-side padding, `spacing` (or `spacing_x`/`spacing_y`),
@@ -110,6 +121,8 @@ custom font families, text backgrounds and advanced text decoration, paragraph i
 per-side border colors, border-pattern declarations, outlines and interaction patches. It reports
 the declaration rather than silently dropping it. Native platform appearance is not
 promised to match custom rendering.
+On iOS, `ui2_custom_rendering` does not select a custom renderer: UIKit remains native,
+and the same presentation diagnostics apply with or without that flag.
 
 `examples/ui2/vml_visual` is an independent example and executable parity fixture.
 With ui2 installed in the module search path:
@@ -123,5 +136,8 @@ V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -d ui2_custom_rendering run
 
 The fixtures compare styles and geometry with ui2's public API and runtime conversion,
 check independent layout coordinates and exercise typed actions and UTF-8 bindings.
+Focused regression fixtures cover vertical wrapping, nested sibling scopes, generated
+source growth and property-evaluation counts at increasing layout depths. Renderer-profile
+classification tests exercise target preferences without executing foreign platforms.
 `TextInput` is the current input API; choose `multiline: false` for a single-line field.
 Removed controls, Rectangle, legacy layout names, `units` and `property` are rejected.

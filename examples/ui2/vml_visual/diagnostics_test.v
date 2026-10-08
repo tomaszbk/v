@@ -2,6 +2,35 @@ module main
 
 import os
 
+fn test_compiled_visual_ios_custom_flag_keeps_native_source_diagnostics() {
+	root := os.join_path(os.vtmp_dir(), 'vml_ios_native_${os.getpid()}')
+	os.mkdir_all(root)!
+	defer {
+		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
+	}
+	view := os.join_path(root, 'view.vml')
+	source := os.join_path(root, 'main.v')
+	os.write_file(view, 'Label {\n    weight: 600\n}')!
+	os.write_file(source, 'import ui2\nfn main() { _ = $vml("view.vml") }')!
+	for custom in [false, true] {
+		mut arguments := [@VEXE, '-new-compiler', '-gc', 'boehm', '-path', '@vlib:@vmodules', '-cc',
+			'clang', '-no-retry-compilation', '-os', 'ios', '-check']
+		if custom { arguments << ['-d', 'ui2_custom_rendering'] }
+		arguments << source
+		// Frontend diagnostics only: no SDK build or UIKit execution is needed.
+		result := os.exec(arguments)
+		profile := if custom { 'flag' } else { 'native' }
+		os.write_file(os.join_path(root, '${profile}-argv.txt'), arguments.join('\n'))!
+		os.write_file(os.join_path(root, '${profile}-diagnostics.log'), result.output)!
+		os.write_file(os.join_path(root, '${profile}-exit.txt'), result.exit_code.str())!
+		assert result.exit_code != 0, result.output
+		assert result.output.contains('${view}:2:5:'), result.output
+		assert result.output.contains('`weight` requires the custom renderer'), result.output
+		assert result.output.contains('called from ${source}:2:'), result.output
+		assert !result.output.contains('<unknown>'), result.output
+	}
+}
+
 fn test_compiled_visual_dynamic_types_and_inactive_arms_report_vml_locations() {
 	root := os.join_path(os.vtmp_dir(), 'vml_visual_types_${os.getpid()}')
 	os.mkdir_all(root)!
