@@ -4792,6 +4792,11 @@ fn (mut t Transformer) merge_worker_capture_contexts(w &Transformer) {
 		return
 	}
 	for name in w.generated_capture_contexts {
+		// A scoped batch can itself belong to a worker. Keep its publication log
+		// so the worker's eventual merge also publishes these capture contexts.
+		if name !in t.generated_capture_contexts {
+			t.generated_capture_contexts << name.clone()
+		}
 		if info := w.structs[name] {
 			t.structs[name.clone()] = clone_struct_info_owned(info)
 		}
@@ -21259,7 +21264,8 @@ fn (mut t Transformer) transform_call_expr_inner(id flat.NodeId, node flat.Node)
 		return t.make_empty()
 	}
 	if node.value.len > 0 && node.value == '__v_compile_error' {
-		t.record_selected_compile_error_call(node)
+		t.record_selected_compile_error_call(id, node)
+		return t.make_empty()
 	}
 	// Materialize value `match`/`if` method receivers and arguments before builtin/method
 	// dispatch, so builtin lowerings (e.g. `(match ...).clone()` -> make_array_clone_call, or
@@ -21606,7 +21612,7 @@ fn (t &Transformer) bound_method_array_key(name string) string {
 	return '${t.cur_file}|${t.cur_module}|${t.cur_fn_name}|${name}'
 }
 
-fn (mut t Transformer) record_selected_compile_error_call(node flat.Node) {
+fn (mut t Transformer) record_selected_compile_error_call(id flat.NodeId, node flat.Node) {
 	if node.kind != .call || node.children_count == 0 {
 		return
 	}
@@ -21624,7 +21630,19 @@ fn (mut t Transformer) record_selected_compile_error_call(node flat.Node) {
 	} else {
 		'compile-time error'
 	}
-	t.record_monomorph_error('compile-time error: ${message}')
+	// Specialization can select a reflected branch that checking deferred.
+	// Publish a located diagnostic also when -check only runs specialization.
+	if !isnil(t.tc) && t.tc.check_concrete_generic_bodies {
+		t.tc.record_transform_error(id, node.pos, message)
+	} else {
+		location := if file := t.a.source_files[node.pos.id] {
+			position := file.logical_position(node.pos)
+			'${position.filename}:${position.line}:${position.column}: '
+		} else {
+			''
+		}
+		t.record_monomorph_error('${location}compile-time error: ${message}')
+	}
 }
 
 // is_disabled_fn_name reports whether is disabled fn name applies in transform.

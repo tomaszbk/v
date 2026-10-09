@@ -1,0 +1,5 @@
+vlib/v/parser/tests/vml_assignment_target_err.vv:2:9: error: vlib/v/parser/tests/vml_structure/invalid_assignment.vml:2:39: event assignments must target a mutable top-level app field
+    1 | fn main() {
+    2 |     _ = $vml('vml_structure/invalid_assignment.vml')
+      |         ^
+    3 | }

@@ -1,0 +1,2 @@
+import MissingStructureModule
+View { MissingStructureModule {} }

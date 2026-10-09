@@ -1,0 +1,25 @@
+import CombinedRow
+View {
+    width: 360 height: 320
+    Grid {
+        id: layout columns: 2 width: 360 height: 180
+        View {
+            id: local width: 170 height: 160
+            computed int offset: 5
+            Checkbox {
+                id: checked bind.checked: app.checked
+                on_change: app.record(local.offset + app.count + (app.checked ? 11 : 22))
+                on_tap: app.tap(local.offset + app.count)
+            }
+            Button { id: compound on_tap: app.record(local.offset + app.count * 2) }
+            TextInput { id: input multiline: false bind.text: app.message on_change: app.named }
+            Scroll {
+                id: scroll on_tap: app.tap(app.count)
+                on_scroll: app.record(local.offset + app.count)
+            }
+            Label { Run { text: "Niñez" bold: false weight: 0 letter_spacing: 0 } }
+        }
+        View { width: 170 height: 160 Button { text: "Separate" } }
+    }
+    Repeater { model: app.rows key: item.id CombinedRow {} }
+}

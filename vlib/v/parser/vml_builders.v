@@ -136,8 +136,11 @@ fn (mut c VmlCompiler) compile_shared_node(node &VmlNode, path string, input str
 			local_scope.ids[id] = VmlNamedValue{ frame: frame, props: props, prop_types: named.prop_types }
 		}
 		previous := c.out
+		previous_locations := c.locations.clone()
+		previous_location := c.location
 		parent := c.active_builder
 		c.out = strings.new_builder(4096)
+		c.locations = []VmlLocation{}
 		c.active_builder = name
 		body_path := canonical
 		result := c.compile_node_body(node, body_path, 'vml_builder_input', local_scope, '', placement)
@@ -171,11 +174,14 @@ fn (mut c VmlCompiler) compile_shared_node(node &VmlNode, path string, input str
 			properties << VmlBuilderValue{ property: property.name, typ: vml_builder_property_type(node, property), value: variable }
 		}
 		body := c.out.str()
+		body_locations := c.locations.clone()
 		c.out = previous
+		c.locations = previous_locations
+		c.location = previous_location
 		c.active_builder = parent
 		builder := VmlBuilder{ name: name, parameters: parameters, exports: exports, properties: properties }
 		c.builders[key] = builder
-		c.emit_shared_builder(builder, body, 'vml_element_${vml_var(body_path)}')
+		c.emit_shared_builder(builder, body, body_locations, 'vml_element_${vml_var(body_path)}')
 	}
 	builder := c.builders[key]
 	mut call_arguments := [input]
@@ -204,8 +210,8 @@ fn (mut c VmlCompiler) compile_shared_node(node &VmlNode, path string, input str
 	for property in builder.properties {
 		outputs << 'vml_property_${suffix}_${vml_var(property.property)}'
 	}
-	c.out.writeln('\t${outputs.join(', ')} := ${name}(${call_arguments.join(', ')})')
-	for output in outputs { c.out.writeln('\t_ = ${output}') }
+	c.writeln('\t${outputs.join(', ')} := ${name}(${call_arguments.join(', ')})')
+	for output in outputs { c.writeln('\t_ = ${output}') }
 	for id, value in named { scope.ids[id] = value }
 	return scope
 }
@@ -214,7 +220,7 @@ fn (mut c VmlCompiler) compile_shared_node(node &VmlNode, path string, input str
 // arguments include offered geometry and visible references, so an allocated
 // sibling cannot reuse a result measured with a different scope. ui2 still owns
 // every measure/allocation call; there is no persistent text or layout cache.
-fn (mut c VmlCompiler) emit_shared_builder(builder VmlBuilder, body string, element string) {
+fn (mut c VmlCompiler) emit_shared_builder(builder VmlBuilder, body string, body_locations []VmlLocation, element string) {
 	mut out := strings.new_builder(body.len + 2048)
 	inputs := [VmlBuilderValue{ typ: 'ui2.Rect', value: 'vml_builder_input' }]
 	mut all_inputs := inputs.clone()
@@ -247,6 +253,7 @@ fn (mut c VmlCompiler) emit_shared_builder(builder VmlBuilder, body string, elem
 	out.writeln('\tfor vml_cached_index in 0 .. ${builder.name}_input_0.len {')
 	out.writeln('\t\tif ${comparisons.join(' && ')} { return ${cached.join(', ')} }')
 	out.writeln('\t}')
+	body_start := out.spart(0, out.len).count('\n')
 	out.write_string(body)
 	for index, argument in all_inputs {
 		out.writeln('\t${builder.name}_input_${index} << ${argument.value}')
@@ -256,5 +263,9 @@ fn (mut c VmlCompiler) emit_shared_builder(builder VmlBuilder, body string, elem
 	}
 	out.writeln('\treturn ${results.map(it.value).join(', ')}')
 	out.writeln('\t}')
-	c.builder_declarations << out.str()
+	declaration := out.str()
+	mut locations := []VmlLocation{len: declaration.count('\n'), init: c.location}
+	for index, location in body_locations { locations[body_start + index] = location }
+	c.builder_declarations << declaration
+	c.builder_locations << locations
 }

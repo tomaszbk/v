@@ -1,0 +1,8 @@
+module Card
+import Caption
+View {
+    id: card
+    width: 300
+    height: 60
+    Caption { id: explicit_caption text: "Imported caption" }
+}

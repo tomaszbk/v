@@ -1,0 +1,8 @@
+import RootRefCard
+View {
+    View { id: card width: 77 }
+    RootRefCard { id: first width: 100 }
+    RootRefCard { id: second width: 200 }
+    RootRefCard { id: third width: card.width }
+    View { width: first.width height: second.height }
+}

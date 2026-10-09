@@ -1,0 +1,1 @@
+TextInput { multiline: false id: named bind.text: app.message on_change: named_change }

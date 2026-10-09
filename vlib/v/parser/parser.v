@@ -169,6 +169,7 @@ mut:
 	pending_aligned                   string
 	skip_next_decl                    bool
 	disable_fn_body                   bool
+	vml_declarations                  []flat.NodeId
 	pending_decl_pub                  bool
 	pending_decl_attrs                []string
 	pending_decl_attr_kinds           []int
@@ -456,6 +457,7 @@ fn (mut p Parser) reset_file_state(path string) {
 	p.skip_next_decl = false
 	p.disable_fn_body = false
 	p.pending_decl_pub = false
+	p.vml_declarations.clear()
 	p.pending_decl_attrs.clear()
 	p.pending_decl_attr_kinds.clear()
 	p.pending_decl_attr_sources.clear()
@@ -663,6 +665,7 @@ fn (mut p Parser) parse_buffer(path string, stable_src string) {
 			ids << implicit_os_id
 		}
 	}
+	ids << p.vml_declarations
 	start := p.add_children(ids)
 	trailing_id := p.add_node(flat.Node{
 		kind:           .file

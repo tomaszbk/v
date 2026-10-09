@@ -8760,7 +8760,7 @@ pub mut:
 
 pub fn (mut app App) save() {}
 
-fn view(app &App) ui2.Element {
+fn view(mut app App) ui2.Element {
 	return $vml('views/profile.vml')
 }
 ```
@@ -8790,7 +8790,7 @@ given. A relative path is searched for in this order:
 The compiled VML subset supports these UI2 elements:
 
 - `Screen`, `View`, `Rectangle`, `Column`, `Row`, and `Scroll` containers;
-- `Label`, `Image`, `Button`, `Checkbox`, `Dropdown`, `TextField`, and `TextArea`;
+- `Label`, `Image`, `Button`, `Checkbox`, `Dropdown`, and `TextInput`;
 - `ProgressBar`, `Slider`, `Switch`, `Spinner`, and `MessageBox`;
 - `Repeater` delegates, `MenuItem` entries, and `Option` entries.
 
@@ -8804,9 +8804,18 @@ String literals may use either double (`"`) or single (`'`) quote delimiters. Es
 quote or a backslash with `\`; `\n` and `\t` are also supported.
 
 The `bind.text`, `bind.checked`, `bind.active`, and `bind.value` properties create two-way
-bindings to mutable top-level fields on `app`. Event properties `on_tap`, `on_change`,
-`on_active`, `on_text`, and `on_submit` call an `app` method with zero or one argument. These
-methods and their argument types are checked while the generated V code is compiled.
+bindings to public mutable top-level fields on `app`. Event properties `on_tap`, `on_change`,
+`on_active`, and `on_submit` call a public `app` method with zero arguments, one `int`, or one
+`string`, returning nothing. They also support assignments such as `app.count = app.count + 1`.
+Bindings apply the event payload before the action runs. V checks paths and signatures, including
+inactive branches and empty list schemas. Diagnostics retain the originating VML file and line.
+
+Files can import named VML modules relative to their own directory. Each invocation namespaces
+internal ids, and keyed repeaters preserve descendant identities across reorder. `Menu` and
+`MenuBar` roots return typed `[]ui2.Menu` declarations. Text editing uses `TextInput`, with
+`multiline: false` for a single-line field; retired widget names and `on_text` are errors.
+See the [compiled VML structure guide](vml_structure.md) and `examples/vml_structure` for import,
+list, callback, assignment and menu fixtures compiled against the public ui2 API.
 
 #### `$env`
 

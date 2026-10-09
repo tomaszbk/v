@@ -1,8 +1,5 @@
 module parser
 
-import v.flat
-import v.token
-
 // These names describe the existing ui2 API, not a second style/layout engine.
 const vml_text_properties = ['color', 'background_color', 'font_size', 'size', 'font_family', 'weight',
 	'letter_spacing', 'line_height', 'line_height_factor', 'baseline_offset', 'tabular_figures',
@@ -134,6 +131,9 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 // Each conditional arm has its own expected type. The checker must validate
 // inactive arms too, while runtime evaluates only the selected arm.
 fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, expr &VmlExpr, scope VmlScope) string {
+	if property.declared_type.len == 0 && property.name == 'key' {
+		return vml_stringify(c.expr(expr, scope, .raw))
+	}
 	if expr.kind == .conditional {
 		condition := c.expr(expr.left, scope, .bool_)
 		then_value := c.visual_property_value(node, property, expr.right, scope)
@@ -175,6 +175,7 @@ fn vml_visual_enum_values(node &VmlNode, name string) []string {
 
 fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 	if node.tag == 'Run' { return name == 'text' || name in vml_text_properties }
+	if vml_is_event(name) { return true }
 	if name in ['id', 'key', 'x', 'y', 'width', 'height', 'hidden', 'enabled', 'native', 'clickable',
 		'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation', 'cursor', 'tooltip',
 		'secure', 'autocorrect', 'pad_left', 'accessibility_role', 'accessibility_label',
@@ -236,7 +237,11 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 }
 
 fn vml_visual_error(property VmlProperty, message string) IError {
-	return error('${message} at line ${property.line}, column ${property.column}')
+	return if property.expr.source.len > 0 {
+		error('${property.expr.source}:${property.line}:${property.column}: ${message}')
+	} else {
+		error('${message} at line ${property.line}, column ${property.column}')
+	}
 }
 
 fn vml_visual_number(expr &VmlExpr) ?f64 {
@@ -252,11 +257,11 @@ fn vml_visual_number(expr &VmlExpr) ?f64 {
 
 // Literal checks recurse through both conditional arms, even when the condition
 // is false. Dynamic values are checked by V in the generated typed assignment.
-fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr, check_bounds bool) ! {
+fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr, check_bounds bool, in_repeater bool) ! {
 	if expr.kind == .conditional {
 		validate_vml_visual_bool(property, expr.left)!
-		validate_vml_visual_value(node, property, expr.right, check_bounds)!
-		validate_vml_visual_value(node, property, expr.third, check_bounds)!
+		validate_vml_visual_value(node, property, expr.right, check_bounds, in_repeater)!
+		validate_vml_visual_value(node, property, expr.third, check_bounds, in_repeater)!
 		return
 	}
 	use := vml_property_use(property)
@@ -305,12 +310,16 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 		return vml_visual_error(property, '`${property.name}` requires a #RRGGBB color or a typed integer')
 	}
 	if expr.kind == .path && !expr.value.contains('.') && !expr.value.starts_with('#')
-		&& property.name != 'id' {
+		&& property.name != 'id' && !(in_repeater && expr.value in ['item', 'index']) {
 		return vml_visual_error(property, 'unknown VML name `${expr.value}`; quote string literals')
 	}
 	if (expr.kind == .binary && expr.value in ['+', '-', '*', '/', '%']) || (expr.kind == .unary && expr.value == '-') {
-		if !isnil(expr.left) { validate_vml_visual_value(node, property, expr.left, false)! }
-		if !isnil(expr.right) { validate_vml_visual_value(node, property, expr.right, false)! }
+		if !isnil(expr.left) {
+			validate_vml_visual_value(node, property, expr.left, false, in_repeater)!
+		}
+		if !isnil(expr.right) {
+			validate_vml_visual_value(node, property, expr.right, false, in_repeater)!
+		}
 	}
 }
 
@@ -321,24 +330,32 @@ fn validate_vml_visual_bool(property VmlProperty, expr &VmlExpr) ! {
 }
 
 fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
+	validate_compiled_vml_visual_scope(node, parent, false)!
+}
+
+fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater bool) ! {
+	if node.tag in ['Menu', 'MenuBar'] {
+		validate_compiled_vml_menu(node)!
+		return
+	}
 	if node.tag !in ['Screen', 'View', 'Absolute', 'Flex', 'Row', 'Column', 'Grid', 'Scroll',
 		'ScaledContent', 'Label', 'Run', 'TextInput', 'Image', 'Button', 'Checkbox', 'Dropdown',
 		'ProgressBar', 'Slider', 'Switch', 'Spinner', 'MessageBox', 'Repeater', 'MenuItem', 'Option'] {
-		return error('unsupported VML element `${node.tag}` at line ${node.line}, column ${node.column}')
+		return vml_visual_node_error(node, 'unsupported VML element `${node.tag}`')
 	}
 	if node.tag == 'Label' && node.children.any(it.tag !in ['Run', 'MenuItem']) {
-		return error('Label children must be Run nodes at line ${node.line}, column ${node.column}')
+		return vml_visual_node_error(node, 'Label children must be Run nodes')
 	}
 	if node.tag == 'Run' && parent != 'Label' {
-		return error('Run must be a child of Label at line ${node.line}, column ${node.column}')
+		return vml_visual_node_error(node, 'Run must be a child of Label')
 	}
 	if node.tag == 'Run' && node.children.len > 0 {
-		return error('Run cannot contain children at line ${node.line}, column ${node.column}')
+		return vml_visual_node_error(node, 'Run cannot contain children')
 	}
 	if node.tag in ['Grid', 'Flex', 'Row', 'Column'] && node.children.any(it.tag == 'Repeater') {
 		// Structural expansion belongs to the repeater lowering, before visual
 		// allocation; never treat a delegate as an ordinary layout child.
-		return error('Repeater layout expansion is unsupported at line ${node.line}, column ${node.column}')
+		return vml_visual_node_error(node, 'Repeater layout expansion is unsupported')
 	}
 	mut seen := map[string]bool{}
 	for property in node.properties {
@@ -359,34 +376,35 @@ fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
 		} else if !vml_visual_property_allowed(node, property.name, parent) {
 			return vml_visual_error(property, 'unsupported property `${property.name}` on ${node.tag}')
 		}
-		if property.name.starts_with('on_') && (property.expr.kind != .call || !property.expr.value.starts_with('app.')) {
-			return vml_visual_error(property, 'event handlers must call a typed app action')
-		}
 		if !property.name.starts_with('on_') && property.name != 'model' {
-			validate_vml_visual_value(node, property, property.expr, true)!
+			validate_vml_visual_value(node, property, property.expr, true, in_repeater || node.tag == 'Repeater')!
 		}
 	}
 	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
 		if 'text' in seen || 'bind.text' in seen {
-			return error('Label uses either text or Run children at line ${node.line}, column ${node.column}')
+			return vml_visual_node_error(node, 'Label uses either text or Run children')
 		}
 		if node.children.any(it.tag !in ['Run', 'MenuItem']) {
-			return error('Label children must be Run nodes at line ${node.line}, column ${node.column}')
+			return vml_visual_node_error(node, 'Label children must be Run nodes')
 		}
 	}
 	if node.tag == 'ScaledContent' {
 		for name in ['content_width', 'content_height'] {
 			if name !in seen {
-				return error('ScaledContent requires `${name}` at line ${node.line}, column ${node.column}')
+				return vml_visual_node_error(node, 'ScaledContent requires `${name}`')
 			}
 		}
 	}
-	for child in node.children { validate_compiled_vml_visual(child, node.tag)! }
+	// Repeater delegates occupy the surrounding container; the directive creates no element.
+	child_parent := if node.tag == 'Repeater' { parent } else { node.tag }
+	for child in node.children {
+		validate_compiled_vml_visual_scope(child, child_parent, in_repeater || node.tag == 'Repeater')!
+	}
 }
 
 fn validate_vml_native_visual(node &VmlNode) ! {
 	if node.tag in ['ScaledContent', 'Run'] {
-		return error('${node.tag} requires the custom renderer at line ${node.line}, column ${node.column}')
+		return vml_visual_node_error(node, '${node.tag} requires the custom renderer')
 	}
 	for property in node.properties {
 		base := vml_visual_base_property(property.name)
@@ -438,9 +456,10 @@ fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inh
 		mut properties := inherited.clone()
 		for property in child.properties {
 			name := 'vml_property_${suffix}_run_${index}_${vml_var(property.name)}'
+			c.location = VmlLocation{ path: property.expr.source, line: property.line, column: property.column }
 			value := c.visual_property_value(child, property, property.expr, scope)
-			c.out.writeln('\t${name} := ${value}')
-			c.out.writeln('\t_ = ${name}')
+			c.writeln('\t${name} := ${value}')
+			c.writeln('\t_ = ${name}')
 			c.property_positions[name] = property
 			properties[property.name] = name
 			if property.name == 'size' { properties.delete('font_size') }
@@ -448,53 +467,9 @@ fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inh
 		runs << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'
 	}
 	name := 'vml_runs_${suffix}'
-	c.out.writeln('\t${name} := ${vml_array_literal('ui2.TextRun', runs)}')
+	c.writeln('\t${name} := ${vml_array_literal('ui2.TextRun', runs)}')
 	inherited['@runs'] = name
 	inherited['@run_text'] = "${name}.map(it.text).join('')"
-}
-
-fn (c &VmlCompiler) compiled_node_callback(node &VmlNode, scope VmlScope) string {
-	mut arms := []string{}
-	mut callbacks := []string{}
-	change_handler := if vml_find_property(node, 'on_active') != none
-		&& vml_find_property(node, 'on_change') == none {
-		'on_active'
-	} else {
-		'on_change'
-	}
-	for pair in [['on_tap', 'tap'], [change_handler, 'change'], ['on_submit', 'submit']] {
-		if vml_find_property(node, pair[0]) == none && vml_binding_for_event(node, pair[0]) == none {
-			continue
-		}
-		callbacks << c.compiled_event_value(node, pair[0], scope, "''")
-		arms << '.${pair[1]} { callback_${callbacks.len - 1}(event) }'
-	}
-	if callbacks.len == 0 { return 'unsafe { nil }' }
-	mut declarations := []string{}
-	mut captures := []string{}
-	for index, callback in callbacks {
-		declarations << 'callback_${index} := ${callback}'
-		captures << 'callback_${index}'
-	}
-	return '(fn [mut app] () ui2.ElementCallback { ${declarations.join('\n')}\nreturn fn [${captures.join(', ')}] (event ui2.ElementEvent) { match event.kind { ${arms.join(' ')} else {} } } }())'
-}
-
-fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, id string, key string, action string) {
-	c.out.writeln('\tvml_text_input_${suffix} := ui2.text_input(ui2.TextInputConfig{')
-	c.out.writeln('\t\tid: ${id}, frame: ${frame}, on_event: ${action}')
-	c.out.writeln('\t\ttext: ${vml_value(properties, 'text', 'bind.text', "''")}, placeholder: ${vml_prop(properties, 'placeholder', "''")}')
-	for name in ['multiline', 'password', 'readonly', 'disable_scroll', 'enabled', 'autocorrect',
-		'padding_left'] {
-		if value := properties[name] { c.out.writeln('\t\t${name}: ${value}') }
-	}
-	if value := properties['keyboard'] { c.out.writeln('\t\tkeyboard: int(${value})') }
-	c.out.writeln('\t\tbox: ${c.box_style(properties)}, text_style: ${c.text_style(properties)}')
-	c.out.writeln('\t}) or { panic(err) }')
-	c.out.writeln('\tvml_element_${suffix} := ui2.Element{ ...vml_text_input_${suffix}, key: ${key}')
-	mut common := properties.clone()
-	if 'secure' !in common { common['secure'] = 'vml_text_input_${suffix}.secure' }
-	c.write_common_fields(node, common, scope, "''", "''", "''")
-	c.out.writeln('\t}')
 }
 
 fn vml_layout_padding(properties map[string]string, typ string) string {
@@ -570,21 +545,21 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	mut scope := vml_clone_scope(incoming)
 	visible := node.children.filter(it.tag !in ['MenuItem', 'Option'])
 	probe := 'vml_probe_${suffix}'
-	c.out.writeln('\t${probe} := ui2.rect(0, 0, ${if placement == .width_preferred {
+	c.writeln('\t${probe} := ui2.rect(0, 0, ${if placement == .width_preferred {
 		input + '.width'
 	} else {
 		vml_prop(properties, 'width', input + '.width')
 	}}, ${vml_prop(properties, 'height', input + '.height')})')
 	items := 'vml_items_${suffix}'
 	spans := 'vml_spans_${suffix}'
-	c.out.writeln('\tmut ${items} := []ui2.${if grid { 'Element' } else { 'FlexChild' }}{}')
-	if grid { c.out.writeln('\tmut ${spans} := []ui2.GridSpan{}') }
+	c.writeln('\tmut ${items} := []ui2.${if grid { 'Element' } else { 'FlexChild' }}{}')
+	if grid { c.writeln('\tmut ${spans} := []ui2.GridSpan{}') }
 	mut preferred_scope := vml_clone_scope(incoming)
 	mut preferred_child_ids := []map[string]VmlNamedValue{cap: visible.len}
 	for index, child in visible {
 		child_path := '${path}_measure.${index}'
 		child_input := 'vml_input_${vml_var(child_path)}'
-		c.out.writeln('\t${child_input} := ${probe}')
+		c.writeln('\t${child_input} := ${probe}')
 		child_scope := c.compile_node(child, child_path, child_input, preferred_scope, '', .preferred)
 		mut child_ids := map[string]VmlNamedValue{}
 		for id, named in child_scope.ids {
@@ -597,36 +572,36 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		preferred_scope = child_scope
 		child_properties := c.visual_child_properties(child, child_path)
 		element := 'vml_element_${vml_var(child_path)}'
-		c.out.writeln('\t${items} << ${if grid {
+		c.writeln('\t${items} << ${if grid {
 			element
 		} else {
 			vml_flex_item(element, child_properties)
 		}}')
 		if grid {
-			c.out.writeln('\t${spans} << ui2.GridSpan{column_span: int(${vml_prop(child_properties, 'column_span', 'f64(1)')}), row_span: int(${vml_prop(child_properties, 'row_span', 'f64(1)')})}')
+			c.writeln('\t${spans} << ui2.GridSpan{column_span: int(${vml_prop(child_properties, 'column_span', 'f64(1)')}), row_span: int(${vml_prop(child_properties, 'row_span', 'f64(1)')})}')
 		}
 	}
 	config := 'vml_config_${suffix}'
-	c.out.writeln('\t${config} := ${c.visual_layout_config(node, probe, properties, items, spans)}')
+	c.writeln('\t${config} := ${c.visual_layout_config(node, probe, properties, items, spans)}')
 	preferred_mode := placement in [.preferred, .width_preferred, .inherited_preferred]
 	available := if preferred_mode { probe } else { declared_frame }
 	initial := 'vml_initial_${suffix}'
-	c.out.writeln('\t${initial} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${config}, frame: ${available}}')
+	c.writeln('\t${initial} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${config}, frame: ${available}}')
 	first := 'vml_first_frames_${suffix}'
 	grid_width := 'vml_grid_width_${suffix}'
 	if grid && preferred_mode {
-		c.out.writeln('\tvml_grid_natural_${suffix} := ui2.grid_preferred_size(${initial}, ${items}.map(it.frame)) or { panic(err) }')
+		c.writeln('\tvml_grid_natural_${suffix} := ui2.grid_preferred_size(${initial}, ${items}.map(it.frame)) or { panic(err) }')
 		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', 'vml_grid_natural_${suffix}.width')
-		c.out.writeln('\t${grid_width} := ${width}')
-		c.out.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${grid_width}, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
+		c.writeln('\t${grid_width} := ${width}')
+		c.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${grid_width}, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
 	} else {
-		c.out.writeln('\t${first} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(${initial}${if grid {
+		c.writeln('\t${first} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(${initial}${if grid {
 			', ' + items + '.len'
 		} else {
 			''
 		}}) or { panic(err) }')
 	}
-	c.out.writeln('\t_ = ${first}')
+	c.writeln('\t_ = ${first}')
 	if !grid || preferred_mode {
 		// Each pass sees only preceding siblings, using that pass's emitted names.
 		mut width_scope := vml_clone_scope(incoming)
@@ -639,13 +614,13 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 			}
 			child_path := '${path}_width.${index}'
 			child_input := 'vml_input_${vml_var(child_path)}'
-			c.out.writeln('\t${child_input} := ui2.rect(0, 0, ${first}[${index}].width, ${probe}.height)')
+			c.writeln('\t${child_input} := ui2.rect(0, 0, ${first}[${index}].width, ${probe}.height)')
 			width_scope = c.compile_node(child, child_path, child_input, width_scope, '', .width_preferred)
 			measurement := 'vml_element_${vml_var(child_path)}'
 			if grid {
-				c.out.writeln('\t${items}[${index}] = ui2.Element{...${items}[${index}], frame: ui2.rect(0, 0, ${items}[${index}].frame.width, ${measurement}.frame.height)}')
+				c.writeln('\t${items}[${index}] = ui2.Element{...${items}[${index}], frame: ui2.rect(0, 0, ${items}[${index}].frame.width, ${measurement}.frame.height)}')
 			} else {
-				c.out.writeln('\t${items}[${index}] = ui2.FlexChild{...${items}[${index}], element: ui2.Element{...${items}[${index}].element, frame: ui2.rect(0, 0, ${items}[${index}].element.frame.width, ${measurement}.frame.height)}}')
+				c.writeln('\t${items}[${index}] = ui2.FlexChild{...${items}[${index}], element: ui2.Element{...${items}[${index}].element, frame: ui2.rect(0, 0, ${items}[${index}].element.frame.width, ${measurement}.frame.height)}}')
 			}
 		}
 	}
@@ -657,16 +632,16 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	} else {
 		''
 	}
-	c.out.writeln('\t${measured} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${initial}, children: ${items}${measurement_frame}}')
+	c.writeln('\t${measured} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${initial}, children: ${items}${measurement_frame}}')
 	frame := if preferred_mode { 'vml_preferred_frame_${suffix}' } else { declared_frame }
 	if preferred_mode {
 		preferred := 'vml_preferred_size_${suffix}'
 		if grid {
-			c.out.writeln('\t${preferred} := ui2.grid_preferred_size(${measured}, ${items}.map(it.frame)) or { panic(err) }')
+			c.writeln('\t${preferred} := ui2.grid_preferred_size(${measured}, ${items}.map(it.frame)) or { panic(err) }')
 		} else {
-			c.out.writeln('\t${preferred} := ui2.flex_preferred_size(${measured}) or { panic(err) }')
+			c.writeln('\t${preferred} := ui2.flex_preferred_size(${measured}) or { panic(err) }')
 		}
-		c.out.writeln('\t_ = ${preferred}')
+		c.writeln('\t_ = ${preferred}')
 		preferred_width := if grid { grid_width } else { 'vml_preferred_width_' + suffix }
 		preferred_height := if grid {
 			preferred + '.height'
@@ -676,26 +651,26 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		if !grid {
 			width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', preferred_width)
 			height := vml_layout_measured_axis(placement, properties, input, declared_frame, 'height', preferred_height)
-			c.out.writeln('\tmut ${preferred_width} := ${preferred}.width')
-			c.out.writeln('\tmut ${preferred_height} := ${preferred}.height')
-			c.out.writeln('\tif ${measured}.wrap && ${measured}.orientation == .horizontal {')
-			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, ${width}, 0)}) or { panic(err) }')
-			c.out.writeln('\t\t${preferred_height} = ${measured}.padding.top')
-			c.out.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.y + child_frame.height > ${preferred_height} { ${preferred_height} = child_frame.y + child_frame.height } }')
-			c.out.writeln('\t\t${preferred_height} += ${measured}.padding.bottom')
-			c.out.writeln('\t} else if ${measured}.wrap && ${measured}.orientation == .vertical {')
-			c.out.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, 0, ${height})}) or { panic(err) }')
-			c.out.writeln('\t\t${preferred_width} = ${measured}.padding.left')
-			c.out.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.x + child_frame.width > ${preferred_width} { ${preferred_width} = child_frame.x + child_frame.width } }')
-			c.out.writeln('\t\t${preferred_width} += ${measured}.padding.right')
-			c.out.writeln('\t}')
+			c.writeln('\tmut ${preferred_width} := ${preferred}.width')
+			c.writeln('\tmut ${preferred_height} := ${preferred}.height')
+			c.writeln('\tif ${measured}.wrap && ${measured}.orientation == .horizontal {')
+			c.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, ${width}, 0)}) or { panic(err) }')
+			c.writeln('\t\t${preferred_height} = ${measured}.padding.top')
+			c.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.y + child_frame.height > ${preferred_height} { ${preferred_height} = child_frame.y + child_frame.height } }')
+			c.writeln('\t\t${preferred_height} += ${measured}.padding.bottom')
+			c.writeln('\t} else if ${measured}.wrap && ${measured}.orientation == .vertical {')
+			c.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, 0, ${height})}) or { panic(err) }')
+			c.writeln('\t\t${preferred_width} = ${measured}.padding.left')
+			c.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.x + child_frame.width > ${preferred_width} { ${preferred_width} = child_frame.x + child_frame.width } }')
+			c.writeln('\t\t${preferred_width} += ${measured}.padding.right')
+			c.writeln('\t}')
 		}
 		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', preferred_width)
 		height := vml_layout_measured_axis(placement, properties, input, declared_frame, 'height', preferred_height)
-		c.out.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${width}, ${height})')
+		c.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${width}, ${height})')
 	}
 	frames := 'vml_frames_${suffix}'
-	c.out.writeln('\t${frames} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(ui2.${if grid {
+	c.writeln('\t${frames} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(ui2.${if grid {
 		'GridConfig'
 	} else {
 		'FlexConfig'
@@ -705,78 +680,23 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		named := scope.ids[node.id] or { VmlNamedValue{} }
 		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named.props, prop_types: named.prop_types }
 	}
-	c.out.writeln('\tmut ${children} := []ui2.Element{}')
+	c.writeln('\tmut ${children} := []ui2.Element{}')
 	for index, child in visible {
 		child_path := '${path}.${index}'
 		child_input := 'vml_input_${vml_var(child_path)}'
-		c.out.writeln('\t${child_input} := ${frames}[${index}]')
+		c.writeln('\t${child_input} := ${frames}[${index}]')
 		child_scope := c.compile_node(child, child_path, child_input, scope, '', .allocated)
 		for id, named in child_scope.ids { scope.ids[id] = named }
-		c.out.writeln('\t${children} << vml_element_${vml_var(child_path)}')
+		c.writeln('\t${children} << vml_element_${vml_var(child_path)}')
 	}
 	c.compile_element(node, suffix, frame, children, properties, scope, default_key)
 	return scope
 }
 
-fn (mut p Parser) register_vml_source(path string, source string, call_pos token.Pos) int {
-	mut files := token.FileSet.new()
-	mut file := files.add_file(path, source.len)
-	file.index_lines(source)
-	id := p.next_file_id
-	p.next_file_id++
-	p.a.source_files[id] = file
-	p.a.template_call_sites[id] = call_pos
-	p.a.template_actions[id] = p.template_action_name()
-	return id
-}
-
-fn (mut p Parser) record_vml_diagnostic(path string, source string, message string, call_start int) {
-	id := p.register_vml_source(path, source, p.span_to(call_start))
-	location := message.all_after_last(' at line ')
-	line := int_max(1, location.all_before(',').int())
-	column := int_max(1, location.all_after('column ').int())
-	file := p.a.source_files[id] or { return }
-	start := int_min(source.len, file.line_start(line) + column - 1)
-	p.append_diagnostic(Diagnostic{
-		file:    path
-		pos:     token.new_span(id, start, int_min(source.len, start + 1))
-		line:    line
-		column:  column
-		message: message.all_before_last(' at line ')
-	})
-}
-
-// Preserve property locations for V's type errors as well as parser errors.
-// Template remapping has already run; generated nodes still carry their
-// generated file where they did not match a literal template line.
-fn (mut p Parser) remap_vml_visual_positions(first_node int, path string, source string, generated string, properties map[string]VmlProperty, call_pos token.Pos) {
-	id := p.register_vml_source(path, source, call_pos)
-	file := p.a.source_files[id] or { return }
-	lines := generated.split_into_lines()
-	for index in first_node .. p.a.nodes.len {
-		node := p.a.nodes[index]
-		// The checker reads a struct initializer's type name from its source.
-		// Keep synthetic ui2 types in generated V; map their field/value errors.
-		if node.kind == .struct_init { continue }
-		generated_file := p.a.source_files[node.pos.id] or { continue }
-		property := if generated_file.name == '<veb-template>' {
-			position := generated_file.position(node.pos)
-			if position.line < 1 || position.line > lines.len { continue }
-			line := lines[position.line - 1].trim_space()
-			// A sibling local's use belongs to the receiving property, not its
-			// declaration. Prefer the generated statement's source position.
-			properties[line] or {
-				properties[line.all_before(' := ')] or {
-					properties[node.value] or { continue }
-				}
-			}
-		} else {
-			properties[node.value] or { continue }
-		}
-		start := file.line_start(property.line) + property.column - 1
-		p.a.nodes[index] = flat.Node{
-			...node
-			pos: token.new_span(id, start, int_min(source.len, start + property.name.len))
-		}
+fn vml_visual_node_error(node &VmlNode, message string) IError {
+	return if node.source.len > 0 {
+		error('${node.source}:${node.line}:${node.column}: ${message}')
+	} else {
+		error('${message} at line ${node.line}, column ${node.column}')
 	}
 }

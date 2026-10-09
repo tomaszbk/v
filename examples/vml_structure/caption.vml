@@ -1,0 +1,2 @@
+module Caption
+Label { id: caption text: "Caption" width: 280 height: 28 }

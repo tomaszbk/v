@@ -1,0 +1,3 @@
+View {
+    Repeater { model: app.rows key: item.id Button { key: "duplicate" text: item.name } }
+}

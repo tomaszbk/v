@@ -3,6 +3,39 @@ module parser
 import os
 import v.pref
 
+fn test_shared_visual_builders_keep_every_generated_source_line() {
+	mut root := parse_vml_source('Grid { columns: 2
+    View { id: local computed int offset: 5 Button { on_tap: app.record(app.count + local.offset) } }
+    Label { Run { text: "mapped" } }
+}')!
+	vml_set_source(mut root, 'combined.vml')
+	mut compiler := VmlCompiler{ uses_app: true }
+	generated := compiler.compile(root)
+	assert generated.contains(' := fn [')
+	assert compiler.locations.len == generated.count('\n')
+	assert compiler.builder_locations.len == compiler.builder_declarations.len
+	for index, declaration in compiler.builder_declarations {
+		assert compiler.builder_locations[index].len == declaration.count('\n')
+	}
+	for location in compiler.locations {
+		assert location.path == 'combined.vml'
+	}
+}
+
+fn test_repeater_delegates_keep_the_surrounding_visual_placement_rules() {
+	parse_vml_source('Absolute { Repeater { model: app.rows key: item.id
+        Label { x: index * 10 text: item.name }
+    } }')!
+	if _ := parse_vml_source('View { Repeater { model: app.rows key: item.id
+        Label { x: index * 10 text: item.name }
+    } }') {
+		assert false, 'Repeater must not allow absolute placement in an ordinary View'
+	}
+	if _ := parse_vml_source('Label { width: index }') {
+		assert false, 'Repeater locals must not escape their delegate scope'
+	}
+}
+
 fn test_selected_auto_grid_measurement_keeps_shared_nested_child_source() {
 	root := parse_vml_source('Absolute {
         width: 300 height: 300

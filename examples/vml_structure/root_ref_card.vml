@@ -1,0 +1,9 @@
+module RootRefCard
+View {
+    id: card
+    height: card.width + card.increment
+    computed int increment: 1
+    width: 100
+    Label { id: caption text: "root=${card.width}" }
+    Button { id: select on_tap: app.level = card.width }
+}

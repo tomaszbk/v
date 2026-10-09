@@ -4,6 +4,7 @@ import os
 import crypto.sha256
 import strings
 import v.flat
+import v.parser
 import v.pref
 import v.tempname
 import v.types
@@ -23,7 +24,7 @@ const c_source_directives_end = '/* V3CACHE_SOURCE_DIRECTIVES_END */'
 const c_late_directives_begin = '/* V3CACHE_LATE_DIRECTIVES_BEGIN */'
 const c_late_directives_end = '/* V3CACHE_LATE_DIRECTIVES_END */'
 const source_body_marker = '// v3cache: source bodies required'
-const source_signature_cache_format = 'v3-source-signature-cache-9'
+const source_signature_cache_format = 'v3-source-signature-cache-10'
 
 // Manager owns persistent v3 module cache paths for one compiler configuration.
 pub struct Manager {
@@ -1048,6 +1049,38 @@ fn compile_time_vml_paths(source string, source_file string) ([]string, []string
 			has_unresolved_path = true
 		}
 		pos = if next_pos > pos { next_pos } else { pos + 4 }
+	}
+	// Follow every declared import, including unused ones that lowering reads.
+	// Keep unresolved candidates so adding a higher-priority file invalidates
+	// the signature, and lookup paths so symlink retargeting does too.
+	mut pending := paths.keys()
+	mut visited := map[string]bool{}
+	for pending.len > 0 {
+		file := pending.pop()
+		if file in visited { continue }
+		visited[file] = true
+		// Missing literal roots already fail the signature's content read below.
+		vml_source := os.read_file(file) or { continue }
+		imports := parser.compiled_vml_import_candidates(vml_source, os.dir(file)) or {
+			has_unresolved_path = true
+			continue
+		}
+		for import_candidates in imports {
+			mut found := false
+			for candidate in import_candidates {
+				if !os.is_file(candidate) {
+					lookup_candidates[candidate] = true
+					continue
+				}
+				resolved := os.real_path(candidate)
+				lookup_paths[candidate] = true
+				paths[resolved] = true
+				pending << resolved
+				found = true
+				break
+			}
+			if !found { has_unresolved_path = true }
+		}
 	}
 	mut result := paths.keys()
 	result.sort()
