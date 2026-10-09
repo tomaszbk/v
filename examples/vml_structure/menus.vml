@@ -1,0 +1,12 @@
+MenuBar {
+    Menu {
+        title: "File"
+        MenuItem { id: create text: "New" shortcut: "cmd+n" on_tap: app.count = app.count + 1 }
+        MenuSeparator {}
+        Menu {
+            title: "Selection"
+            MenuItem { id: choose text: "Choose" checked: true on_tap: app.select(7) }
+            MenuItem { id: disabled text: "Disabled" enabled: false }
+        }
+    }
+}

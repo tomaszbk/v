@@ -31,10 +31,10 @@ pub fn bounds() Element {
 		panic(err)
 	}
 	bin := os.join_path(root, 'bin')
-	result := os.exec([@VEXE, '-nocache', '-gc', 'none', '-path', '@vlib|' + '${module_dir}', '-o',
-		bin, source])
+	result := os.exec([@VEXE, '-new-compiler', '-nocache', '-gc', 'boehm', '-cc', 'clang',
+		'-no-retry-compilation', '-path', '@vlib|' + '${module_dir}', '-o', bin, source])
 	assert result.exit_code != 0
-	assert result.output.contains('<veb-template>:'), result.output
+	assert result.output.contains('screen.vml:'), result.output
 	assert result.output.contains('called from'), result.output
 	assert result.output.contains('has no field named `width`'), result.output
 }

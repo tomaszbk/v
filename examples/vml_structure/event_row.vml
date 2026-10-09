@@ -1,0 +1,7 @@
+module EventRow
+import EventCaption
+View {
+    id: record
+    EventCaption {}
+    Button { id: select on_tap: app.record(item.id + app.count) }
+}

@@ -15792,13 +15792,17 @@ fn (mut t Transformer) resolved_receiver_arg_compatible(arg_id flat.NodeId, actu
 	}
 	// A `mut`/pointer parameter is called with the value form (`r.read(mut
 	// buf)` with `buf []u8` against `&[]u8`); cgen auto-refs such args.
-	if expected.starts_with('&') && actual == expected[1..] {
+	// Specializations can lock a main-module type as `main.App` while the
+	// function field's ABI still spells the same type `App`.
+	actual_value := type_text_without_main_locks(actual)
+	expected_value := type_text_without_main_locks(expected)
+	if expected_value.starts_with('&') && actual_value == expected_value[1..] {
 		return true
 	}
 	// V also permits the inverse value coercion. This covers a borrowed value
 	// passed to a by-value parameter and `&param` inside a specialized function
 	// where a source `mut T` parameter already has `&T` storage after lowering.
-	if actual.starts_with('&') && actual[1..] == expected {
+	if actual_value.starts_with('&') && actual_value[1..] == expected_value {
 		return true
 	}
 	if expected == '&void'
