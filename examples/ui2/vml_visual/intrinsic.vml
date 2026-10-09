@@ -1,0 +1,28 @@
+Column {
+    id: measured
+    width: 140
+    height: 300
+    padding: 10
+    gap: 8
+    Label {
+        id: paragraph
+        text: "Long text shares allocated width with its inherited Run styles."
+        width: 120
+        lines: 5
+    }
+    Grid {
+        id: nested_grid
+        width: 120
+        columns: 2
+        spacing: 4
+        Label { text: "A" }
+        Label { text: "A longer nested cell" lines: 5 }
+    }
+    Row {
+        id: nested_row
+        width: 120
+        gap: 4
+            Label { text: "Three" }
+        Label { text: "Four" }
+    }
+}

@@ -1,0 +1,9 @@
+Label {
+    width: app.count + 100
+    height: 40
+    font_size: app.count
+    weight: app.count * 10
+    color: app.count + 1
+    Run { text: "Dynamic " }
+    Run { text: app.name size: app.count / 2 letter_spacing: app.count - 18 }
+}

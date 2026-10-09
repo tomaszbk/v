@@ -1,0 +1,27 @@
+Button {
+    id: styled
+    text: "Tap"
+    width: 120
+    height: 40
+    background: "#ffffff"
+    transparent: true
+    radius: 8
+    border_width: 2
+    border_color: "#123456"
+    border_left_color: "#000000"
+    border_pattern: .dashed
+    dash_length: 5
+    dash_gap: 3
+    outline_color: "#334155"
+    outline_width: 1
+    outline_offset: 2
+    hover_background: "#000000"
+    hover_transparent: false
+    hover_color: "#ffffff"
+    focus_border_left: 0
+    focus_outline_width: 3
+    pressed_background: "#22c55e"
+    disabled_background: "#cccccc"
+    disabled_color: "#000000"
+    on_tap: app.tap()
+}
