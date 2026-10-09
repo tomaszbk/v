@@ -2336,6 +2336,14 @@ fn (mut t Transformer) absorb_scoped_batch(batch &Transformer, scope voidptr, ne
 		t.end_promote_text_window()
 	}
 	t.merge_worker_signatures(batch)
+	if batch.generated_capture_contexts.len > 0 {
+		// Helpers publish batches before their peers finish reading the base maps.
+		if t.struct_maps_shared {
+			t.structs = t.structs.clone()
+			t.struct_maps_shared = false
+		}
+		if !isnil(t.tc) { t.tc.ensure_private_transform_structs() }
+	}
 	t.merge_worker_capture_contexts(batch)
 	if t.skip_generics {
 		// Non-generic workers mutate only newly appended nodes and slots recorded by

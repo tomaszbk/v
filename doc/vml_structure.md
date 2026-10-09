@@ -32,6 +32,11 @@ An import reuses a tree. Properties on its invocation override root properties; 
 are appended. Each invocation has a stable namespace for its internal control ids. This is tree
 reuse only; it introduces no private model, component state, slots or lifecycle.
 
+Overriding a root id preserves references to that root inside the imported definition. Caller
+overrides and appended children use caller ids; only the invocation id is exported to siblings.
+Build caches track transitive import contents and lookup candidates, so edits, deletions and
+new higher-priority import files invalidate cached output.
+
 ## Repeaters
 
 ```text

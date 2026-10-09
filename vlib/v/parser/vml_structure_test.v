@@ -78,6 +78,31 @@ fn test_vml_imports_keep_the_defining_documents_module_scope() {
 	assert root.children[1].children[0].tag == 'Button'
 }
 
+fn test_vml_import_root_remapping_keeps_invocations_and_expression_locations_independent() {
+	dir := os.join_path(os.vtmp_dir(), 'vml_root_remapping_${os.getpid()}')
+	os.mkdir_all(dir)!
+	defer { os.rmdir_all(dir) or {} }
+	card := os.join_path(dir, 'card.vml')
+	os.write_file(card, 'module Card\nView { id: card height: card.width width: 100 Label { text: "\${card.width}" } }')!
+	main := os.join_path(dir, 'main.vml')
+	os.write_file(main, 'import Card\nView { Card { id: first width: card.width } Card { id: second } Card {} }')!
+	root := parse_compiled_vml_file(main, '', [])!
+	for index, id in ['first', 'second', 'card'] {
+		height := vml_find_property(root.children[index], 'height') or { panic('missing height') }
+		assert height.expr.value == '${id}.width'
+		assert height.expr.source == os.real_path(card)
+		assert height.expr.line == 2
+		text := root.children[index].children[0].properties[0].expr
+		assert text.parts[0].expr.value == '${id}.width'
+		assert text.parts[0].expr.source == os.real_path(card)
+	}
+	// Overrides retain the caller's interpretation, even when its id equals the
+	// definition's original root id.
+	width := vml_find_property(root.children[0], 'width') or { panic('missing width') }
+	assert width.expr.value == 'card.width'
+	assert width.expr.source == os.real_path(main)
+}
+
 fn test_vml_generated_item_paths_keep_import_source_location() {
 	dir := os.join_path(os.vtmp_dir(), 'vml_structure_positions_${os.getpid()}')
 	os.mkdir_all(dir)!

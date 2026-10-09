@@ -13215,13 +13215,20 @@ fn (t &Transformer) current_source_module() string {
 }
 
 fn (mut t Transformer) new_fn_literal_name() string {
+	// Lowering a work item can introduce a VML closure after the literal scan.
+	// Private helper maps cannot see names created concurrently by other items.
+	prefix := if t.literal_free_fn_body && t.item_range_hi >= 0 {
+		'anon_fn_work_${t.item_range_hi}'
+	} else {
+		'anon_fn'
+	}
 	for {
-		name := t.new_global_temp('anon_fn')
+		name := t.new_global_temp(prefix)
 		if !t.fn_literal_name_exists(name) {
 			return name
 		}
 	}
-	return t.new_global_temp('anon_fn')
+	return t.new_global_temp(prefix)
 }
 
 fn (t &Transformer) fn_literal_name_exists(name string) bool {
