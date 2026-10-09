@@ -1,5 +1,7 @@
 module parser
 
+import math
+
 // These names describe the existing ui2 API, not a second style/layout engine.
 const vml_text_properties = ['color', 'background_color', 'font_size', 'size', 'font_family', 'weight',
 	'letter_spacing', 'line_height', 'line_height_factor', 'baseline_offset', 'tabular_figures',
@@ -286,6 +288,9 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 	if use == .number && check_bounds {
 		if value := vml_visual_number(expr) {
 			base := vml_visual_base_property(property.name)
+			if base in ['scale_x', 'scale_y'] && (!math.is_finite(value) || value == 0) {
+				return vml_visual_error(property, '`${property.name}` must be finite and nonzero')
+			}
 			if base == 'weight' && (value != int(value) || (value != 0 && (value < 100 || value > 900))) {
 				return vml_visual_error(property, 'weight must be zero or an integer from 100 to 900')
 			}
@@ -599,7 +604,7 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	config := 'vml_config_${suffix}'
 	c.writeln('\t${config} := ${c.visual_layout_config(node, frame, properties, items, spans)}')
 	base := 'vml_layout_${suffix}'
-	c.writeln('\t${base} := ui2.${if grid { 'grid' } else { 'flex' }}(${config}) or { panic(err) }')
+	c.writeln('\t${base} := ui2.${if grid { 'grid_declaration' } else { 'flex' }}(${config}) or { panic(err) }')
 	mutable := properties.clone()
 	c.compile_element(node, suffix + '_plain', frame, children, mutable, scope, default_key)
 	plain := 'vml_declaration_${suffix}_plain'
