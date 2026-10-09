@@ -1,3 +1,1 @@
-TextField {
-    text: "removed"
-}
+TextField(text: "removed")

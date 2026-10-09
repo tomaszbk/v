@@ -1,2 +1,4 @@
 import MissingStructureModule
-View { MissingStructureModule {} }
+View {
+    MissingStructureModule()
+}

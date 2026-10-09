@@ -1,3 +1,1 @@
-Label {
-    weight: true ? 400 : "heavy"
-}
+Label(weight: true ? 400 : "heavy")

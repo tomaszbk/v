@@ -1,8 +1,6 @@
-vlib/v/parser/tests/vml_visual/inactive_type.vml:2:5: error: `weight` requires a number
-    1 | Label {
-    2 |     weight: true ? 400 : "heavy"
-      |     ^
-    3 | }
+vlib/v/parser/tests/vml_visual/inactive_type.vml:1:7: error: `weight` requires a number
+    1 | Label(weight: true ? 400 : "heavy")
+      |       ^
 called from vlib/v/parser/tests/vml_visual_inactive_type.vv:2:6
     1 | fn main() {
     2 |     _ = $vml('vml_visual/inactive_type.vml')

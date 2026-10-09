@@ -12,7 +12,7 @@ fn validate_compiled_vml_menu(node &VmlNode) ! {
 		}
 	}
 	for property in node.properties {
-		if property.name !in allowed || property.declared_type.len > 0 {
+		if property.name !in allowed {
 			return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: unsupported `${property.name}` on ${node.tag}')
 		}
 	}
@@ -29,7 +29,13 @@ fn validate_compiled_vml_menu(node &VmlNode) ! {
 
 fn (mut c VmlCompiler) compile_menus(root &VmlNode) string {
 	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
-	capture := if c.uses_app { '[mut app] ' } else { '' }
+	mut captures := c.callback_captures.clone()
+	if c.uses_app { captures.insert(0, 'mut app') }
+	capture := if captures.len > 0 {
+		'[' + captures.join(', ') + '] '
+	} else {
+		''
+	}
 	c.writeln('(fn ${capture}() []ui2.Menu {')
 	scope := VmlScope{}
 	mut menus := []string{}
@@ -40,7 +46,7 @@ fn (mut c VmlCompiler) compile_menus(root &VmlNode) string {
 	c.writeln('\tvml_menus := ${vml_array_literal('ui2.Menu', menus)}')
 	c.writeln('\tui2.validate_menus(vml_menus) or { panic(' + vml_quote('${root.source}:${root.line}:${root.column}: ') + ' + err.msg()) }')
 	c.writeln('\treturn vml_menus')
-	c.writeln('}())')
+	c.writeln('})()')
 	c.write_list_guards()
 	return c.out.str()
 }

@@ -1,5 +1,10 @@
-vlib/v/parser/tests/vml_missing_import_err.vv:2:9: error: vlib/v/parser/tests/vml_structure/missing_import.vml:1:8: could not find VML import `MissingStructureModule`
+vlib/v/parser/tests/vml_structure/missing_import.vml:1:8: error: could not find VML import `MissingStructureModule`
+    1 | import MissingStructureModule
+      |        ^
+    2 | View {
+    3 |     MissingStructureModule()
+called from vlib/v/parser/tests/vml_missing_import_err.vv:2:9
     1 | fn main() {
     2 |     _ = $vml('vml_structure/missing_import.vml')
-      |         ^
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     3 | }

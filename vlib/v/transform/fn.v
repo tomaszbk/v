@@ -157,6 +157,12 @@ fn (t &Transformer) fn_value_call_return_type(node flat.Node) ?string {
 		return none
 	}
 	callee := t.a.nodes[int(callee_id)]
+	// An explicit generic named call is handled by generic return resolution.
+	// Treating its type arguments as a runtime fn value loses lexical witnesses
+	// during the global pass that refreshes specialized declaration types.
+	if callee.kind == .index && !t.index_callee_is_value_index(callee) {
+		return none
+	}
 	if callee.kind == .ident {
 		local_type := t.var_type(callee.value)
 		if ret := t.local_fn_value_return_type_from_type(local_type) {
@@ -1157,6 +1163,9 @@ fn (t &Transformer) generic_call_type_arg_name(id flat.NodeId) string {
 	node := t.a.node(id)
 	match node.kind {
 		.ident {
+			if node.value.contains('typeof(__vml_expr_') {
+				return t.resolve_vml_inferred_type_text(node.value)
+			}
 			// Map type arguments are represented by a synthetic `Map_key_value`
 			// identifier, while `typ` retains the source-level `map[key]value`.
 			// Keep the latter so comptime type groups and generic substitution can
@@ -3427,6 +3436,11 @@ fn (t &Transformer) decl_param_type_in_module(typ string, module_name string) st
 }
 
 fn (t &Transformer) decl_param_type_in_scope(typ string, module_name string, file_name string) string {
+	if typ.contains('typeof(__vml_expr_') {
+		resolved := t.resolve_vml_inferred_type_text(typ)
+		if resolved != typ { return t.decl_param_type_in_scope(resolved, module_name, file_name) }
+		return typ
+	}
 	clean := typ.trim_space()
 	if clean.len == 0 {
 		return clean
@@ -12831,6 +12845,7 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 	mut capture_heap_slots := map[string]bool{}
 	mut capture_heap_snapshots := map[string]bool{}
 	mut capture_array_param_snapshots := map[string]bool{}
+	mut capture_pointer_param_values := map[string]bool{}
 	mut capture_is_ref_param := map[string]bool{}
 	mut body_ids := []flat.NodeId{}
 	for i in 0 .. node.children_count {
@@ -12885,6 +12900,12 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 				if capture_type.len == 0 || capture_type == 'unknown' {
 					capture_type = 'int'
 				}
+				// An app borrow observes an explicit pointer parameter's value,
+				// rather than capturing the caller's additional pointer slot.
+				if child.op == .amp && t.mut_param_values[child.value]
+					&& t.pointer_value_rvalues[child.value] && capture_type.starts_with('&') {
+					capture_pointer_param_values[child.value] = true
+				}
 				// Mutable parameter captures retain the caller's array header reference.
 				if !child.is_mut && t.mut_param_values[child.value]
 					&& !t.pointer_value_rvalues[child.value]
@@ -12893,7 +12914,7 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 					capture_type = capture_type[1..]
 					capture_array_param_snapshots[child.value] = true
 				}
-				if child.value in t.heaped_amp_locals && capture_type.starts_with('&') {
+				if child.op != .amp && child.value in t.heaped_amp_locals && capture_type.starts_with('&') {
 					capture_type = capture_type[1..]
 					if t.is_fixed_array_type(capture_type) {
 						capture_heap_slots[child.value] = true
@@ -12929,8 +12950,10 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 				// closure is returned and would make separate instances interfere.
 				// A fixed array is the exception: `[mut values]` shares the storage of
 				// the captured array, so writes on either side are seen by the other.
+				// Generated VML app borrows use an address capture. Ordinary
+				// mutable V captures retain their closure-owned value semantics.
 				context_field_types[child.value] = if is_ref_capture
-					&& t.is_fixed_array_type(capture_type) {
+					&& (child.op == .amp || t.is_fixed_array_type(capture_type)) {
 					'&${capture_type}'
 				} else {
 					capture_type
@@ -13145,7 +13168,10 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 	for capture_name in capture_names {
 		context_field_type := context_field_types[capture_name] or { continue }
 		mut value := t.make_ident(capture_name)
-		if capture_array_param_snapshots[capture_name] or { false } {
+		if capture_pointer_param_values[capture_name] or { false } {
+			value = t.make_prefix(.mul, value)
+			t.set_node_typ(int(value), context_field_type)
+		} else if capture_array_param_snapshots[capture_name] or { false } {
 			value = t.make_prefix(.mul, value)
 			t.set_node_typ(int(value), context_field_type)
 		} else if capture_heap_snapshots[capture_name] or { false } {

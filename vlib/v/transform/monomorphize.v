@@ -2119,7 +2119,9 @@ fn (t &Transformer) interface_box_fn_literal_return_type(id flat.NodeId, node fl
 			return return_type
 		}
 	}
-	if node.kind == .fn_literal && node.typ.len > 0 {
+	// The interface prescan has no lexical locals. Generated typeof witnesses
+	// are resolved when lowering their enclosing function, before specialization.
+	if node.kind == .fn_literal && node.typ.len > 0 && !node.typ.contains('typeof(__vml_expr_') {
 		return t.tc.parse_type(node.typ)
 	}
 	return none
@@ -14839,6 +14841,11 @@ fn (t &Transformer) canonical_generic_specialization_args(args []string) []strin
 }
 
 fn (t &Transformer) canonical_generic_specialization_arg(arg string) string {
+	if arg.contains('typeof(__vml_expr_') {
+		resolved := t.resolve_vml_inferred_type_text(arg)
+		if resolved != arg { return t.canonical_generic_specialization_arg(resolved) }
+		return arg
+	}
 	clean := arg.trim_space()
 	if clean.len == 0 {
 		return clean
@@ -15255,7 +15262,7 @@ fn (t &Transformer) generic_args_have_placeholders(args []string) bool {
 		return false
 	}
 	for arg in args {
-		if t.generic_arg_is_unresolved(arg) {
+		if arg.contains('typeof(__vml_expr_') || t.generic_arg_is_unresolved(arg) {
 			return true
 		}
 	}

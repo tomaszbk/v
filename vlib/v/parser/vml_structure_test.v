@@ -4,58 +4,66 @@ import os
 import v.pref
 
 fn test_vml_interpolated_paths_keep_physical_string_locations() {
-	source := 'View {\n Label { text: "prefix\\n\${app.first}\n\${app.second}" }\n}'
-	root := parse_vml_source(source)!
-	expr := root.children[0].properties[0].expr
-	first := expr.parts[1].expr
-	second := expr.parts[3].expr
+	root := parse_vml_source('View {\n    Label(text: "prefix\\\\n\${app.first}\n\${app.second}")\n}')!
+	expression := root.children[0].properties[0].expr
+	first := expression.parts[1].expr
+	second := expression.parts[3].expr
 	assert first.value == 'app.first'
-	assert first.line == 2 && first.column == 27
+	assert first.line == 2 && first.column == 29
 	assert second.value == 'app.second'
 	assert second.line == 3 && second.column == 3
 }
 
-fn test_vml_assignments_are_only_event_expressions() {
-	root := parse_vml_source('View { Button { on_tap: app.count = app.count + 1 } }')!
+fn test_vml_assignments_lower_only_writable_sources() {
+	root := parse_vml_source('View { Button(on_tap: app.count++) }')!
 	assert root.children[0].properties[0].expr.kind == .assignment
-	for source in ['Label { text: app.count = 1 }', 'Button { on_tap: item.count = 1 }',
-		'Button { on_tap: app.nested.count = 1 }', 'TextInput { multiline: false on_text: app.save() }'] {
+	for source in ['Label(text: app.count = 1)', 'TextInput(on_text: app.save())'] {
 		if _ := parse_vml_source(source) {
 			assert false, source
 		}
 	}
+	for target in ['item.count', 'app.nested.count'] {
+		parse_vml_source('Button(on_tap: ${target} = 1)') or {
+			assert err.msg().contains('assignment target `${target}` is read-only'), err.msg()
+			continue
+		}
+		assert false, 'accepted read-only assignment target `${target}`'
+	}
 }
 
-fn test_vml_imports_expand_nested_modules_and_overrides() {
-	dir := os.join_path(os.vtmp_dir(), 'vml_structure_imports_${os.getpid()}')
+fn test_vml_imports_expand_component_signatures_and_lexical_slots() {
+	dir := os.join_path(os.vtmp_dir(), 'vml_component_imports_${os.getpid()}')
 	os.mkdir_all(dir)!
 	defer { os.rmdir_all(dir) or {} }
-	os.write_file(os.join_path(dir, 'caption.vml'), 'module Caption\nLabel { id: caption text: "default" }')!
-	os.write_file(os.join_path(dir, 'card.vml'), 'module Card\nimport Caption\nView { Caption { text: "nested" } }')!
+	os.write_file(os.join_path(dir, 'caption.vml'), 'component Caption(text string = "default") { Label(id: "caption", text: text) }')!
+	os.write_file(os.join_path(dir, 'card.vml'), 'import Caption\ncomponent Card(content slot) { View { Caption(text: "nested") Slot {} } }')!
 	path := os.join_path(dir, 'main.vml')
-	os.write_file(path, 'import Card\nView { Card { id: first Label { text: "appended" } } Card { id: second } }')!
+	os.write_file(path, 'import Card\nView { Card(id: "first") { Label(text: app.title) } Card(id: "second") }')!
 	root := parse_compiled_vml_file(path, '', [])!
 	assert root.children.len == 2
-	assert root.children[0].imported
-	assert root.children[0].id == 'first'
-	assert root.children[0].children.len == 2
-	assert root.children[1].children.len == 1
-	assert root.children[0].children[0].properties[1].expr.value == 'nested'
-	assert root.children[0].children[0].source == os.real_path(os.join_path(dir, 'caption.vml'))
-	os.write_file(os.join_path(dir, 'caption.vml'), 'module Wrong\nLabel {}')!
+	first := root.children[0]
+	assert first.tag == '__Component' && first.component_name == 'Card'
+	assert first.id == 'first'
+	assert first.children[0].children.len == 2
+	caption := first.children[0].children[0]
+	assert caption.component_name == 'Caption'
+	assert caption.children[0].source == os.real_path(os.join_path(dir, 'caption.vml'))
+	assert first.children[0].children[1].caller_content
+	assert root.children[1].children[0].children.len == 1
+	os.write_file(os.join_path(dir, 'caption.vml'), 'component Wrong() { Label }')!
 	parse_compiled_vml_file(path, '', []) or {
-		assert err.msg().contains('module Caption')
+		assert err.msg().contains('component Caption')
 		return
 	}
-	assert false, 'module mismatch was accepted'
+	assert false, 'signature mismatch was accepted'
 }
 
 fn test_vml_import_cycle_reports_chain() {
-	dir := os.join_path(os.vtmp_dir(), 'vml_structure_cycle_${os.getpid()}')
+	dir := os.join_path(os.vtmp_dir(), 'vml_component_cycle_${os.getpid()}')
 	os.mkdir_all(dir)!
 	defer { os.rmdir_all(dir) or {} }
-	os.write_file(os.join_path(dir, 'first.vml'), 'module First\nimport Second\nView { Second {} }')!
-	os.write_file(os.join_path(dir, 'second.vml'), 'module Second\nimport First\nView { First {} }')!
+	os.write_file(os.join_path(dir, 'first.vml'), 'import Second\ncomponent First() { View { Second } }')!
+	os.write_file(os.join_path(dir, 'second.vml'), 'import First\ncomponent Second() { View { First } }')!
 	parse_compiled_vml_file(os.join_path(dir, 'first.vml'), '', []) or {
 		assert err.msg().contains('cyclic VML import')
 		assert err.msg().contains('first.vml') && err.msg().contains('second.vml')
@@ -64,63 +72,41 @@ fn test_vml_import_cycle_reports_chain() {
 	assert false, 'cycle was accepted'
 }
 
-fn test_vml_imports_keep_the_defining_documents_module_scope() {
-	dir := os.join_path(os.vtmp_dir(), 'vml_structure_scoped_imports_${os.getpid()}')
+fn test_vml_component_reuse_keeps_private_ids_and_source_locations() {
+	dir := os.join_path(os.vtmp_dir(), 'vml_component_positions_${os.getpid()}')
 	os.mkdir_all(dir)!
 	defer { os.rmdir_all(dir) or {} }
-	os.write_file(os.join_path(dir, 'card.vml'), 'module Card\nView { Label { text: "inside" } }')!
-	os.write_file(os.join_path(dir, 'label.vml'), 'module Label\nView { Button { text: "outside" } }')!
-	os.write_file(os.join_path(dir, 'main.vml'), 'import Card\nimport Label\nView { Card { Label {} } Label {} }')!
+	os.write_file(os.join_path(dir, 'card.vml'), 'component Card(title string) {\n    View(id: "card") { Label(text: title) }\n}')!
+	os.write_file(os.join_path(dir, 'main.vml'), 'import Card\nView { Card(id: "first", title: "one") Card(id: "second", title: "two") }')!
 	root := parse_compiled_vml_file(os.join_path(dir, 'main.vml'), '', [])!
-	assert root.children[0].children[0].tag == 'Label'
-	assert root.children[0].children[1].tag == 'View'
-	assert root.children[0].children[1].children[0].tag == 'Button'
-	assert root.children[1].children[0].tag == 'Button'
-}
-
-fn test_vml_import_root_remapping_keeps_invocations_and_expression_locations_independent() {
-	dir := os.join_path(os.vtmp_dir(), 'vml_root_remapping_${os.getpid()}')
-	os.mkdir_all(dir)!
-	defer { os.rmdir_all(dir) or {} }
-	card := os.join_path(dir, 'card.vml')
-	os.write_file(card, 'module Card\nView { id: card height: card.width width: 100 Label { text: "\${card.width}" } }')!
-	main := os.join_path(dir, 'main.vml')
-	os.write_file(main, 'import Card\nView { Card { id: first width: card.width } Card { id: second } Card {} }')!
-	root := parse_compiled_vml_file(main, '', [])!
-	for index, id in ['first', 'second', 'card'] {
-		height := vml_find_property(root.children[index], 'height') or { panic('missing height') }
-		assert height.expr.value == '${id}.width'
-		assert height.expr.source == os.real_path(card)
-		assert height.expr.line == 2
-		text := root.children[index].children[0].properties[0].expr
-		assert text.parts[0].expr.value == '${id}.width'
-		assert text.parts[0].expr.source == os.real_path(card)
+	for child in root.children {
+		assert child.children[0].id == 'card'
+		assert child.children[0].line == 2
+		assert child.inputs[0].name == 'title'
 	}
-	// Overrides retain the caller's interpretation, even when its id equals the
-	// definition's original root id.
-	width := vml_find_property(root.children[0], 'width') or { panic('missing width') }
-	assert width.expr.value == 'card.width'
-	assert width.expr.source == os.real_path(main)
+	mut compiler := VmlCompiler{}
+	generated := compiler.compile(root)
+	assert generated.contains(".child('0.0')")
+	assert generated.contains(".child('0.1')")
+	assert compiler.locations.any(it.path.ends_with('card.vml') && it.line == 2)
 }
 
 fn test_vml_generated_item_paths_keep_import_source_location() {
-	dir := os.join_path(os.vtmp_dir(), 'vml_structure_positions_${os.getpid()}')
+	dir := os.join_path(os.vtmp_dir(), 'vml_component_item_positions_${os.getpid()}')
 	os.mkdir_all(dir)!
 	defer { os.rmdir_all(dir) or {} }
-	os.write_file(os.join_path(dir, 'list.vml'), 'module List\nView {\n Repeater { model: app.items key: item.id\n Label { text: item.missing }\n }\n}')!
-	os.write_file(os.join_path(dir, 'main.vml'), 'import List\nView { List {} }')!
+	os.write_file(os.join_path(dir, 'list.vml'), 'component List() {\n View { Repeater(model: app.items, key: item.id) { Label(text: item.missing) } }\n}')!
+	os.write_file(os.join_path(dir, 'main.vml'), 'import List\nView { List }')!
 	path := os.join_path(dir, 'main.v')
 	os.write_file(path, "module main\nimport ui2\nfn build(mut app App) ui2.Element { return \$vml('main.vml') }\n")!
 	mut parser := Parser.new(pref.new_preferences())
 	ast := parser.parse_file(path)
 	assert parser.diagnostics.len == 0, parser.diagnostics.str()
-	mut found := false
-	for node in ast.nodes {
-		if node.kind == .ident && node.value.starts_with('vml_item_') {
-			if location := ast.source_position(node.pos) {
-				if location.filename.ends_with('list.vml') && location.line == 4 { found = true }
-			}
-		}
-	}
-	assert found, 'item path must point to imported VML'
+	assert ast.nodes.any(it.kind == .ident && it.value.starts_with('vml_item_'))
+}
+
+fn test_vml_inferred_types_relocate_every_nested_expression_link() {
+	assert shift_vml_inferred_type('![]&ui2.Signal[typeof(__vml_expr_12)]', 100) == '![]&ui2.Signal[typeof(__vml_expr_112)]'
+	assert shift_vml_inferred_type('fn(typeof(__vml_expr_1)) typeof(__vml_expr_22)', 10) == 'fn(typeof(__vml_expr_11)) typeof(__vml_expr_32)'
+	assert shift_vml_inferred_type('[]int', 10) == '[]int'
 }

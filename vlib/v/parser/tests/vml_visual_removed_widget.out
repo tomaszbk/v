@@ -1,8 +1,6 @@
 vlib/v/parser/tests/vml_visual/removed_widget.vml:1:1: error: unsupported VML element `TextField`
-    1 | TextField {
+    1 | TextField(text: "removed")
       | ^
-    2 |     text: "removed"
-    3 | }
 called from vlib/v/parser/tests/vml_visual_removed_widget.vv:2:6
     1 | fn main() {
     2 |     _ = $vml('vml_visual/removed_widget.vml')

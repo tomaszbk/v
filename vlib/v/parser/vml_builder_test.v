@@ -7,8 +7,8 @@ fn test_vml_nested_layout_source_has_a_bounded_number_of_leaf_builders() {
 	mut sizes := []int{}
 	mut copies := []int{}
 	for depth in [1, 2, 4, 8] {
-		mut source := 'Label { width: 30 text: "unique_leaf_marker" }'
-		for _ in 0 .. depth { source = 'Row { align_items: .start ${source} }' }
+		mut source := 'Label(width: 30, text: "unique_leaf_marker")'
+		for _ in 0 .. depth { source = 'Row(align_items: start) { ${source} }' }
 		root := parse_vml_source(source)!
 		mut compiler := VmlCompiler{}
 		generated := compiler.compile(root)
@@ -32,7 +32,7 @@ fn test_vml_renderer_profile_matches_target_qualified_custom_flag() {
 	defer { os.rmdir_all(root) or {} }
 	view := os.join_path(root, 'view.vml')
 	source := os.join_path(root, 'main.v')
-	os.write_file(view, 'Label {\n  weight: 600\n  text: "Example"\n}')!
+	os.write_file(view, 'Label(weight: 600, text: "Example")')!
 	os.write_file(source, 'fn main() { _ = $vml("view.vml") }')!
 	// Target preferences exercise classification only; they do not select,
 	// compile or execute a Linux/Windows backend on this host.
@@ -58,7 +58,7 @@ fn test_vml_renderer_profile_matches_target_qualified_custom_flag() {
 			assert parser.diagnostics.len == 1, '${entry}: ${parser.diagnostics}'
 			diagnostic := parser.diagnostics[0]
 			assert os.real_path(diagnostic.file) == os.real_path(view)
-			assert diagnostic.line == 2 && diagnostic.column == 3
+			assert diagnostic.line == 1 && diagnostic.column == 7
 			assert diagnostic.message == '`weight` requires the custom renderer'
 			assert diagnostic.pos.id in parser.a.template_call_sites
 		}
@@ -67,13 +67,12 @@ fn test_vml_renderer_profile_matches_target_qualified_custom_flag() {
 
 fn test_vml_named_self_references_do_not_accumulate_descendant_exports() {
 	for depth in [1, 2, 4, 8, 16] {
-		mut source := 'Label { width: 30 height: 20 text: "named_leaf_marker" }'
+		mut source := 'Label(width: 30, height: 20, text: "named_leaf_marker")'
 		for index in 0 .. depth {
-			source = 'Row {
-                id: level_${index}
-                computed f64 offered: level_${index}.width
-                width: level_${index}.offered / 2
-                height: 20 align_items: .start
+			source = 'Row(id: "level_${index}", width: 100, height: 20, align_items: start) {
+                Absolute {
+                    Label(text: level_${index}.width, width: level_${index}.width, height: 20)
+                }
                 ${source}
             }'
 		}

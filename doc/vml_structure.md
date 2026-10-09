@@ -1,8 +1,10 @@
-# Compiled VML structure
+# Compiled VML components and structure
 
-`$vml('screen.vml')` parses a file at compile time and lowers it to the public ui2 API.
-The usual result is `ui2.Element`; a `Menu` or `MenuBar` root returns `[]ui2.Menu`.
-Import ui2 and provide a mutable `app` parameter when a document reads or writes its model:
+`$vml('screen.vml')` parses a document at compile time and lowers it to ui2's
+public V API. Visual documents return `ui2.Element`; standalone `Menu` or
+`MenuBar` documents return `[]ui2.Menu`. Import ui2 in the calling V file.
+`$vml('screen.vml', frame)` accepts an explicit `ui2.Rect`; the default follows
+the window's logical viewport.
 
 ```v ignore
 fn build(mut app App) ui2.Element {
@@ -10,148 +12,151 @@ fn build(mut app App) ui2.Element {
 }
 ```
 
-Use `ui2.run_compiled_vml` with this builder to give callbacks access to the live model.
-The compiler emits typed callbacks, ordinary V expressions and API declarations. ui2 owns
-rendering, editing, event delivery and retained interaction state.
+`app` always refers to the calling application's live instance, including
+services and ordinary V methods. The generated callbacks borrow that instance.
+Use `ui2.run_compiled_vml` with the builder and the application's pointer. ui2
+creates the retained document once and updates affected properties and keyed
+child groups. Parsing, expression evaluation and layout are not interpreted at
+runtime; ui2 owns signals, lifecycle, layout, rendering and editor state.
 
-## Text values
+## Component declarations
 
-`text` accepts strings and numbers without explicit interpolation:
-
-```text
-Label { text: app.count }
-Label { text: app.count + 1 }
-Label { text: app.ready ? app.count : "waiting" }
-```
-
-ui2 formats numeric values with V's `.str()` and preserves strings. The value type is checked
-at compile time. Other properties keep their declared types; `computed string` values and
-`bind.text` remain string-typed. Arithmetic and comparisons keep V's usual type rules. Use
-interpolation for combined captions or explicit formatting. See
-`examples/vml_structure/numeric_text_test.v`.
-
-## File imports
+Each component lives in a `.vml` file. Import names resolve to `Name.vml` or
+`name.vml` relative to the importing document. Missing files, mismatched
+component names and import cycles are diagnosed at the source location.
 
 ```text
-import Card
-View {
-    Card { id: first }
-    Card { id: second }
-}
-```
-
-`Card` resolves to `Card.vml` or `card.vml` beside the importing file. The imported file must
-start with `module Card`. Imports in that file resolve relative to its own directory. Missing
-files, duplicate directives, mismatched modules and import cycles are errors.
-
-An import reuses a tree. Properties on its invocation override root properties; passed children
-are appended. Each invocation has a stable namespace for its internal control ids. This is tree
-reuse only; it introduces no private model, component state, slots or lifecycle.
-
-Overriding a root id preserves references to that root inside the imported definition. Caller
-overrides and appended children use caller ids; only the invocation id is exported to siblings.
-Build caches track transitive import contents and lookup candidates, so edits, deletions and
-new higher-priority import files invalidate cached output.
-
-## Repeaters
-
-```text
-View {
-    Repeater {
-        model: app.rows
-        key: item.id
-        Button { id: select text: item.name on_tap: app.select(item.id) }
+component Counter(title string = "Count", changed event(value int)) {
+    state count := 0
+    computed doubled := count * 2
+    fn increment() { count++; changed(count) }
+    Column(spacing: 12) {
+        Label(text: title)
+        Label(text: doubled)
+        Button(text: "Add", on_tap: increment)
     }
 }
 ```
 
-Model paths expose public fields, matching ui2 model schemas. The model is a V array, including
-arrays of structs, pointers or interfaces. `item` and `index`
-are scoped to its body. V checks item fields, action signatures and inactive expression branches
-even when the array is empty. Keys are scalar values and must be nonempty and unique per repeater.
-Choose a business identity that survives reorder; an index cannot provide that guarantee.
-
-Repeated controls get ids derived from their source position and encoded key segments. Descendant
-ids retain the enclosing repeat identity. Nested repeaters encode each key independently, so
-separators in business keys cannot merge identities. An explicit element `key` remains its sibling
-key; otherwise a single child uses the repeater key and multiple children add a source-child suffix.
-ui2 validates duplicate ids and sibling keys before the generated builder returns its tree.
-
-Stable ids and keys let ui2 retain focus, local edits, selection, scroll and IME across unrelated
-updates and reorder. The lowering does not add reconciliation or reset editor state.
-
-## Actions and assignments
-
 ```text
-TextInput { multiline: false
-    id: message
-    bind.text: app.message
-    on_change: app.copied = app.message
+import Counter
+Row {
+    Counter(title: "First", on_changed: app.observe)
+    Counter(title: "Second")
 }
-Button { text: "Increment" on_tap: app.count = app.count + 1 }
-Button { text: "Select" on_tap: app.select(item.id) }
 ```
 
-Bindings and assignments target public mutable top-level app fields. Assignments are supported
-only in event properties. Bindings write the event payload before the action or assignment runs.
-An assignment reads the live app at invocation time and captures repeater-local values from its
-own row. It is an ordinary typed V assignment followed by ui2 refresh invalidation.
+Inputs are typed and read-only. An input without a default is required. Private
+`state` infers its V type and initializes once per instance. `computed` infers
+its type and is a pure lazy memo; it cannot assign state, emit an event or call
+an action. Both Counter instances have independent state and lifecycle.
 
-App action methods must be public and have one of these signatures: no arguments, one `int`, or
-one `string`, returning nothing. Arguments are checked by V and evaluated at event time after the
-binding write, including compound expressions such as `app.count + item.id`. Row/local values
-are captured when building that row; app reads use the live borrowed model. An explicit V
-callback can also be referenced by name or a callback field. Bindings write and request refresh
-before forwarding the original event once; a nil callback still allows the binding write.
-Scroll events require `on_scroll`. Each event property receives only its matching event kind;
-named callbacks preserve the original payload without pointer or gesture fallbacks.
-Checkbox bindings consume `change` before `on_change`; `on_tap` stays a separate tap action.
-A control id identifies its source; it does not select a
-handler. Use `on_change` for text changes; obsolete `on_text` is rejected. Inline blocks,
-increments and component handlers belong to later compiler work.
+Members and local element ids use unprefixed names. `app` is reserved, and
+collisions between inputs, state, computed values, functions, refs, ids and
+function parameters are errors. Output events validate their payload even
+without a listener. A listener must return void and accept either no arguments
+or exactly the declared payload types.
 
-## Menus
+## Writable connections and actions
 
-A `MenuItem` child of an element lowers to `ui2.MenuEntry`, with its own typed `on_select` callback.
-`Option` children of a dropdown lower to entries with their displayed text as identity.
-Application menus use a standalone document:
+A signature can declare a bindable input, for example `bind name string = ""`.
+`Editor(bind.name: app.name)` connects it to a writable source. Passing an
+ordinary value keeps the input read-only. Editable local copies use `state`.
+
+```text
+component Editor(bind name string = "", changed event(value string)) {
+    Column {
+        TextInput(bind.text: name, on_change: changed(name))
+        Button(on_tap: { name = ""; changed(name) }, text: "Clear")
+    }
+}
+```
+
+`text: value` reads; `bind.text: value` also writes. Display text accepts strings
+and numbers, with numbers formatted using `.str()`. Editing text remains string
+only: numeric conversion must be explicit. Checkbox/switch bindings require
+bool, and slider bindings require a numeric source. App binding targets must
+be public mutable top-level fields.
+
+Local `fn` declarations, callback references, short actions and inline blocks
+share ordinary V expression types. Built-in element callback references accept
+`fn ()` or `fn (ui2.ElementEvent)` returning void. Method calls validate their
+argument count and types. The binding commits the event payload before an
+explicit action runs; actions batch signal writes. Event ids do not choose
+handlers, and unrelated event kinds do not invoke a binding.
+
+`mount { ... }`, `unmount { ... }` and `cleanup { ... }` register instance hooks.
+Mount runs once when attached; removal disposes owned effects and descendants.
+Unmount and cleanup can read the instance's existing state and memos. Callbacks
+from disposed instances are ignored. Lifecycle-owned tasks use ui2's component
+runtime API.
+
+## Slots and typed refs
+
+Declare slots in the public signature, such as `content slot` or `header slot`.
+Ordinary invocation content supplies the default slot; `Slot(name: "header")`
+selects named content. Slot expressions retain the author's lexical signals
+and app, while their resource lifetime belongs to the receiving instance.
+
+```text
+component Panel(header slot, content slot) {
+    Column {
+        Slot(name: "header")
+        Slot {}
+    }
+}
+```
+
+`ref name_field TextInput` declares a typed ref; `TextInput(ref: name_field)`
+connects it to that exact control kind. Refs become available after mount and
+expire on disposal. They expose typed runtime operations such as
+`name_field.focus()!` and `name_field.set_text("ready")!`. Refs are excluded
+from binding and snapshot data. `TextInput` and `TextArea` are distinct types.
+
+## Keyed child groups
+
+```text
+Column {
+    Label(text: "Rows")
+    Repeater(model: app.rows, key: item.id) {
+        Button(text: item.name, on_tap: app.select(item.id))
+    }
+    Label(text: "End")
+}
+```
+
+A model is a V array. `item` and `index` belong to each keyed instance; V checks
+item fields and inactive expressions even for an empty array. Keys must be
+nonempty and unique in a repeater. Use a business identity that survives
+reorder. Each item can produce multiple roots, nested child groups and
+components. Static siblings keep their declaration order.
+
+ui2 reuses keyed nodes during reorder, updates item/index signals, creates only
+insertions and disposes removals. Local ids are namespaced by component and
+keyed instance; anonymous declarations keep an empty public id and use private
+retained identity. Explicit ids and keys remain validated. Focus, selection,
+scroll, IME and unchanged local edit buffers survive unrelated updates.
+
+## Menus and diagnostics
 
 ```text
 MenuBar {
-    Menu {
-        title: "File"
-        MenuItem { id: create text: "New" shortcut: "cmd+n" on_tap: app.create() }
-        MenuSeparator {}
-        Menu { title: "More" MenuItem { id: help text: "Help" } }
+    Menu(title: "File") {
+        MenuItem(id: "create", text: "New", shortcut: "cmd+n", on_tap: app.create)
+        MenuSeparator()
     }
 }
 ```
 
-Pass the returned array to `ui2.set_menu_bar`. Titles, shortcuts, checked/enabled state, separators
-and nested items use `ui2.Menu` and `ui2.MenuItem`; `ui2.validate_menus` checks the result before
-installation. Menu properties are validated rather than silently ignored. Empty declarations use
-modern typed array initializers; populated arrays use inferred array literals.
-Titles and shortcuts are strings; checked/enabled/separator flags are bool. V checks menu fields
-and action expressions without implicit string/number conversion.
+Pass the result to `ui2.set_menu_bar`. Nested items use typed `ui2.Menu` and
+`ui2.MenuItem` declarations and validate before installation. Named arguments
+are the only property syntax; ids and ordinary strings require quotes. VML enum
+arguments use bare names, for example `align: right`. Conditions require bool;
+other than display text, properties have no implicit string/number conversion.
 
-## Running the public fixtures
-
-`examples/vml_structure` provides import, nested-list, menu, assignment and event-parity fixtures.
-It requires a matching ui2 checkout exposing the typed callback API. Set an isolated module path:
-
-```sh
-V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -nocache \
-  -path '@vlib:/path/to/modules:@vmodules' -o /tmp/vml_structure examples/vml_structure
-/tmp/vml_structure
-V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -nocache \
-  -path '@vlib:/path/to/modules:@vmodules' test examples/vml_structure
-V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -nocache \
-  -path '@vlib:/path/to/modules:@vmodules' -d ui2_custom_rendering \
-  -o /tmp/vml_structure_custom examples/vml_structure
-/tmp/vml_structure_custom --window
-```
-
-Here `/path/to/modules/ui2` is the ui2 checkout. The fixtures compare supported output and events
-with the existing runtime API, and verify identity stability after reorder. Compiler/parser tests
-also run without installing ui2. Generated diagnostics identify the originating VML file and line,
-including imported declarations, and retain the `$vml` call site.
+Diagnostics report the originating VML file, line and column and retain the
+calling `$vml` location. Native profiles reject unsupported custom presentation
+properties instead of silently changing their meaning. Parser tests do not
+require an installed ui2 module; runtime acceptance uses a matching compiler
+and ui2 revision, for example `-path '/path/to/modules|@vlib|@vmodules'` with
+`/path/to/modules/ui2` pointing to the checkout.
