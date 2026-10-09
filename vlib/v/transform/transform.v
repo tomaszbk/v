@@ -223,6 +223,7 @@ mut:
 	building_v                          bool
 	var_types                           []VarTypeBinding
 	comptime_scalar_locals              map[string]ComptimeStringScalar
+	cur_stmt_list                       []flat.NodeId // the statement list being transformed
 	var_type_indices                    map[string]int
 	var_type_cache                      &VarTypeIndexCache = unsafe { nil }
 	refined_node_types                  map[int]string
@@ -4530,7 +4531,15 @@ fn (t &Transformer) fork_program_view(ast &flat.FlatAst, wtc &types.TypeChecker,
 		shared_local_decl_names:             t.shared_local_decl_names
 		has_shared_decls:                    t.has_shared_decls
 		shared_field_names:                  t.shared_field_names
-		const_array_fixed_storage_cache:     t.const_array_fixed_storage_cache
+		const_array_fixed_storage_ready:     t.const_array_fixed_storage_ready
+		// A populated cache is only read, so workers can share it. A lazy cache
+		// memoizes lookup misses: sharing its buckets would let a worker insert
+		// keys owned by its scratch arena into storage that outlives the worker.
+		const_array_fixed_storage_cache:     if t.const_array_fixed_storage_ready {
+			t.const_array_fixed_storage_cache
+		} else {
+			map[string]i8{}
+		}
 		enum_types:                          t.enum_types
 		enum_backing_types:                  t.enum_backing_types
 		runtime_type_indexes:                t.runtime_type_indexes
@@ -6571,7 +6580,10 @@ fn (mut t Transformer) transform_string_interp_part(child_id flat.NodeId) flat.N
 		&& t.string_interp_needs_value_read(expr_node.value, typ) {
 		// Reading a local moved to the heap already dereferences its storage, while
 		// `typ` can still be the `&Alias` of that storage: read the value only once.
-		if !t.is_value_read_of(transformed, expr_node.value) {
+		// A `mut n &T` parameter is a slot for the pointer, so its `*n` is still `&T`.
+		is_mut_pointer_param := t.mut_param_values[expr_node.value]
+			&& t.var_type(expr_node.value).starts_with('&')
+		if is_mut_pointer_param || !t.is_value_read_of(transformed, expr_node.value) {
 			transformed = t.make_prefix(.mul, transformed)
 		}
 		typ = typ[1..]
@@ -11131,7 +11143,12 @@ fn (t &Transformer) fn_return_type_for_name(name string) ?string {
 pub fn (mut t Transformer) transform_stmts(ids []flat.NodeId) []flat.NodeId {
 	mut result := []flat.NodeId{cap: ids.len}
 	saved_comptime_locals := t.comptime_scalar_locals.clone()
-	defer { t.comptime_scalar_locals = saved_comptime_locals }
+	outer_stmt_list := t.cur_stmt_list
+	t.cur_stmt_list = ids
+	defer {
+		t.comptime_scalar_locals = saved_comptime_locals
+		t.cur_stmt_list = outer_stmt_list
+	}
 	had_base_smartcasts := t.smartcast_stack.len > 0
 	base_smartcasts := if had_base_smartcasts {
 		t.smartcast_stack.clone()
@@ -13355,7 +13372,10 @@ fn (mut t Transformer) const_array_literal_requires_fixed_storage(key string) bo
 		return cached > 0
 	}
 	result := t.const_array_literal_requires_fixed_storage_uncached(key)
-	t.const_array_fixed_storage_cache[key] = if result { i8(1) } else { i8(-1) }
+	// A populated cache can be shared with running workers; never grow it.
+	if !t.const_array_fixed_storage_ready {
+		t.const_array_fixed_storage_cache[key] = if result { i8(1) } else { i8(-1) }
+	}
 	return result
 }
 
