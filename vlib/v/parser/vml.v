@@ -1659,6 +1659,7 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 	}
 	if node.tag == 'Screen' {
 		c.writeln('\t\tbox: ${c.box_style(properties)}')
+		c.writeln('\t\tcompiled_metadata: &ui2.CompiledVmlMetadata{screen: ui2.ManagedScreen{name: ${vml_prop(properties, 'name', id)}}}')
 	} else if node.tag == 'Scroll' {
 		c.writeln('\t\tbox: ${c.box_style(properties)}')
 		c.writeln('\t\tpersistent_scrollbars: ${vml_prop(properties, 'persistent', 'false')}')
@@ -1715,9 +1716,9 @@ fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame st
 }
 
 fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, properties map[string]string, scope VmlScope, role_default string, label_default string, value_default string) {
-	c.writeln('\t\tinteraction_style: ${c.interaction_style(properties)}')
+	c.writeln('\t\tinteraction_style: ${vml_prop(properties, '@interaction_style', c.interaction_style(properties))}')
 	c.writeln('\t\tbutton_behavior: ${vml_prop(properties, 'button_behavior', 'false')}')
-	c.writeln('\t\tmenu: ${c.menu_value(node, suffix, scope)}')
+	c.writeln('\t\tmenu: ${vml_prop(properties, '@menu', c.menu_value(node, suffix, scope))}')
 	c.writeln('\t\tsecure: ${vml_prop(properties, 'secure', 'false')}' + if node.tag == 'TextInput' {
 		' || ${vml_prop(properties, 'password', 'false')}'
 	} else {

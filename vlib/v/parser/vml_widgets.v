@@ -223,7 +223,23 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 	c.writeln('\t${temporary} := ${constructor}')
 	c.writeln('\t${output} := ui2.Element{...${temporary}, key: ${key}')
 	if metadata.len > 0 { c.writeln('\tcompiled_metadata: &ui2.CompiledVmlMetadata{${metadata}}') }
-	c.write_common_fields(node, suffix, properties, scope, '${temporary}.accessibility_role', '${temporary}.accessibility_label', '${temporary}.accessibility_value')
+	mut common := properties.clone()
+	// Composite constructors derive common fields from their own config (for
+	// example, visibility of a closed ModalView). Only authored arguments replace
+	// those values; the defaults for directly declared elements are unchanged.
+	for name in ['button_behavior', 'secure', 'clickable', 'draggable', 'long_press',
+		'swipe_left', 'rotation', 'translate_x', 'translate_y', 'scale_x', 'scale_y',
+		'origin_x', 'origin_y', 'cursor', 'tooltip', 'hidden', 'enabled', 'autocorrect'] {
+		if name !in common { common[name] = '${temporary}.${name}' }
+	}
+	if 'native' !in common { common['native'] = '${temporary}.native_style' }
+	if 'pad_left' !in common { common['pad_left'] = '${temporary}.padding_left' }
+	if !node.children.any(it.tag == 'MenuItem') { common['@menu'] = '${temporary}.menu' }
+	if !properties.keys().any(it.starts_with('hover_') || it.starts_with('focus_')
+		|| it.starts_with('pressed_') || it.starts_with('disabled_')) {
+		common['@interaction_style'] = '${temporary}.interaction_style'
+	}
+	c.write_common_fields(node, suffix, common, scope, '${temporary}.accessibility_role', '${temporary}.accessibility_label', '${temporary}.accessibility_value')
 	c.writeln('\t}')
 	return true
 }

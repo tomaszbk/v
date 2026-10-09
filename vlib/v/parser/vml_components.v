@@ -483,7 +483,7 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 		if app_dependency && ('mut ' + owner) !in captures { captures << 'mut ' + owner }
 		dependency := if app_dependency { owner + '.watch_app() or { panic(err) }; ' } else { '' }
 		updated := if property.name in ['x', 'y', 'width', 'height'] {
-			'element.with_layout_frame(ui2.Rect{...element.frame, ${property.name}: ${value}})'
+			'element.with_layout_frame(ui2.Rect{...(element.layout_input or { element.frame }), ${property.name}: ${value}})'
 		} else {
 			'ui2.Element{...element, ${patch}}'
 		}
