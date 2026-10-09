@@ -959,6 +959,7 @@ enum VmlExprUse {
 	raw
 	number
 	string_
+	text
 	bool_
 	color
 }
@@ -973,6 +974,7 @@ fn vml_property_use(property VmlProperty) VmlExprUse {
 			else { .raw }
 		}
 	}
+	if property.name == 'text' { return .text }
 	if use := vml_visual_property_use(property.name) { return use }
 	if property.name in ['x', 'y', 'width', 'height', 'padding', 'spacing', 'corner_radius', 'radius',
 		'rotation', 'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor',
@@ -1035,6 +1037,13 @@ fn (c &VmlCompiler) resolve_path(path string, scope VmlScope) (string, bool) {
 }
 
 fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
+	if use == .text {
+		if expr.kind == .conditional {
+			condition := c.expr(expr.left, scope, .bool_)
+			return '(if ${condition} { ${c.expr(expr.right, scope, .text)} } else { ${c.expr(expr.third, scope, .text)} })'
+		}
+		return 'ui2.vml_display_text(${c.expr(expr, scope, .raw)})'
+	}
 	match expr.kind {
 		.literal {
 			if expr.quoted {
@@ -1496,7 +1505,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 		for index, item in menu_items {
 			id := c.event_callback(item, 'on_tap', scope)
 			text := if property := vml_find_property(item, 'text') {
-				c.expr(property.expr, scope, .raw)
+				c.expr(property.expr, scope, .text)
 			} else {
 				"''"
 			}
@@ -1511,7 +1520,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 				continue
 			}
 			text := if property := vml_find_property(option, 'text') {
-				c.expr(property.expr, scope, .raw)
+				c.expr(property.expr, scope, .text)
 			} else {
 				"''"
 			}
@@ -1529,7 +1538,7 @@ fn (c &VmlCompiler) option_values(node &VmlNode, scope VmlScope) string {
 			continue
 		}
 		value := if property := vml_find_property(option, 'text') {
-			c.expr(property.expr, scope, .string_)
+			c.expr(property.expr, scope, .text)
 		} else {
 			"''"
 		}
@@ -1794,7 +1803,7 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 		c.write_action_type_checks(child, '${suffix}_message_action_${child_index}', scope)
 		child_action := c.event_callback(child, 'on_tap', scope)
 		text := if property := vml_find_property(child, 'text') {
-			c.expr(property.expr, scope, .string_)
+			c.expr(property.expr, scope, .text)
 		} else {
 			"''"
 		}

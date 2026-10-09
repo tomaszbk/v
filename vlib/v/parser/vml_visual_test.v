@@ -66,7 +66,7 @@ fn test_vml_visual_errors_include_the_property_location_and_check_inactive_arms(
 		['Label {\n  tabular_figures: false ? true : 1\n}', 'requires bool', '2', '3'],
 		['Label {\n  align: .diagonal\n}', 'unsupported align value', '2', '3'],
 		['Label {\n  align: "right"\n}', 'requires a V enum value', '2', '3'],
-		['Label {\n  text: 123\n}', '`text` requires a string', '2', '3'],
+		['Label {\n  text: true\n}', '`text` requires a string or number', '2', '3'],
 		['View {\n  units: "logical"\n}', 'unsupported property `units`', '2', '3'],
 		['Run { text: "orphan" }', 'Run must be a child of Label', '1', '1'],
 		['TextField {}', 'unsupported VML element `TextField`', '1', '1'],
@@ -100,6 +100,22 @@ fn test_vml_visual_lowering_produces_valid_v_syntax() {
 		mut parser := Parser.new(pref.new_preferences())
 		parser.parse_file(path)
 		assert parser.diagnostics.len == 0, parser.diagnostics.str()
+	}
+}
+
+fn test_vml_text_formats_numeric_expressions_without_relaxing_other_properties() {
+	for source in ['Label { text: 123 }', 'Label { text: -12.5 }', 'Label { text: app.count + 1 }',
+		'Label { text: app.caption() }', 'Label { text: app.ready ? app.count : "waiting" }',
+		'Label { Run { text: app.count } }', 'Dropdown { Option { text: app.count } }'] {
+		root := parse_vml_source(source)!
+		mut compiler := VmlCompiler{ uses_app: true }
+		assert compiler.compile(root).contains('ui2.vml_display_text(')
+	}
+	for source in ['Label { text: app.ready ? 123 : true }', 'Label { computed string caption: 123 }',
+		'TextInput { placeholder: 123 }', 'Label { width: "123" }'] {
+		if _ := parse_vml_source(source) {
+			assert false, 'unexpectedly accepted ${source}'
+		}
 	}
 }
 

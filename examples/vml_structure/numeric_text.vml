@@ -1,0 +1,21 @@
+View {
+    Label { id: count text: app.count }
+    Label { id: next text: app.count + 1 }
+    Label { id: amount text: app.amount }
+    Label { id: caption text: app.caption }
+    Label { id: conditional text: app.ready ? app.count : "waiting" }
+    Label { id: called text: app.next_count() }
+    TextInput { id: input multiline: false bind.text: app.caption }
+    Repeater {
+        model: app.numbers
+        key: item
+        Label { text: item }
+        Label { text: index }
+    }
+    Dropdown { id: options Option { text: app.ready ? app.count : "waiting" } }
+    Spinner { id: spinner Option { text: app.count } }
+    Column {
+        Label { text: app.count }
+        Label { text: app.ready ? app.count : "waiting" }
+    }
+}

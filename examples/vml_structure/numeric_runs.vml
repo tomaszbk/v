@@ -1,0 +1,5 @@
+Label {
+    Run { text: app.count }
+    Run { text: " / " }
+    Run { text: app.amount }
+}

@@ -58,7 +58,7 @@ fn (mut c VmlCompiler) application_menu(node &VmlNode, path string, scope VmlSco
 	}
 	c.write_action_type_checks(node, 'menu_${path}', local)
 	items := c.application_menu_items(node, path, local)
-	title := c.menu_property(node, 'title', c.menu_property(node, 'text', "''", .raw), .raw)
+	title := c.menu_property(node, 'title', c.menu_property(node, 'text', "''", .text), .raw)
 	c.location = VmlLocation{ path: node.source, line: node.line, column: node.column }
 	name := 'vml_menu_${path}'
 	c.writeln('\t${name} := ui2.Menu{title: ${title}, items: ${items}}')
@@ -82,7 +82,7 @@ fn (mut c VmlCompiler) application_menu_items(node &VmlNode, path string, scope 
 		}
 		nested := c.application_menu_items(child, child_path, local)
 		c.location = VmlLocation{ path: child.source, line: child.line, column: child.column }
-		title := c.menu_property(child, 'title', c.menu_property(child, 'text', "''", .raw), .raw)
+		title := c.menu_property(child, 'title', c.menu_property(child, 'text', "''", .text), .raw)
 		fields := if child.tag == 'Menu' {
 			''
 		} else {

@@ -14,6 +14,22 @@ Use `ui2.run_compiled_vml` with this builder to give callbacks access to the liv
 The compiler emits typed callbacks, ordinary V expressions and API declarations. ui2 owns
 rendering, editing, event delivery and retained interaction state.
 
+## Text values
+
+`text` accepts strings and numbers without explicit interpolation:
+
+```text
+Label { text: app.count }
+Label { text: app.count + 1 }
+Label { text: app.ready ? app.count : "waiting" }
+```
+
+ui2 formats numeric values with V's `.str()` and preserves strings. The value type is checked
+at compile time. Other properties keep their declared types; `computed string` values and
+`bind.text` remain string-typed. Arithmetic and comparisons keep V's usual type rules. Use
+interpolation for combined captions or explicit formatting. See
+`examples/vml_structure/numeric_text_test.v`.
+
 ## File imports
 
 ```text

@@ -100,7 +100,7 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 	if vml_property_use(property) == .color {
 		return 'ui2.TextStyle{color: ${value}}.color'
 	}
-	if vml_property_use(property) == .string_ {
+	if vml_property_use(property) in [.string_, .text] {
 		return 'ui2.Element{text: ${value}}.text'
 	}
 	if vml_property_use(property) == .bool_ {
@@ -293,6 +293,9 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 	}
 	if use == .bool_ { validate_vml_visual_bool(property, expr)! }
 	if expr.kind == .literal {
+		if use == .text && !expr.quoted && expr.value in ['true', 'false'] {
+			return vml_visual_error(property, '`text` requires a string or number')
+		}
 		if use == .number && (expr.quoted || expr.value in ['true', 'false']) {
 			return vml_visual_error(property, '`${property.name}` requires a number')
 		}

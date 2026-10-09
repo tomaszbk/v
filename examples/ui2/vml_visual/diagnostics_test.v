@@ -3,7 +3,7 @@ module main
 import os
 
 fn test_compiled_visual_ios_custom_flag_keeps_native_source_diagnostics() {
-	root := os.join_path(os.vtmp_dir(), 'vml_ios_native_${os.getpid()}')
+	root := os.join_path(os.real_path(os.vtmp_dir()), 'vml_ios_native_${os.getpid()}')
 	os.mkdir_all(root)!
 	defer {
 		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
@@ -32,7 +32,7 @@ fn test_compiled_visual_ios_custom_flag_keeps_native_source_diagnostics() {
 }
 
 fn test_compiled_visual_dynamic_types_and_inactive_arms_report_vml_locations() {
-	root := os.join_path(os.vtmp_dir(), 'vml_visual_types_${os.getpid()}')
+	root := os.join_path(os.real_path(os.vtmp_dir()), 'vml_visual_types_${os.getpid()}')
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }
 	view := os.join_path(root, 'view.vml')
@@ -55,17 +55,17 @@ fn test_compiled_visual_dynamic_types_and_inactive_arms_report_vml_locations() {
 		['Label {\n    weight: app.count > 0\n}', '2:5'],
 		['Label {\n    color: app.color\n}', '2:5'],
 		['Label {\n    align: app.align\n}', '2:5'],
-		['Label {\n    text: app.count\n}', '2:5'],
-		['Label {\n    text: app.count + app.count\n}', '2:5'],
+		['Label {\n    text: app.flag\n}', '2:5'],
+		['Label {\n    text: app.flag && app.flag\n}', '2:5'],
 		['Label {\n    text: app.count > 0\n}', '2:5'],
 		['Label {\n    text: !app.flag\n}', '2:5'],
 		['Label {\n    text: app.count ? "yes" : "no"\n}', '2:5'],
 		['Label {\n    weight: true ? 400 : app.weight\n}', '2:5'],
-		['Label {\n    text: true ? "valid" : app.count\n}', '2:5'],
+		['Label {\n    text: true ? "valid" : app.flag\n}', '2:5'],
 		['Label {\n    bold: false ? app.count : true\n}', '2:5'],
 		['Label {\n    Run {\n        weight: true ? 400 : app.weight\n    }\n}', '3:9'],
 		['Label {\n    Run {\n        weight: app.weight\n    }\n}', '3:9'],
-		['Label {\n    Run {\n        text: app.count\n    }\n}', '3:9'],
+		['Label {\n    Run {\n        text: app.flag\n    }\n}', '3:9'],
 	] {
 		os.write_file(view, entry[0])!
 		result := os.exec([@VEXE, '-new-compiler', '-gc', 'boehm', '-path', '@vlib:@vmodules',
@@ -77,7 +77,7 @@ fn test_compiled_visual_dynamic_types_and_inactive_arms_report_vml_locations() {
 }
 
 fn test_compiled_visual_native_profile_rejects_unsupported_presentation() {
-	root := os.join_path(os.vtmp_dir(), 'vml_visual_native_${os.getpid()}')
+	root := os.join_path(os.real_path(os.vtmp_dir()), 'vml_visual_native_${os.getpid()}')
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }
 	view := os.join_path(root, 'view.vml')
