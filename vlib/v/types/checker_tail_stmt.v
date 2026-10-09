@@ -16778,7 +16778,9 @@ fn (tc &TypeChecker) type_from_typeof_type_text(typ string) ?Type {
 			] {
 				return tc.parse_resolution_type(witness)
 			}
-			value := tc.expr_type(expression_id) or { return none }
+			// Type witnesses are detached from the generated executable body.
+			// Resolve them in the current lexical scope before a checked cache exists.
+			value := tc.expr_type(expression_id) or { tc.resolve_type(expression_id) }
 			if value is Void || value is Unknown || type_contains_unknown(value) || value.name().contains('typeof(__vml_expr_') {
 				return none
 			}

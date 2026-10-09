@@ -68,7 +68,8 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	build_captures << 'mut ' + parent
 	if geometry_parent != parent { build_captures << 'mut ' + geometry_parent }
 	build_captures << collection
-	c.writeln('mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string { _ = ${collection}; return ${vml_stringify(key_value)} }, fn [${build_captures.join(', ')}] (mut ${owner} ui2.CompiledVmlComponent, ${signal} &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
+	c.writeln('mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string { _ = ${collection}; return ${vml_stringify(key_value)} }, fn [${build_captures.join(', ')}] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
+	c.writeln('mut ${signal} := ${signal}_input')
 	c.writeln('_ = ${collection}')
 	c.writeln('mut ${index} := ${owner}.state(' + vml_quote('@index') + ', 0)!')
 	c.writeln('_ = ${index}')
