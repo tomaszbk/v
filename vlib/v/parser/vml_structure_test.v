@@ -103,6 +103,17 @@ fn test_vml_generated_item_paths_keep_import_source_location() {
 	ast := parser.parse_file(path)
 	assert parser.diagnostics.len == 0, parser.diagnostics.str()
 	assert ast.nodes.any(it.kind == .ident && it.value.starts_with('vml_item_'))
+	mut item_bindings := 0
+	for node in ast.nodes {
+		if node.kind != .decl_assign || node.children_count != 2 { continue }
+		binding := ast.child_node(&node, 0)
+		if !binding.value.starts_with('vml_item_signal_') { continue }
+		item_bindings++
+		assert node.is_mut, 'reactive item reads require a mutable signal binding'
+		source := ast.child_node(&node, 1)
+		assert source.kind == .ident && source.value == binding.value + '_input'
+	}
+	assert item_bindings == 1
 }
 
 fn test_vml_inferred_types_relocate_every_nested_expression_link() {
