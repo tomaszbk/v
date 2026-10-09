@@ -75,7 +75,7 @@ fn test_visual_structure_callbacks_keep_locals_binding_order_and_event_routes() 
 }
 
 fn test_shared_visual_named_callbacks_keep_original_payload_during_reentry() {
-	mut app := CombinedApp{}
+	mut app := &CombinedApp{}
 	app.named = fn [mut app] (event ui2.ElementEvent) {
 		assert event.kind == .change && app.message == event.text
 		app.payloads << event
