@@ -1,0 +1,5 @@
+module ScopeRow
+Row {
+    width: 100 height: 40
+    Label { id: private width: 7 height: 8 computed f64 marker: 11 }
+}

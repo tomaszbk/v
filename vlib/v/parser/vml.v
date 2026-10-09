@@ -1275,7 +1275,8 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	}
 	c.write_action_type_checks(node, suffix, scope)
 	if node.tag in ['Flex', 'Row', 'Column', 'Grid'] {
-		return c.compile_visual_layout(node, path, input, frame, properties, scope, placement, default_key)
+		result := c.compile_visual_layout(node, path, input, frame, properties, scope, placement, default_key)
+		return vml_node_output_scope(node, incoming, result)
 	}
 	children := 'vml_children_${suffix}'
 	container := node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll']
@@ -1290,6 +1291,14 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		c.writeln('\tmut ${children} := []ui2.Element{cap: ${visible_children.len}}')
 	}
 	cursor := ''
+	child_placement := if node.tag == 'Absolute' {
+		VmlPlacement.preferred
+	} else if measure_mode {
+		// Generic containers offer fixed axes; zero auto axes need measurement.
+		VmlPlacement.inherited_preferred
+	} else {
+		VmlPlacement.normal
+	}
 	for child_index, child in node.children {
 		child_path := '${path}.${child_index}'
 		if child.tag == 'MenuItem' {
@@ -1301,23 +1310,12 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 			continue
 		}
 		if child.tag == 'Repeater' {
-			c.compile_repeater(child, child_path, frame, node.tag, properties, cursor, scope, children, scope.special['__repeat_identity'] or { '' }, false)
+			c.compile_repeater(child, child_path, frame, node.tag, properties, cursor, scope, children, scope.special['__repeat_identity'] or { '' }, false, child_placement)
 			continue
 		}
 		child_input := 'vml_input_${vml_var(child_path)}'
-		c.writeln('\t${child_input} := ${if node.tag == 'ScaledContent' {
-			'ui2.rect(0, 0, ' + vml_prop(properties, 'content_width', 'f64(0)') + ', ' + vml_prop(properties, 'content_height', 'f64(0)') + ')'
-		} else {
-			vml_child_input(node.tag, frame, properties, cursor)
-		}}')
-		child_scope := c.compile_node(child, child_path, child_input, scope, '', if node.tag == 'Absolute' {
-			.preferred
-		} else if measure_mode {
-			// Generic containers offer their fixed axes; only zero auto axes need measurement.
-			.inherited_preferred
-		} else {
-			.normal
-		})
+		c.writeln('\t${child_input} := ${vml_child_input(node.tag, frame, properties, cursor)}')
+		child_scope := c.compile_node(child, child_path, child_input, scope, '', child_placement)
 		for id, named in child_scope.ids {
 			scope.ids[id] = named
 		}
@@ -1342,29 +1340,37 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		}}, ${vml_prop(properties, 'height', vml_measured_axis(placement, frame + '.height', 'vml_measured_' + suffix + '.height'))})}')
 		if node.id.len > 0 {
 			// Later siblings use this pass's measured frame; declared props keep precedence.
+			// A typed local can also be captured by an event closure; capture lists
+			// accept identifiers rather than field-access expressions.
+			measured_frame := 'vml_measured_frame_${suffix}'
+			c.writeln('\t${measured_frame} := vml_element_${suffix}.frame')
+			c.writeln('\t_ = ${measured_frame}')
 			scope.ids[node.id] = VmlNamedValue{
-				frame:      'vml_element_${suffix}.frame'
+				frame:      measured_frame
 				props:      named_props.clone()
 				prop_types: named_types.clone()
 			}
 		}
 	}
-	if node.imported {
-		mut exported := vml_clone_scope(incoming)
-		if node.id.len > 0 { exported.ids[node.id] = scope.ids[node.id] }
-		return exported
-	}
-	return scope
+	return vml_node_output_scope(node, incoming, scope)
+}
+
+fn vml_node_output_scope(node &VmlNode, incoming VmlScope, scope VmlScope) VmlScope {
+	if !node.imported { return scope }
+	mut exported := vml_clone_scope(incoming)
+	if node.id.len > 0 { exported.ids[node.id] = scope.ids[node.id] }
+	return exported
 }
 
 fn vml_child_input(tag string, frame string, properties map[string]string, cursor string) string {
-	_ = tag
-	_ = properties
 	_ = cursor
+	if tag == 'ScaledContent' {
+		return 'ui2.rect(0, 0, ' + vml_prop(properties, 'content_width', 'f64(0)') + ', ' + vml_prop(properties, 'content_height', 'f64(0)') + ')'
+	}
 	return 'ui2.rect(f64(0), f64(0), ${frame}.width, ${frame}.height)'
 }
 
-fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame string, parent_tag string, parent_properties map[string]string, cursor string, incoming VmlScope, output string, outer_key string, flattened bool) {
+fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame string, parent_tag string, parent_properties map[string]string, cursor string, incoming VmlScope, output string, outer_key string, flattened bool, placement VmlPlacement) {
 	model := vml_find_property(node, 'model') or { return }
 	key := vml_find_property(node, 'key') or { return }
 	suffix := vml_var(path)
@@ -1409,7 +1415,7 @@ fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame
 		}
 		child_path := '${path}.${child_index}'
 		if child.tag == 'Repeater' {
-			c.compile_repeater(child, child_path, parent_frame, parent_tag, parent_properties, cursor, scope, output, identity, true)
+			c.compile_repeater(child, child_path, parent_frame, parent_tag, parent_properties, cursor, scope, output, identity, true, placement)
 			continue
 		}
 		child_input := 'vml_input_${vml_var(child_path)}'
@@ -1421,7 +1427,7 @@ fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame
 		} else {
 			"'" + r'$' + '{' + key_name + '}' + ':${visible_index}' + "'"
 		}
-		child_scope := c.compile_node(child, child_path, child_input, scope, default_key, .normal)
+		child_scope := c.compile_node(child, child_path, child_input, scope, default_key, placement)
 		for id, named in child_scope.ids {
 			scope.ids[id] = named
 		}

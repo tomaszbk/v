@@ -1,0 +1,5 @@
+module ScopeGrid
+Grid {
+    width: 100 height: 40 columns: 1
+    Label { id: private width: 9 height: 10 computed f64 marker: 13 }
+}

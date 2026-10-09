@@ -1,0 +1,11 @@
+import ScopeRow
+import ScopeGrid
+View {
+    width: 300 height: 200
+    View { id: private width: 23 height: 17 computed f64 marker: 29 }
+    ScopeRow { id: row_export }
+    Label { width: private.width height: private.marker }
+    ScopeGrid { id: grid_export }
+    Label { width: private.width height: private.marker }
+    Label { width: row_export.width height: grid_export.height }
+}
