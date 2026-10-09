@@ -1,5 +1,10 @@
-vlib/v/parser/tests/vml_assignment_target_err.vv:2:9: error: vlib/v/parser/tests/vml_structure/invalid_assignment.vml:2:39: event assignments must target a mutable top-level app field
+vlib/v/parser/tests/vml_structure/invalid_assignment.vml:2:20: error: assignment target `app.nested.count` is read-only
+    1 | View {
+    2 |     Button(on_tap: app.nested.count = 1)
+      |                    ^
+    3 | }
+called from vlib/v/parser/tests/vml_assignment_target_err.vv:2:9
     1 | fn main() {
     2 |     _ = $vml('vml_structure/invalid_assignment.vml')
-      |         ^
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     3 | }

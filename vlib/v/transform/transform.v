@@ -7781,6 +7781,7 @@ fn (mut t Transformer) collect_mut_capture_sources(id flat.NodeId) {
 		for i in 0 .. node.children_count {
 			capture := t.a.child_node(&node, i)
 			if capture.kind == .ident && capture.is_mut && capture.value.len > 0 {
+				if capture.op == .amp { t.escaping_amp_sources[capture.value] = true }
 				t.mut_fixed_array_capture_sources[capture.value] = true
 			}
 		}
@@ -7796,6 +7797,19 @@ fn (mut t Transformer) collect_mut_capture_sources(id flat.NodeId) {
 		// materialized as a scoped temporary during call lowering, so its mutable
 		// fixed-array captures can keep borrowing this frame's storage.
 		if node.kind == .call && i == 0 && t.fn_literal_has_runtime_captures(child_id) {
+			// VML's retained result can contain callbacks borrowing app even
+			// though its construction closure itself is called immediately.
+			mut literal_id := child_id
+			for t.a.nodes[int(literal_id)].kind == .paren {
+				literal_id = t.a.child(&t.a.nodes[int(literal_id)], 0)
+			}
+			literal := t.a.nodes[int(literal_id)]
+			for index in 0 .. literal.children_count {
+				capture := t.a.child_node(&literal, index)
+				if capture.kind == .ident && capture.op == .amp {
+					t.escaping_amp_sources[capture.value] = true
+				}
+			}
 			continue
 		}
 		t.collect_mut_capture_sources(child_id)

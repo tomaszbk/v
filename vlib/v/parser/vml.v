@@ -23,6 +23,12 @@ enum VmlTokenKind {
 	not
 	eq
 	assign
+	declare
+	increment
+	decrement
+	semicolon
+	lsbr
+	rsbr
 	ne
 	lt
 	le
@@ -152,13 +158,37 @@ fn tokenize_vml(source string) ![]VmlToken {
 		match c {
 			`{` { tokens << VmlToken{ kind: .lbrace, text: '{', line: line, column: column } }
 			`}` { tokens << VmlToken{ kind: .rbrace, text: '}', line: line, column: column } }
-			`:` { tokens << VmlToken{ kind: .colon, text: ':', line: line, column: column } }
+			`:` {
+				if lexer.pos + 1 < source.len && source[lexer.pos + 1] == `=` {
+					lexer.pos++
+					tokens << VmlToken{ kind: .declare, text: ':=', line: line, column: column }
+				} else {
+					tokens << VmlToken{ kind: .colon, text: ':', line: line, column: column }
+				}
+			}
+			`;` { tokens << VmlToken{ kind: .semicolon, text: ';', line: line, column: column } }
+			`[` { tokens << VmlToken{ kind: .lsbr, text: '[', line: line, column: column } }
+			`]` { tokens << VmlToken{ kind: .rsbr, text: ']', line: line, column: column } }
 			`(` { tokens << VmlToken{ kind: .lpar, text: '(', line: line, column: column } }
 			`)` { tokens << VmlToken{ kind: .rpar, text: ')', line: line, column: column } }
 			`,` { tokens << VmlToken{ kind: .comma, text: ',', line: line, column: column } }
 			`?` { tokens << VmlToken{ kind: .question, text: '?', line: line, column: column } }
-			`+` { tokens << VmlToken{ kind: .plus, text: '+', line: line, column: column } }
-			`-` { tokens << VmlToken{ kind: .minus, text: '-', line: line, column: column } }
+			`+` {
+				if lexer.pos + 1 < source.len && source[lexer.pos + 1] == `+` {
+					lexer.pos++
+					tokens << VmlToken{ kind: .increment, text: '++', line: line, column: column }
+				} else {
+					tokens << VmlToken{ kind: .plus, text: '+', line: line, column: column }
+				}
+			}
+			`-` {
+				if lexer.pos + 1 < source.len && source[lexer.pos + 1] == `-` {
+					lexer.pos++
+					tokens << VmlToken{ kind: .decrement, text: '--', line: line, column: column }
+				} else {
+					tokens << VmlToken{ kind: .minus, text: '-', line: line, column: column }
+				}
+			}
 			`*` { tokens << VmlToken{ kind: .mul, text: '*', line: line, column: column } }
 			`/` { tokens << VmlToken{ kind: .div, text: '/', line: line, column: column } }
 			`%` { tokens << VmlToken{ kind: .mod, text: '%', line: line, column: column } }
@@ -239,6 +269,8 @@ enum VmlExprKind {
 	unary
 	binary
 	assignment
+	block
+	array
 	conditional
 	interpolation
 }
@@ -259,20 +291,20 @@ mut:
 	source string
 	// The tagged expression tree is recursive. Nil marks child links unused by
 	// the current kind, and V requires `unsafe` only for those pointer defaults.
-	left   &VmlExpr = unsafe { nil }
-	right  &VmlExpr = unsafe { nil }
-	third  &VmlExpr = unsafe { nil }
-	args   []&VmlExpr
-	parts  []VmlInterpolationPart
-	quoted bool
+	left     &VmlExpr = unsafe { nil }
+	right    &VmlExpr = unsafe { nil }
+	third    &VmlExpr = unsafe { nil }
+	args     []&VmlExpr
+	parts    []VmlInterpolationPart
+	quoted   bool
+	fallible bool
 }
 
 struct VmlProperty {
-	name          string
-	declared_type string
-	line          int
-	column        int
-	expr          &VmlExpr
+	name   string
+	line   int
+	column int
+	expr   &VmlExpr
 }
 
 struct VmlNode {
@@ -280,12 +312,21 @@ struct VmlNode {
 	line   int
 	column int = 1
 mut:
-	source     string
-	imported   bool
-	import_id  bool
-	id         string
-	properties []VmlProperty
-	children   []&VmlNode
+	source         string
+	imported       bool
+	import_id      bool
+	id             string
+	properties     []VmlProperty
+	children       []&VmlNode
+	component_name string
+	inputs         []VmlInput
+	data           []VmlData
+	functions      []VmlFunction
+	refs           []VmlParameter
+	caller_content bool
+	mount          []&VmlExpr
+	unmount        []&VmlExpr
+	cleanup        []&VmlExpr
 }
 
 struct VmlSourceParser {
@@ -314,60 +355,96 @@ fn (mut p VmlSourceParser) take(kind VmlTokenKind) !VmlToken {
 
 fn (mut p VmlSourceParser) parse_node() !&VmlNode {
 	tag := p.take(.name)!
-	p.take(.lbrace)!
 	mut node := &VmlNode{ tag: tag.text, line: tag.line, column: tag.column }
-	for p.at().kind !in [.rbrace, .eof] {
-		if p.at().kind != .name {
-			return error('unexpected token `${p.at().text}` at line ${p.at().line}')
-		}
-		if p.at().text == 'property' {
-			return error('property has been removed; use computed at line ${p.at().line}, column ${p.at().column}')
-		} else if p.at().text == 'computed' {
-			p.pos++
-			typ := p.take(.name)!
+	if p.at().kind == .lpar {
+		p.pos++
+		for p.at().kind != .rpar {
 			name := p.take(.name)!
 			if node.properties.any(it.name == name.text) {
-				return error('duplicate VML property `${name.text}` at line ${name.line}:${name.column}')
+				return error('duplicate VML argument `${name.text}` at line ${name.line}:${name.column}')
 			}
 			p.take(.colon)!
-			node.properties << VmlProperty{ name: name.text, line: name.line, column: name.column, declared_type: typ.text, expr: p.parse_expression()! }
-		} else if p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .lbrace {
-			node.children << p.parse_node()!
-		} else if p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .colon {
-			name := p.take(.name)!
-			if node.properties.any(it.name == name.text) {
-				return error('duplicate VML property `${name.text}` at line ${name.line}:${name.column}')
-			}
-			p.take(.colon)!
-			expr := if vml_is_event(name.text) {
-				p.parse_assignment()!
+			expr := if vml_is_event(name.text) || name.text.starts_with('on_') {
+				p.parse_handler()!
 			} else {
 				p.parse_expression()!
 			}
+			if name.text.starts_with('on_') && expr.kind !in [.path, .call, .assignment, .block] {
+				return error('callback `${name.text}` requires a typed function reference or an action at line ${name.line}:${name.column}')
+			}
 			if name.text == 'id' {
-				if expr.kind !in [.literal, .path] {
-					return error('id must be a literal identifier at line ${name.line}')
+				if expr.kind != .literal || !expr.quoted {
+					return error('id must be a quoted local name at line ${name.line}:${name.column}')
 				}
 				node.id = expr.value
 			}
 			node.properties << VmlProperty{ name: name.text, line: name.line, column: name.column, expr: expr }
-		} else {
-			return error('unexpected token `${p.at().text}` at line ${p.at().line}')
+			if p.at().kind != .comma { break }
+			p.pos++
 		}
+		p.take(.rpar)!
 	}
-	p.take(.rbrace)!
+	if p.at().kind == .lbrace {
+		p.pos++
+		for p.at().kind !in [.rbrace, .eof] {
+			if p.at().text in ['property', 'computed', 'state'] || (p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .colon) {
+				return error('${p.file}:${p.at().line}:${p.at().column}: element arguments use `Name(name: value)`; state/computed belong to the component body')
+			}
+			node.children << p.parse_node()!
+		}
+		p.take(.rbrace)!
+	}
 	return node
 }
 
 const vml_event_names = ['on_tap', 'on_change', 'on_active', 'on_submit', 'on_scroll', 'on_pointer_down',
-	'on_pointer_drag', 'on_pointer_up', 'on_long_press', 'on_swipe_left', 'on_link']
+	'on_pointer_drag', 'on_pointer_up', 'on_long_press', 'on_swipe_left', 'on_link', 'on_select',
+	'on_toggle', 'on_dismiss']
 
 fn vml_is_event(name string) bool {
 	return name in vml_event_names
 }
 
+fn (mut p VmlSourceParser) parse_handler() !&VmlExpr {
+	if p.at().kind == .lbrace {
+		token := p.take(.lbrace)!
+		mut statements := []&VmlExpr{}
+		for p.at().kind !in [.rbrace, .eof] {
+			statements << p.parse_assignment()!
+			if p.at().kind == .semicolon { p.pos++ }
+		}
+		p.take(.rbrace)!
+		return &VmlExpr{ kind: .block, line: token.line, column: token.column, args: statements }
+	}
+	return p.parse_assignment()
+}
+
 fn (mut p VmlSourceParser) parse_assignment() !&VmlExpr {
 	left := p.parse_expression()!
+	if p.at().kind in [.assign, .increment, .decrement] && left.kind == .path && left.value.contains('.')
+		&& (!left.value.starts_with('app.') || left.value.count('.') != 1) {
+		return error('assignment target `${left.value}` is read-only at line ${left.line}, column ${left.column}')
+	}
+	if p.at().kind in [.increment, .decrement] {
+		op := p.at()
+		p.pos++
+		return &VmlExpr{
+			kind:   .assignment
+			line:   op.line
+			column: op.column
+			left:   left
+			right:  &VmlExpr{
+				kind:  .binary
+				value: if op.kind == .increment {
+					'+'
+				} else {
+					'-'
+				}
+				left:  left
+				right: &VmlExpr{ kind: .literal, value: '1' }
+			}
+		}
+	}
 	if p.at().kind != .assign { return left }
 	op := p.take(.assign)!
 	return &VmlExpr{ kind: .assignment, line: op.line, column: op.column, left: left, right: p.parse_expression()! }
@@ -529,7 +606,9 @@ fn (mut p VmlSourceParser) parse_primary() !&VmlExpr {
 					}
 				}
 				p.take(.rpar)!
-				return &VmlExpr{ kind: .call, value: token.text, line: token.line, column: token.column, args: args }
+				fallible := p.at().kind == .not
+				if fallible { p.pos++ }
+				return &VmlExpr{ fallible: fallible, kind: .call, value: token.text, line: token.line, column: token.column, args: args }
 			}
 			return &VmlExpr{
 				kind:   if token.kind == .number || token.text in ['true', 'false'] {
@@ -541,6 +620,17 @@ fn (mut p VmlSourceParser) parse_primary() !&VmlExpr {
 				line:   token.line
 				column: token.column
 			}
+		}
+		.lsbr {
+			p.pos++
+			mut values := []&VmlExpr{}
+			for p.at().kind != .rsbr {
+				values << p.parse_expression()!
+				if p.at().kind != .comma { break }
+				p.pos++
+			}
+			p.take(.rsbr)!
+			return &VmlExpr{ kind: .array, args: values, line: token.line, column: token.column }
 		}
 		.lpar {
 			p.pos++
@@ -634,7 +724,7 @@ fn parse_vml_interpolation(token VmlToken) !&VmlExpr {
 fn parse_vml_source(source string) !&VmlNode {
 	tokens := tokenize_vml(source)!
 	mut parser := VmlSourceParser{ tokens: tokens }
-	root := parser.parse_node()!
+	root := parser.parse_vml_document()!
 	parser.take(.eof)!
 	validate_compiled_vml_visual(root, '')!
 	validate_compiled_vml_node(root)!
@@ -642,7 +732,11 @@ fn parse_vml_source(source string) !&VmlNode {
 }
 
 fn validate_compiled_vml_node(node &VmlNode) ! {
-	if node.tag in ['TextField', 'TextArea', 'ScrollView'] {
+	if node.tag == '__Component' {
+		for child in node.children { validate_compiled_vml_node(child)! }
+		return
+	}
+	if node.tag in ['TextField', 'ScrollView'] {
 		return error('${node.source}:${node.line}:${node.column}: removed widget `${node.tag}`; use TextInput or Scroll')
 	}
 	mut bindings := 0
@@ -656,27 +750,11 @@ fn validate_compiled_vml_node(node &VmlNode) ! {
 		if property.name.starts_with('bind.') {
 			bindings++
 			bound_property := property.name.all_after('bind.')
-			if bound_property !in ['text', 'checked', 'active', 'value'] {
+			if bound_property !in ['text', 'checked', 'active', 'value', 'pressed'] {
 				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: two-way binding is not supported for `${bound_property}`')
 			}
-			if property.expr.kind != .path || !property.expr.value.starts_with('app.')
-				|| property.expr.value.count('.') != 1 {
+			if property.expr.kind != .path {
 				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: `${property.name}` must target a mutable top-level app field')
-			}
-		}
-		if vml_is_event(property.name)
-			&& property.expr.kind == .call {
-			if !property.expr.value.starts_with('app.') || property.expr.value.count('.') != 1 {
-				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: event handlers must call an app action')
-			}
-			if property.expr.args.len > 1 {
-				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: app actions support at most one argument')
-			}
-		}
-		if vml_is_event(property.name) && property.expr.kind == .assignment {
-			left := property.expr.left
-			if left.kind != .path || !left.value.starts_with('app.') || left.value.count('.') != 1 {
-				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: event assignments must target a mutable top-level app field')
 			}
 		}
 	}
@@ -708,6 +786,8 @@ fn vml_expr_text(expr &VmlExpr) string {
 		.unary { expr.value + vml_expr_text(expr.left) }
 		.binary { '${vml_expr_text(expr.left)} ${expr.value} ${vml_expr_text(expr.right)}' }
 		.assignment { '${vml_expr_text(expr.left)} = ${vml_expr_text(expr.right)}' }
+		.block { '{' + expr.args.map(vml_expr_text(it)).join('; ') + '}' }
+		.array { '[' + expr.args.map(vml_expr_text(it)).join(', ') + ']' }
 		.conditional {
 			'${vml_expr_text(expr.left)} ? ${vml_expr_text(expr.right)} : ${vml_expr_text(expr.third)}'
 		}
@@ -735,6 +815,11 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 	p.next()
 	arg_id := p.expr(.lowest)
 	arg := p.resolve_tmpl_path_arg(arg_id)
+	mut explicit_frame := flat.empty_node
+	if p.tok == .comma {
+		p.next()
+		explicit_frame = p.expr(.lowest)
+	}
 	for p.tok != .rpar && p.tok != .eof && p.tok != .semicolon {
 		p.next()
 	}
@@ -766,9 +851,15 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 			return p.add_val_id(5, '')
 		}
 	}
+	mut callback_captures := []string{}
+	for callback in vml_external_callbacks(root) {
+		if p.is_local_binding(callback) { callback_captures << callback }
+	}
 	mut compiler := VmlCompiler{
-		uses_app:     vml_node_uses_path(root, 'app')
-		guard_prefix: 'vml_check_${source_file.name.hash()}_${call_start}'
+		callback_captures: callback_captures
+		explicit_frame:    int(explicit_frame) >= 0
+		uses_app:          vml_node_uses_path(root, 'app')
+		guard_prefix:      'vml_check_${source_file.name.hash()}_${call_start}'
 	}
 	generated := compiler.compile(root)
 	first_node := p.a.nodes.len
@@ -787,7 +878,10 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 	}
 	saved_fn := p.cur_fn
 	p.cur_fn = ''
+	saved_vml_types := p.inside_vml_types
+	p.inside_vml_types = true
 	stmts := p.parse_stmts_from_source('_ = ${generated}', path, template.pos, source_lines)
+	p.inside_vml_types = saved_vml_types
 	p.cur_fn = saved_fn
 	mut result := flat.empty_node
 	if stmts.len > 0 {
@@ -806,11 +900,45 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		p.record_diagnostic('could not lower VML file `${path}`', call_start)
 		result = p.add_val_id(5, '')
 	}
+	// app denotes the caller's live application. Borrow its storage rather
+	// than giving the generated IIFE a mutable closure-owned value copy.
+	if compiler.uses_app && int(result) >= 0 && p.a.node(result).kind == .call {
+		mut callee := p.a.child(p.a.node(result), 0)
+		for p.a.node(callee).kind == .paren { callee = p.a.child(p.a.node(callee), 0) }
+		literal := p.a.node(callee)
+		if literal.kind == .fn_literal {
+			for index in 0 .. literal.children_count {
+				capture_id := p.a.child(literal, index)
+				capture := p.a.node(capture_id)
+				if capture.kind == .ident && capture.value == 'app' {
+					p.a.nodes[int(capture_id)].op = .amp
+				}
+			}
+		}
+	}
 	p.remap_vml_source(first_node, first_diagnostic, compiler.locations)
+	if int(explicit_frame) >= 0 && int(result) >= 0 {
+		call := p.a.node(result)
+		if call.kind == .call && call.children_count >= 2 {
+			p.a.children[call.children_start + call.children_count - 1] = explicit_frame
+		}
+	}
 	return result
 }
 
 fn vml_node_uses_path(node &VmlNode, base string) bool {
+	for data in node.data { if vml_expr_uses_path(data.expr, base) { return true } }
+	for input in node.inputs {
+		if !isnil(input.default_value) && vml_expr_uses_path(input.default_value, base) {
+			return true
+		}
+	}
+	for function in node.functions {
+		for statement in function.body { if vml_expr_uses_path(statement, base) { return true } }
+	}
+	for statement in node.mount { if vml_expr_uses_path(statement, base) { return true } }
+	for statement in node.cleanup { if vml_expr_uses_path(statement, base) { return true } }
+	for statement in node.unmount { if vml_expr_uses_path(statement, base) { return true } }
 	for property in node.properties {
 		if vml_expr_uses_path(property.expr, base) {
 			return true
@@ -851,15 +979,19 @@ fn vml_expr_uses_path(expr &VmlExpr, base string) bool {
 }
 
 struct VmlNamedValue {
-	frame      string
-	props      map[string]string
-	prop_types map[string]string
+	frame        string
+	frame_signal string
+	props        map[string]string
+	prop_types   map[string]string
 }
 
 struct VmlScope {
 mut:
-	ids     map[string]VmlNamedValue
-	special map[string]string
+	ids              map[string]VmlNamedValue
+	special          map[string]string
+	writable         map[string]string
+	event_parameters map[string][]VmlParameter
+	component        string
 }
 
 struct VmlGuard {
@@ -871,47 +1003,51 @@ struct VmlGuard {
 }
 
 struct VmlCompiler {
-	guard_prefix string
-	uses_app     bool
+	guard_prefix      string
+	uses_app          bool
+	callback_captures []string
+	explicit_frame    bool
 mut:
-	out                  strings.Builder
-	property_positions   map[string]VmlProperty
-	builders             map[string]VmlBuilder
-	builder_declarations []string
-	builder_dependencies map[string][]string
-	active_builder       string
-	share_nodes          bool
-	reference_readers    map[string][]string
-	guards               []VmlGuard
-	location             VmlLocation
-	locations            []VmlLocation
-	builder_locations    [][]VmlLocation
+	effect_mode           bool
+	event_references      map[string]string
+	emitted_child_effects map[string]bool
+	slot_scopes           map[string]VmlScope
+	out                   strings.Builder
+	property_positions    map[string]VmlProperty
+	guards                []VmlGuard
+	location              VmlLocation
+	locations             []VmlLocation
 }
 
 fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	c.out = strings.new_builder(4096)
-	c.share_nodes = vml_has_visual_layout(root)
-	c.builders = map[string]VmlBuilder{}
-	c.builder_declarations = []string{}
-	c.builder_dependencies = map[string][]string{}
-	c.reference_readers = map[string][]string{}
-	c.collect_builder_references(root, '0')
 	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
 	if root.tag in ['Menu', 'MenuBar'] {
 		c.writeln('')
 		return c.compile_menus(root)
 	}
 	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
-	capture := if c.uses_app { '[mut app] ' } else { '' }
-	c.writeln('\tvml_input_0 := ui2.bounds()')
-	scope := VmlScope{
+	mut capture_names := c.callback_captures.clone()
+	if c.uses_app { capture_names.insert(0, 'mut app') }
+
+	capture := if capture_names.len > 0 { '[' + capture_names.join(', ') + '] ' } else { '' }
+	c.writeln('\tvml_input_0 := vml_template_frame')
+	mut scope := VmlScope{
 		ids:     map[string]VmlNamedValue{}
 		special: map[string]string{}
 	}
+	c.writeln("\tmut vml_root_component := ui2.new_vml_document('root') or { panic(err) }")
+	scope.component = 'vml_root_component'
 	c.compile_node(root, '0', 'vml_input_0', scope, '', .normal)
+	if !c.explicit_frame {
+		bounds_root := if root.tag == '__Component' { root.children[0] } else { root }
+		c.writeln('\tvml_element_0.compiled_node.follow_viewport(${vml_find_property(bounds_root, 'width') == none}, ${vml_find_property(bounds_root, 'height') == none})')
+	}
 	c.writeln('\tui2.validate_element_tree(vml_element_0) or { panic(' + vml_quote(root.source + ':' + root.line.str() + ': ') + ' + err.msg()) }')
-	c.writeln('\treturn vml_element_0')
-	c.writeln('}())')
+	c.writeln('\tmut vml_layout_tree := ui2.LayoutTree{}')
+	c.writeln('\tvml_layout_tree.replace(vml_element_0) or { panic(err) }')
+	c.writeln('\treturn vml_layout_tree.resolve(ui2.LayoutConstraints{}, ui2.measure_layout_text, ui2.LayoutEnvironment{}) or { panic(err) }')
+	c.writeln('})(ui2.vml_bounds())')
 	c.write_list_guards()
 	body := c.out.str()
 	body_locations := c.locations.clone()
@@ -919,11 +1055,7 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	c.locations = []VmlLocation{}
 	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
 	c.writeln('')
-	c.writeln('(fn ${capture}() ui2.Element {')
-	for index, declaration in c.builder_declarations {
-		c.out.write_string(declaration)
-		c.locations << c.builder_locations[index]
-	}
+	c.writeln('(fn ${capture}(vml_template_frame ui2.Rect) ui2.Element {')
 	c.out.write_string(body)
 	c.locations << body_locations
 	return c.out.str()
@@ -931,8 +1063,11 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 
 fn vml_clone_scope(scope VmlScope) VmlScope {
 	return VmlScope{
-		ids:     scope.ids.clone()
-		special: scope.special.clone()
+		ids:              scope.ids.clone()
+		special:          scope.special.clone()
+		writable:         scope.writable.clone()
+		event_parameters: scope.event_parameters.clone()
+		component:        scope.component
 	}
 }
 
@@ -965,29 +1100,22 @@ enum VmlExprUse {
 }
 
 fn vml_property_use(property VmlProperty) VmlExprUse {
-	if property.declared_type.len > 0 {
-		return match property.declared_type {
-			'f64', 'f32', 'int' { .number }
-			'bool' { .bool_ }
-			'string' { .string_ }
-			'color' { .color }
-			else { .raw }
-		}
-	}
 	if property.name == 'text' { return .text }
 	if use := vml_visual_property_use(property.name) { return use }
+	if use := vml_widget_property_use(property.name) { return use }
 	if property.name in ['x', 'y', 'width', 'height', 'padding', 'spacing', 'corner_radius', 'radius',
-		'rotation', 'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor',
-		'lines', 'pad_left', 'dialog_width', 'dialog_height', 'border_width', 'border_left',
-		'border_top', 'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width',
-		'thumb_size', 'keyboard'] {
+		'rotation', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y',
+		'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor', 'lines',
+		'pad_left', 'dialog_width', 'dialog_height', 'border_width', 'border_left', 'border_top',
+		'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width', 'thumb_size',
+		'keyboard'] {
 		return .number
 	}
 	if property.name in ['background', 'color', 'background_color', 'border_color', 'value_track_color',
 		'thumb_color', 'inactive_color', 'active_color', 'disabled_track_color', 'disabled_thumb_color'] {
 		return .color
 	}
-	if property.name in ['checked', 'hidden', 'enabled', 'native', 'multiline', 'password', 'readonly',
+	if property.name in ['checked', 'hidden', 'enabled', 'native', 'password', 'readonly',
 		'disable_scroll', 'secure', 'clickable', 'draggable', 'long_press', 'swipe_left', 'persistent',
 		'autocorrect', 'bold', 'italic', 'underline', 'strikethrough', 'shadow', 'outline',
 		'value_track', 'active', 'text_autoupdate']
@@ -1022,6 +1150,9 @@ fn (c &VmlCompiler) resolve_path(path string, scope VmlScope) (string, bool) {
 		return replacement + if parts.len > 1 { '.' + parts[1..].join('.') } else { '' }, true
 	}
 	if named := scope.ids[parts[0]] {
+		if parts.len == 2 && parts[1] in ['x', 'y', 'width', 'height'] && named.frame_signal.len > 0 {
+			return '(' + named.frame_signal + '.get() or { panic(err) }).' + parts[1], true
+		}
 		if parts.len >= 2 {
 			if prop := named.props[parts[1]] {
 				return prop + if parts.len > 2 { '.' + parts[2..].join('.') } else { '' }, true
@@ -1080,7 +1211,7 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 		.call {
 			args := expr.args.map(c.expr(it, scope, .raw)).join(', ')
 			resolved, _ := c.resolve_path(expr.value, scope)
-			call := '${resolved}(${args})'
+			call := '${resolved}(${args})' + if expr.fallible { ' or { panic(err) }' } else { '' }
 			return match use {
 				.string_ { call }
 				.number { 'ui2.LayoutSize{width: ${call}}.width' }
@@ -1129,6 +1260,8 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 			return '(if ${c.expr(expr.left, scope, condition_use)} { ${c.expr(expr.right, scope, use)} } else { ${c.expr(expr.third, scope, use)} })'
 		}
 		.assignment { return c.expr(expr.right, scope, .raw) }
+		.block { return expr.args.map(c.expr(it, scope, .raw)).join('\n') }
+		.array { return '[' + expr.args.map(c.expr(it, scope, .raw)).join(', ') + ']' }
 		.interpolation {
 			mut value := "'"
 			for part in expr.parts {
@@ -1195,10 +1328,17 @@ fn vml_order_properties_by_dependencies(properties []VmlProperty, node_id string
 }
 
 fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
-	// Repeater locals have types supplied by structural lowering. Keep its one
-	// existing emitter; static visual trees share typed builders.
-	if c.share_nodes && incoming.special.len == 0 && default_key.len == 0 {
-		return c.compile_shared_node(node, path, input, incoming, placement)
+	if node.caller_content {
+		mut lexical := vml_clone_scope(c.slot_scopes[incoming.component] or { incoming })
+		owner := 'vml_slot_component_' + vml_var(path)
+		c.writeln('mut ${owner} := ${lexical.component}.slot_child(mut ${incoming.component}, ' + vml_quote(path) + ') or { panic(err) }')
+		lexical.component = owner
+		value := &VmlNode{ ...node, caller_content: false }
+		c.compile_node(value, path, input, lexical, default_key, placement)
+		return incoming
+	}
+	if node.tag == '__Component' {
+		return c.compile_component(node, path, input, incoming, default_key, placement)
 	}
 	return c.compile_node_body(node, path, input, incoming, default_key, placement)
 }
@@ -1215,34 +1355,22 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	}
 	mut named_props := map[string]string{}
 	mut named_types := map[string]string{}
-	// Declared properties are visible before expressions are resolved. Geometry
-	// bindings are added after they are emitted below, so self-geometry can use an
-	// earlier computed binding while declared properties can still read the input.
-	for property in node.properties {
-		if property.declared_type.len > 0 {
-			named_props[property.name] = 'vml_property_${suffix}_${vml_var(property.name)}'
-			named_types[property.name] = vml_builder_property_type(node, property)
-		}
-	}
 	if node.id.len > 0 {
 		scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	mut properties := map[string]string{}
-	mut ordered_properties := vml_order_properties_by_dependencies(node.properties.filter(it.declared_type.len > 0), node.id)
-	ordered_properties << vml_order_properties_by_dependencies(node.properties.filter(it.declared_type.len == 0
-		&& vml_property_is_geometry(it)), node.id)
-	ordered_properties << node.properties.filter(it.declared_type.len == 0
-		&& !vml_property_is_geometry(it))
+	mut ordered_properties := vml_order_properties_by_dependencies(node.properties.filter(vml_property_is_geometry(it)), node.id)
+	ordered_properties << node.properties.filter(!vml_property_is_geometry(it))
 	for property in ordered_properties {
 		c.location = VmlLocation{ path: property.expr.source, line: property.line, column: property.column }
-		if property.name == 'id'
+		if property.name in ['id', 'ref']
 			|| property.name in vml_event_names {
 			continue
 		}
 		name := 'vml_property_${suffix}_${vml_var(property.name)}'
 		property_use := vml_property_use(property)
 		value := c.visual_property_value(node, property, property.expr, scope)
-		if property.declared_type.len == 0 && property_use == .color
+		if property_use == .color
 			&& property.expr.kind in [.literal, .path]
 			&& property.expr.value.starts_with('#') && property.expr.value.len == 7 {
 			// Static colors can be used directly without a generated local.
@@ -1253,7 +1381,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		c.property_positions[name] = property
 		c.writeln('\t_ = ${name}')
 		properties[property.name] = name
-		if property.declared_type.len == 0 && vml_property_is_geometry(property) {
+		if vml_property_is_geometry(property) {
 			named_props[property.name] = name
 			named_types[property.name] = vml_builder_property_type(node, property)
 			if node.id.len > 0 {
@@ -1282,15 +1410,22 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	if node.id.len > 0 {
 		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named_props.clone(), prop_types: named_types.clone() }
 	}
+	if node.id.len > 0 {
+		geometry := 'vml_geometry_${suffix}'
+		c.writeln('\tmut ${geometry} := ${scope.component}.geometry(' + c.node_identity(node, suffix, scope) + ', ${frame}) or { panic(err) }')
+		c.writeln('_ = ${geometry}')
+		scope.ids[node.id] = VmlNamedValue{ frame: frame, frame_signal: geometry, props: named_props.clone(), prop_types: named_types.clone() }
+	}
 	c.write_action_type_checks(node, suffix, scope)
 	if node.tag in ['Flex', 'Row', 'Column', 'Grid'] {
 		result := c.compile_visual_layout(node, path, input, frame, properties, scope, placement, default_key)
+		c.retain_element(node, suffix, scope)
 		return vml_node_output_scope(node, incoming, result)
 	}
 	children := 'vml_children_${suffix}'
-	container := node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll']
+	container := node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll', 'Button']
 		|| node.tag !in ['Label', 'Image', 'Button', 'MessageBox', 'Checkbox', 'Dropdown', 'TextInput',
-			'ProgressBar', 'Slider', 'Switch', 'Spinner']
+			'TextArea', 'ProgressBar', 'Slider', 'Switch', 'Spinner']
 	visible_children := if container {
 		node.children.filter(it.tag !in ['MenuItem', 'Option'])
 	} else {
@@ -1300,7 +1435,9 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		c.writeln('\tmut ${children} := []ui2.Element{cap: ${visible_children.len}}')
 	}
 	cursor := ''
-	child_placement := if node.tag == 'Absolute' {
+	child_placement := if node.tag == 'Scroll' {
+		VmlPlacement.width_preferred
+	} else if node.tag in ['Absolute', 'Stack'] {
 		VmlPlacement.preferred
 	} else if measure_mode {
 		// Generic containers offer fixed axes; zero auto axes need measurement.
@@ -1319,48 +1456,21 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 			continue
 		}
 		if child.tag == 'Repeater' {
-			c.compile_repeater(child, child_path, frame, node.tag, properties, cursor, scope, children, scope.special['__repeat_identity'] or { '' }, false, child_placement)
 			continue
 		}
 		child_input := 'vml_input_${vml_var(child_path)}'
-		c.writeln('\t${child_input} := ${vml_child_input(node.tag, frame, properties, cursor)}')
+		c.writeln('\t${child_input} := ${vml_widget_child_input(node.tag, frame, properties, node.children.len) or { vml_child_input(node.tag, frame, properties, cursor) }}')
 		child_scope := c.compile_node(child, child_path, child_input, scope, '', child_placement)
 		for id, named in child_scope.ids {
 			scope.ids[id] = named
 		}
 		c.writeln('\t${children} << vml_element_${vml_var(child_path)}')
 	}
-	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
+	if node.tag in ['Label', 'TextArea'] && node.children.any(it.tag == 'Run') {
 		c.prepare_visual_runs(node, suffix, mut properties, scope)
 	}
-	base_suffix := if measure_mode {
-		suffix + '_base'
-	} else {
-		suffix
-	}
-	c.compile_element(node, base_suffix, frame, children, properties, scope, default_key)
-	if measure_mode {
-		c.writeln('\tvml_measured_${suffix} := ui2.measure_layout_element(vml_element_${base_suffix}, ui2.LayoutConstraints{}, ui2.measure_layout_text) or { panic(err) }')
-		c.writeln('\t_ = vml_measured_${suffix}')
-		c.writeln('\tvml_element_${suffix} := ui2.Element{...vml_element_${base_suffix}, frame: ui2.rect(${frame}.x, ${frame}.y, ${if placement == .width_preferred {
-			input + '.width'
-		} else {
-			vml_prop(properties, 'width', vml_measured_axis(placement, frame + '.width', 'vml_measured_' + suffix + '.width'))
-		}}, ${vml_prop(properties, 'height', vml_measured_axis(placement, frame + '.height', 'vml_measured_' + suffix + '.height'))})}')
-		if node.id.len > 0 {
-			// Later siblings use this pass's measured frame; declared props keep precedence.
-			// A typed local can also be captured by an event closure; capture lists
-			// accept identifiers rather than field-access expressions.
-			measured_frame := 'vml_measured_frame_${suffix}'
-			c.writeln('\t${measured_frame} := vml_element_${suffix}.frame')
-			c.writeln('\t_ = ${measured_frame}')
-			scope.ids[node.id] = VmlNamedValue{
-				frame:      measured_frame
-				props:      named_props.clone()
-				prop_types: named_types.clone()
-			}
-		}
-	}
+	c.compile_element(node, suffix, frame, children, properties, scope, default_key)
+	c.retain_element(node, suffix, scope)
 	return vml_node_output_scope(node, incoming, scope)
 }
 
@@ -1373,77 +1483,11 @@ fn vml_node_output_scope(node &VmlNode, incoming VmlScope, scope VmlScope) VmlSc
 
 fn vml_child_input(tag string, frame string, properties map[string]string, cursor string) string {
 	_ = cursor
+	if tag == 'Scroll' { return 'ui2.rect(0, 0, ${frame}.width, 0)' }
 	if tag == 'ScaledContent' {
 		return 'ui2.rect(0, 0, ' + vml_prop(properties, 'content_width', 'f64(0)') + ', ' + vml_prop(properties, 'content_height', 'f64(0)') + ')'
 	}
 	return 'ui2.rect(f64(0), f64(0), ${frame}.width, ${frame}.height)'
-}
-
-fn (mut c VmlCompiler) compile_repeater(node &VmlNode, path string, parent_frame string, parent_tag string, parent_properties map[string]string, cursor string, incoming VmlScope, output string, outer_key string, flattened bool, placement VmlPlacement) {
-	model := vml_find_property(node, 'model') or { return }
-	key := vml_find_property(node, 'key') or { return }
-	suffix := vml_var(path)
-	index_name := 'vml_index_${suffix}'
-	item_name := 'vml_item_${suffix}'
-	key_name := 'vml_key_${suffix}'
-	c.location = VmlLocation{ path: model.expr.source, line: model.expr.line, column: model.expr.column }
-	c.write_model_path_checks(model.expr, incoming)
-	collection := 'vml_collection_${suffix}'
-	c.writeln('\t${collection} := ${c.expr(model.expr, incoming, .raw)}')
-	c.write_list_guard(collection, suffix, true)
-	c.writeln('\tmut vml_keys_${suffix} := map[string]bool{}')
-	c.writeln('\tfor ${index_name}, ${item_name} in ${collection} {')
-	c.writeln('\t_ = ${index_name}')
-	mut scope := vml_clone_scope(incoming)
-	scope.special['item'] = item_name
-	scope.special['index'] = index_name
-	c.location = VmlLocation{ path: key.expr.source, line: key.expr.line, column: key.expr.column }
-	c.write_model_path_checks(key.expr, scope)
-	key_raw := '${key_name}_value'
-	c.writeln('\t${key_raw} := ${c.expr(key.expr, scope, .raw)}')
-	c.write_list_guard(key_raw, suffix, false)
-	c.writeln('\t${key_name} := ${vml_stringify(key_raw)}')
-	message := '${key.expr.source}:${key.expr.line}:${key.expr.column}: '
-	c.writeln('\tif ${key_name}.len == 0 { panic(' + vml_quote(message + 'Repeater key cannot be empty') + ') }')
-	c.writeln('\tif ${key_name} in vml_keys_${suffix} { panic(' + vml_quote(message + 'duplicate Repeater key: ') + ' + ${key_name}) }')
-	c.writeln('\tvml_keys_${suffix}[${key_name}] = true')
-	identity := 'vml_identity_${suffix}'
-	segment := '${key_name}.bytes().hex()'
-	c.writeln('\t${identity} := ' + if outer_key.len > 0 {
-		"${outer_key} + '/' + ${segment}"
-	} else {
-		segment
-	})
-	c.writeln('\t_ = ${identity}')
-	scope.special['__repeat_identity'] = identity
-	visible_count := node.children.filter(it.tag !in ['MenuItem', 'Option']).len
-	mut visible_index := 0
-	for child_index, child in node.children {
-		if child.tag in ['MenuItem', 'Option'] {
-			continue
-		}
-		child_path := '${path}.${child_index}'
-		if child.tag == 'Repeater' {
-			c.compile_repeater(child, child_path, parent_frame, parent_tag, parent_properties, cursor, scope, output, identity, true, placement)
-			continue
-		}
-		child_input := 'vml_input_${vml_var(child_path)}'
-		c.writeln('\t\t${child_input} := ${vml_child_input(parent_tag, parent_frame, parent_properties, cursor)}')
-		default_key := if flattened {
-			identity + " + ':${visible_index}'"
-		} else if visible_count == 1 {
-			key_name
-		} else {
-			"'" + r'$' + '{' + key_name + '}' + ':${visible_index}' + "'"
-		}
-		child_scope := c.compile_node(child, child_path, child_input, scope, default_key, placement)
-		for id, named in child_scope.ids {
-			scope.ids[id] = named
-		}
-		c.writeln('\t\t${output} << vml_element_${vml_var(child_path)}')
-		visible_index++
-	}
-	c.writeln('\t}')
 }
 
 fn vml_value(properties map[string]string, name string, alternative string, default_ string) string {
@@ -1551,11 +1595,14 @@ fn vml_array_literal(elem_type string, values []string) string {
 	return if values.len == 0 { '[]${elem_type}{}' } else { '[${values.join(', ')}]' }
 }
 
-fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame string, children string, properties map[string]string, scope VmlScope, default_key string) {
+fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame string, children string, properties map[string]string, incoming_scope VmlScope, default_key string) {
+	mut scope := vml_clone_scope(incoming_scope)
+	scope.special['__node_suffix'] = suffix
 	id := c.control_id(node, suffix, scope)
 	key := vml_prop(properties, 'key', if default_key.len > 0 { default_key } else { "''" })
 	action := c.write_element_callback(node, suffix, scope)
-	if node.tag == 'TextInput' {
+	if c.compile_widget(node, suffix, frame, children, properties, scope, key, action) { return }
+	if node.tag in ['TextInput', 'TextArea'] {
 		c.compile_text_input(node, suffix, frame, properties, scope, key, action)
 		return
 	}
@@ -1586,18 +1633,19 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 		'Button' { 'button' }
 		'Checkbox' { 'checkbox' }
 		'Dropdown' { 'dropdown' }
-		'TextInput' { 'text_area' }
+		'TextInput' { 'text_field' }
+		'TextArea' { 'text_area' }
 		'Scroll' { 'scroll' }
 		else { 'view' }
 	}
-	c.writeln('\tvml_element_${suffix} := ui2.Element{')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\tkind: .${kind}')
 	c.writeln('\t\tid: ${id}')
-	if node.tag != 'Screen' { c.writeln('\t\tframe: ${frame}') }
+	c.writeln('\t\tframe: ${frame}')
 	c.writeln('\t\ton_event: ${action}')
 	c.writeln('\t\tkey: ${key}')
-	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput'] {
-		c.writeln('\t\ttext: ${if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
+	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput', 'TextArea'] {
+		c.writeln('\t\ttext: ${if node.tag in ['Label', 'TextArea'] && node.children.any(it.tag == 'Run') {
 			vml_prop(properties, '@run_text', "''")
 		} else {
 			vml_value(properties, 'text', 'bind.text', "''")
@@ -1619,16 +1667,16 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 	} else if node.tag in ['View', 'ScaledContent', 'Button', 'Dropdown', 'Label'] || kind == 'view' {
 		c.writeln('\t\tbox: ${c.box_style(properties)}')
 	}
-	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput'] {
+	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput', 'TextArea'] {
 		c.writeln('\t\ttext_style: ${c.text_style(properties)}')
 	}
-	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
+	if node.tag in ['Label', 'TextArea'] && node.children.any(it.tag == 'Run') {
 		c.writeln('\t\ttext_runs: ${vml_prop(properties, '@runs', '[]ui2.TextRun{}')}')
 	}
 	if node.tag == 'ScaledContent' {
 		c.writeln('\t\tcontent_size: ui2.LayoutSize{width: ${vml_prop(properties, 'content_width', 'f64(0)')}, height: ${vml_prop(properties, 'content_height', 'f64(0)')}}')
 	}
-	if node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll'] || kind == 'view' {
+	if node.tag in ['Screen', 'View', 'ScaledContent', 'Scroll', 'Button'] || kind == 'view' {
 		c.writeln('\t\tchildren: ${children}')
 	}
 	role_default := if node.tag == 'Checkbox' { "'checkbox'" } else { "''" }
@@ -1647,17 +1695,19 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 }
 
 fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
-	c.writeln('\tvml_text_input_${suffix} := ui2.text_input(ui2.TextInputConfig{')
+	method := if node.tag == 'TextArea' { 'text_area' } else { 'text_input' }
+	config := if node.tag == 'TextArea' { 'TextAreaConfig' } else { 'TextInputConfig' }
+	c.writeln('\tvml_text_input_${suffix} := ui2.${method}(ui2.${config}{')
 	c.writeln('\t\tid: ${c.control_id(node, suffix, scope)}, frame: ${frame}, on_event: ${action}')
-	c.writeln('\t\ttext: ${vml_value(properties, 'text', 'bind.text', "''")}, placeholder: ${vml_prop(properties, 'placeholder', "''")}')
-	for name in ['multiline', 'password', 'readonly', 'disable_scroll', 'enabled', 'autocorrect',
-		'padding_left'] {
+	c.writeln('\t\ttext: ${vml_prop(properties, '@run_text', vml_value(properties, 'text', 'bind.text', "''"))}, placeholder: ${vml_prop(properties, 'placeholder', "''")}')
+	for name in ['password', 'readonly', 'disable_scroll', 'enabled', 'autocorrect', 'padding_left'] {
 		if value := properties[name] { c.writeln('\t\t${name}: ${value}') }
 	}
 	if value := properties['keyboard'] { c.writeln('\t\tkeyboard: int(${value})') }
 	c.writeln('\t\tbox: ${c.box_style(properties)}, text_style: ${c.text_style(properties)}')
 	c.writeln('\t}) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
-	c.writeln('\tvml_element_${suffix} := ui2.Element{ ...vml_text_input_${suffix}, key: ${key}')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{ ...vml_text_input_${suffix}, key: ${key}')
+	if '@runs' in properties { c.writeln('text_runs: ' + properties['@runs']) }
 	mut common := properties.clone()
 	if 'secure' !in common { common['secure'] = 'vml_text_input_${suffix}.secure' }
 	c.write_common_fields(node, suffix, common, scope, "''", "''", "''")
@@ -1678,6 +1728,13 @@ fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, propert
 	c.writeln('\t\tlong_press: ${vml_prop(properties, 'long_press', 'false')}')
 	c.writeln('\t\tswipe_left: ${vml_prop(properties, 'swipe_left', 'false')}')
 	c.writeln('\t\trotation: ${vml_prop(properties, 'rotation', 'f64(0)')}')
+	for field in ['translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y'] {
+		c.writeln('\t\t${field}: ${vml_prop(properties, field, if field.starts_with('scale') {
+			'f64(1)'
+		} else {
+			'f64(0)'
+		})}')
+	}
 	c.writeln('\t\tcursor: ${vml_prop(properties, 'cursor', "''")}')
 	c.writeln('\t\ttooltip: ${vml_prop(properties, 'tooltip', "''")}')
 	c.writeln('\t\thidden: ${vml_prop(properties, 'hidden', 'false')}')
@@ -1687,7 +1744,7 @@ fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, propert
 	c.writeln('\t\taccessibility_value: ${vml_prop(properties, 'accessibility_value', value_default)}')
 	c.writeln('\t\tnative_style: ${vml_prop(properties, 'native', 'false')}')
 	c.writeln('\t\tautocorrect: ${vml_prop(properties, 'autocorrect', 'true')}')
-	padding_left := if node.tag == 'TextInput' {
+	padding_left := if node.tag in ['TextInput', 'TextArea'] {
 		vml_value(properties, 'padding_left', 'pad_left', 'f64(12)')
 	} else {
 		vml_prop(properties, 'pad_left', 'f64(12)')
@@ -1706,7 +1763,7 @@ fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame 
 	c.writeln('\t\tcolor: ${vml_prop(properties, 'color', 'u32(0x3b82f6)')}')
 	c.writeln('\t\tradius: ${vml_value(properties, 'corner_radius', 'radius', 'f64(4)')}')
 	c.writeln('\t)')
-	c.writeln('\tvml_element_${suffix} := ui2.Element{')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\t...${base}')
 	c.writeln('\t\ton_event: ${action}')
 	c.writeln('\t\tkey: ${key}')
@@ -1740,7 +1797,7 @@ fn (mut c VmlCompiler) compile_slider(node &VmlNode, suffix string, frame string
 	c.writeln('\t\tvalue_track: ${vml_prop(properties, 'value_track', 'false')}')
 	c.writeln('\t\tstyle: ${style}')
 	c.writeln('\t)')
-	c.writeln('\tvml_element_${suffix} := ui2.Element{')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\t...${base}')
 	c.writeln('\t\tkey: ${key}')
 	c.write_common_fields(node, suffix, properties, scope, '${base}.accessibility_role', '${base}.accessibility_label', '${base}.accessibility_value')
@@ -1764,7 +1821,7 @@ fn (mut c VmlCompiler) compile_switch(node &VmlNode, suffix string, frame string
 	c.writeln('\t\tactive: ${vml_value(properties, 'active', 'bind.active', 'false')}')
 	c.writeln('\t\tstyle: ${style}')
 	c.writeln('\t)')
-	c.writeln('\tvml_element_${suffix} := ui2.Element{')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\t...${base}')
 	c.writeln('\t\tkey: ${key}')
 	c.write_common_fields(node, suffix, properties, scope, '${base}.accessibility_role', '${base}.accessibility_label', '${base}.accessibility_value')
@@ -1787,7 +1844,7 @@ fn (mut c VmlCompiler) compile_spinner(node &VmlNode, suffix string, frame strin
 	c.writeln('\t\tbox: ${box}')
 	c.writeln('\t\ttext_style: ${text_style}')
 	c.writeln('\t)')
-	c.writeln('\tvml_element_${suffix} := ui2.Element{')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\t...${base}')
 	c.writeln('\t\tkey: ${key}')
 	c.write_common_fields(node, suffix, properties, scope, '${base}.accessibility_role', '${base}.accessibility_label', '${base}.accessibility_value')
@@ -1801,7 +1858,15 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 			continue
 		}
 		c.write_action_type_checks(child, '${suffix}_message_action_${child_index}', scope)
-		child_action := c.event_callback(child, 'on_tap', scope)
+		event_key := (scope.special['__node_suffix'] or { suffix }) + ':message_action:' + child_index.str()
+		child_action := if c.effect_mode {
+			c.event_references[event_key] or { 'unsafe { nil }' }
+		} else {
+			reference := 'vml_message_action_${suffix}_${child_index}'
+			c.writeln('${reference} := ' + c.event_callback(child, 'on_tap', scope))
+			c.event_references[event_key] = reference
+			reference
+		}
 		text := if property := vml_find_property(child, 'text') {
 			c.expr(property.expr, scope, .text)
 		} else {
@@ -1819,7 +1884,7 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 	c.writeln('\t\theight: ${vml_prop(properties, 'dialog_height', 'f64(150)')}')
 	c.writeln('\t\tactions: ${vml_array_literal('ui2.MessageBoxAction', actions)}')
 	c.writeln('\t)')
-	c.writeln('\tvml_element_${suffix} := ui2.Element{')
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\t...vml_message_box_${suffix}')
 	c.writeln('\t\ton_event: ${action}')
 	c.writeln('\t\tkey: ${key}')

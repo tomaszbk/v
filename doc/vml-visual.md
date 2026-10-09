@@ -5,9 +5,10 @@ Build the compiler and its standard library from the same revision. Layout, font
 measurement, rendering, interaction patches and editor state are implemented by ui2.
 VML parsing happens during compilation; the application does not interpret these files.
 
-Use V enums (`align: .right`), quoted strings, numeric values and bool conditions.
-String interpolation is explicit: `text: "Count ${app.count}"`. There is no implicit
-string/number conversion. Unknown elements, properties, enum values and computed types
+Use bare VML enum names (`align: right`), quoted strings, numeric values and bool conditions.
+String interpolation is explicit: `text: "Count ${app.count}"`. Display text accepts
+numbers and strings; other properties have no implicit string/number conversion.
+Unknown elements, properties, enum values and inferred declaration types
 are errors, including invalid expressions in inactive conditional arms. Diagnostics
 identify the VML file, line and column and retain the enclosing `$vml` call site.
 
@@ -27,10 +28,15 @@ typography fields from its Label. Explicit false, zero, black and an alternate
 ui2's rich text measurement and rendering.
 
 ```vml
-Label {
-    width: 240 height: 100 font_size: 18 weight: 600 lines: 4
-    Run { text: "An inherited segment " }
-    Run { text: "and an override" size: 12 weight: 0 bold: false baseline_offset: 3 }
+Label(
+    width: 240,
+    height: 100,
+    font_size: 18,
+    weight: 600,
+    lines: 4,
+) {
+    Run(text: "An inherited segment ")
+    Run(text: "and an override", size: 12, weight: 0, bold: false, baseline_offset: 3)
 }
 ```
 
@@ -43,11 +49,17 @@ ui2 fits the composition with contain scaling and handles clipping, inverse inpu
 coordinates and IME caret projection. This does not change device DPI or reflow text.
 
 ```vml
-ScaledContent {
-    width: 400 height: 300 content_width: 800 content_height: 400
-    Absolute {
-        width: 800 height: 400
-        Label { x: 600 y: 300 width: 180 height: 40 text: "Fixed geometry" }
+ScaledContent(
+    width: 400,
+    height: 300,
+    content_width: 800,
+    content_height: 400,
+) {
+    Absolute(
+        width: 800,
+        height: 400,
+    ) {
+        Label(x: 600, y: 300, width: 180, height: 40, text: "Fixed geometry")
     }
 }
 ```
@@ -57,7 +69,7 @@ ScaledContent {
 Containers, Label, Button, Dropdown, TextInput and Spinner accept box properties.
 They lower to `ui2.BoxStyle`: `background`, `radius` (or `corner_radius`),
 `transparent`, `border_color`, `border_width`, per-side border widths and colors,
-`border_pattern: .solid` or `.dashed`, `dash_length`, `dash_gap`, `outline_color`,
+`border_pattern: solid` or `dashed`, `dash_length`, `dash_gap`, `outline_color`,
 `outline_width` and `outline_offset`. Color literals use `#RRGGBB`; dynamic colors
 are typed integers.
 
@@ -67,28 +79,30 @@ fields remain absent; explicit false, zero and black are preserved. ui2 owns sta
 precedence and keeps these patches from changing layout.
 
 ```vml
-Button {
-    text: "Save" width: 120 height: 40 radius: 8
-    hover_background: "#000000" hover_color: "#ffffff"
-    focus_outline_width: 2 focus_outline_color: "#2563eb"
-    pressed_background: "#93c5fd"
-    on_tap: app.save()
-}
+Button(
+    text: "Save",
+    width: 120,
+    height: 40,
+    radius: 8,
+    hover_background: "#000000",
+    hover_color: "#ffffff",
+    focus_outline_width: 2,
+    focus_outline_color: "#2563eb",
+    pressed_background: "#93c5fd",
+    on_tap: app.save(),
+)
 ```
 
 ## Bindings and actions
 
-`Checkbox { bind.checked: app.checked }` reads the application's bool when the
-element is built. Its typed `.change` callback writes `event.checked` back to that
+`Checkbox(bind.checked: app.checked)` reads the application's bool reactively. Its
+typed `.change` callback writes `event.checked` back to that
 field, including false. An explicit `on_change` action runs after the binding, so
 it observes the committed state. Action arguments written as `app.field` read the
 live application field when the event is handled.
 
 ```vml
-Checkbox {
-    bind.checked: app.checked
-    on_change: app.changed()
-}
+Checkbox(bind.checked: app.checked, on_change: app.changed())
 ```
 
 `on_tap` remains an independent tap action; it does not apply the checkbox binding.
@@ -97,7 +111,7 @@ their element declarations; an event id does not select another element's action
 
 ## Flex and Grid
 
-`Flex` uses `orientation: .horizontal` or `.vertical`. `Row` and `Column` select
+`Flex` uses `orientation: horizontal` or `vertical`. `Row` and `Column` select
 those orientations. Container fields include `padding`, `padding_left`, `padding_top`,
 `padding_right`, `padding_bottom`, `gap`, `line_gap`, `wrap`, `justify` and `align_items`.
 Children accept `flex_basis`, `flex_grow`, `flex_shrink`, `min_width`, `min_height`,
@@ -121,28 +135,21 @@ natural extent. For example, five 20-by-20 children offered width 300 with
 `auto_columns_min_width: 100` select width 60, then measure five rows and height 100.
 Authored heights and allocated frames retain their dimensions, including zero.
 
-Children can read an earlier sibling's geometry and typed `computed` properties,
-including ids declared in its descendants. These references are resolved in declaration
-order during preferred measurement, width measurement and final allocation. A child
-with explicit height keeps its preferred bindings when width measurement skips it.
-References to omitted dimensions use the sibling's measured size for that phase.
-Later siblings remain unavailable; final builders expose the allocated sibling scope.
-
-Static visual trees use shared typed builders for each node and placement phase.
-Repeated calls with identical offered geometry and visible references share their result
-within one `$vml` construction. The next construction starts fresh. Property expressions
-should read stable application state during construction; event callbacks retain the live
-application capture. This bounds generated subtree copies without moving layout or text
-measurement out of ui2. Runtime work also depends on the number of distinct measurement
-inputs; shared builders do not promise a linear bound for arbitrary responsive expressions.
+Children can read an earlier sibling's geometry, including ids declared in its
+descendants. Geometry signals expose allocated logical frames; dependent
+properties react after ui2 resolves layout. Later siblings remain unavailable.
+The compiler emits authored declarations and delegates measurement and final
+allocation to ui2's retained `LayoutTree`. It creates each node once and
+registers effects for dynamic properties. Window resize updates viewport and
+geometry dependencies without recreating components.
 
 `Grid` accepts `columns` (or `cols`), `rows`, `auto_columns_min_width`, `max_columns`,
 `padding` and per-side padding, `spacing` (or `spacing_x`/`spacing_y`),
 `col_default_width`, `row_default_height`, `col_force_default`, `row_force_default`
 and the full `ui2.GridOrientation` enum. Children accept `column_span` and `row_span`.
 The compiler calls ui2's layout functions and does not reproduce their algorithms.
-Structural Repeater expansion inside Flex/Grid must precede allocation. This visual
-lowering rejects that combination until the structural lowering supplies its children.
+Keyed Repeater groups flatten into the container alongside static siblings before
+allocation, with each child retaining its typed layout constraints.
 
 ## Profiles and verification
 
@@ -173,5 +180,5 @@ automatic columns at the selected width and its fractional thresholds,
 explicit zero dimensions, nested sibling scopes, generated
 source growth and property-evaluation counts at increasing layout depths. Renderer-profile
 classification tests exercise target preferences without executing foreign platforms.
-`TextInput` is the current input API; choose `multiline: false` for a single-line field.
+`TextInput` is a single-line field. Use `TextArea` for multiline and rich editing.
 Removed controls, Rectangle, legacy layout names, `units` and `property` are rejected.

@@ -1,8 +1,6 @@
-vlib/v/parser/tests/vml_visual/unsupported.vml:2:5: error: unsupported property `tracking` on Label
-    1 | Label {
-    2 |     tracking: 2
-      |     ^
-    3 | }
+vlib/v/parser/tests/vml_visual/unsupported.vml:1:7: error: unsupported property `tracking` on Label
+    1 | Label(tracking: 2)
+      |       ^
 called from vlib/v/parser/tests/vml_visual_unsupported.vv:2:6
     1 | fn main() {
     2 |     _ = $vml('vml_visual/unsupported.vml')

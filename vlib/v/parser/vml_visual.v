@@ -51,15 +51,16 @@ fn vml_visual_property_use(name string) ?VmlExprUse {
 	base := vml_visual_base_property(name)
 	if base in ['weight', 'letter_spacing', 'line_height', 'line_height_factor', 'baseline_offset',
 		'dash_length', 'dash_gap', 'outline_width', 'outline_offset', 'content_width', 'content_height',
-		'gap', 'line_gap', 'padding_left', 'padding_top', 'padding_right', 'padding_bottom',
-		'flex_basis', 'flex_grow', 'flex_shrink', 'min_width', 'min_height', 'max_width', 'max_height',
-		'columns', 'cols', 'rows', 'max_columns', 'auto_columns_min_width', 'column_span', 'row_span',
-		'spacing_x', 'spacing_y', 'col_default_width', 'row_default_height', 'border_width',
-		'border_left', 'border_top', 'border_right', 'border_bottom', 'radius', 'corner_radius'] {
+		'gap', 'line_gap', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y',
+		'padding_left', 'padding_top', 'padding_right', 'padding_bottom', 'flex_basis', 'flex_grow',
+		'flex_shrink', 'min_width', 'min_height', 'max_width', 'max_height', 'columns', 'cols',
+		'rows', 'max_columns', 'auto_columns_min_width', 'column_span', 'row_span', 'spacing_x',
+		'spacing_y', 'col_default_width', 'row_default_height', 'border_width', 'border_left',
+		'border_top', 'border_right', 'border_bottom', 'radius', 'corner_radius'] {
 		return .number
 	}
 	if base in ['transparent', 'tabular_figures', 'wrap', 'col_force_default', 'row_force_default',
-		'multiline', 'password', 'readonly', 'disable_scroll', 'button_behavior'] {
+		'password', 'readonly', 'disable_scroll', 'button_behavior'] {
 		return .bool_
 	}
 	if base in ['background', 'color', 'border_color', 'outline_color', 'border_left_color',
@@ -74,16 +75,13 @@ fn vml_visual_property_use(name string) ?VmlExprUse {
 }
 
 fn vml_visual_integer_property(property VmlProperty) bool {
-	return property.declared_type == 'int' || (property.declared_type.len == 0
-		&& vml_visual_base_property(property.name) in ['weight', 'lines', 'columns', 'cols', 'rows',
-			'max_columns', 'column_span', 'row_span', 'keyboard'])
+	return vml_visual_base_property(property.name) in ['weight', 'lines', 'columns', 'cols', 'rows',
+		'max_columns', 'column_span', 'row_span', 'keyboard']
 }
 
 fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) string {
 	base := vml_visual_base_property(property.name)
-	if property.declared_type == 'f32' { return value }
-	if property.declared_type == 'bool' { return 'ui2.Element{hidden: ${value}}.hidden' }
-	if property.declared_type == 'string' { return 'ui2.Element{text: ${value}}.text' }
+	if typed := vml_widget_typed_value(node, property.name, value) { return typed }
 	if vml_visual_integer_property(property) {
 		return match base {
 			'lines', 'weight' { 'ui2.TextStyle{${base}: ${value}}.${base}' }
@@ -131,7 +129,7 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 // Each conditional arm has its own expected type. The checker must validate
 // inactive arms too, while runtime evaluates only the selected arm.
 fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, expr &VmlExpr, scope VmlScope) string {
-	if property.declared_type.len == 0 && property.name == 'key' {
+	if property.name == 'key' {
 		return vml_stringify(c.expr(expr, scope, .raw))
 	}
 	if expr.kind == .conditional {
@@ -140,11 +138,14 @@ fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, e
 		else_value := c.visual_property_value(node, property, expr.third, scope)
 		return '(if ${condition} { ${then_value} } else { ${else_value} })'
 	}
+	if property.name == 'keyboard' && expr.kind == .path && expr.value in ['default', 'decimal'] {
+		return 'ui2.keyboard_' + expr.value
+	}
+	if expr.kind == .path && expr.value in vml_visual_enum_values(node, property.name) {
+		return vml_typed_visual_value(node, property, '.' + expr.value)
+	}
 	value := if vml_visual_integer_property(property) {
 		c.expr(expr, scope, .raw)
-	} else if property.declared_type == 'f32' {
-		numeric := c.expr(expr, scope, .number)
-		vml_numeric_cast('f32', 'ui2.LayoutSize{width: ${numeric}}.width')
 	} else {
 		c.expr(expr, scope, vml_property_use(property))
 	}
@@ -156,9 +157,19 @@ fn vml_visual_enum_values(node &VmlNode, name string) []string {
 		'align' { ['left', 'center', 'right'] }
 		'valign' { ['top', 'middle', 'bottom'] }
 		'align_items' { ['start', 'center', 'end', 'stretch'] }
+		'align_x', 'align_y' { ['start', 'center', 'end', 'stretch'] }
+		'align_self_x', 'align_self_y' { ['auto', 'start', 'center', 'end', 'stretch'] }
+		'tab_pos' {
+			['top_left', 'top_mid', 'top_right', 'bottom_left', 'bottom_mid', 'bottom_right', 'left_top',
+				'left_mid', 'left_bottom', 'right_top', 'right_mid', 'right_bottom']
+		}
+		'direction' {
+			if node.tag == 'Carousel' { ['right', 'left', 'top', 'bottom'] } else { []string{} }
+		}
 		'align_self' { ['auto', 'start', 'center', 'end', 'stretch'] }
 		'justify' { ['start', 'center', 'end', 'space_between', 'space_around', 'space_evenly'] }
 		'border_pattern' { ['solid', 'dashed'] }
+		'keyboard' { ['default', 'decimal'] }
 		'orientation' {
 			if node.tag == 'Grid' {
 				['left_to_right_top_to_bottom', 'top_to_bottom_left_to_right',
@@ -175,16 +186,18 @@ fn vml_visual_enum_values(node &VmlNode, name string) []string {
 
 fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 	if node.tag == 'Run' { return name == 'text' || name in vml_text_properties }
-	if vml_is_event(name) { return true }
-	if name in ['id', 'key', 'x', 'y', 'width', 'height', 'hidden', 'enabled', 'native', 'clickable',
-		'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation', 'cursor', 'tooltip',
+	if vml_widget_property_allowed(node, name, parent) { return true }
+	if vml_is_event(name) { return name != 'on_submit' || node.tag == 'TextInput' }
+	if name in ['id', 'ref', 'key', 'x', 'y', 'width', 'height', 'hidden', 'enabled', 'native',
+		'clickable', 'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation',
+		'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y', 'cursor', 'tooltip',
 		'secure', 'autocorrect', 'pad_left', 'accessibility_role', 'accessibility_label',
 		'accessibility_value', 'on_tap', 'on_change', 'on_active', 'on_submit'] {
 		return true
 	}
 	if name in vml_box_properties {
 		if node.tag in ['Screen', 'View', 'Absolute', 'Flex', 'Row', 'Column', 'Grid', 'Scroll',
-			'ScaledContent', 'Label', 'Button', 'Dropdown', 'TextInput', 'Spinner'] {
+			'ScaledContent', 'Label', 'Button', 'Dropdown', 'TextInput', 'TextArea', 'Spinner'] {
 			return true
 		}
 		return (node.tag == 'ProgressBar' && name in ['background', 'radius', 'corner_radius'])
@@ -193,7 +206,8 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 	base := vml_visual_base_property(name)
 	if base != name { return base in vml_box_properties || base == 'color' }
 	if name in vml_text_properties {
-		return node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput', 'Spinner']
+		return node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput', 'TextArea',
+			'Spinner']
 			|| (name == 'color' && node.tag in ['ProgressBar', 'Slider', 'Switch'])
 	}
 	if name in vml_flex_child_properties { return parent in ['Flex', 'Row', 'Column'] }
@@ -201,7 +215,7 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 	return match node.tag {
 		'Flex', 'Row', 'Column' {
 			name in ['orientation', 'padding', 'padding_left', 'padding_top', 'padding_right',
-				'padding_bottom', 'gap', 'line_gap', 'wrap', 'justify', 'align_items']
+				'padding_bottom', 'gap', 'spacing', 'line_gap', 'wrap', 'justify', 'align_items']
 		}
 		'Grid' {
 			name in ['columns', 'cols', 'rows', 'orientation', 'padding', 'padding_left', 'padding_top',
@@ -214,13 +228,17 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 			name in ['text', 'checked', 'bind.checked']
 		}
 		'TextInput' {
-			name in ['text', 'bind.text', 'placeholder', 'multiline', 'password', 'readonly',
-				'disable_scroll', 'keyboard', 'padding_left']
+			name in ['text', 'bind.text', 'placeholder', 'password', 'readonly', 'keyboard',
+				'padding_left']
+		}
+		'TextArea' {
+			name in ['text', 'bind.text', 'placeholder', 'readonly', 'disable_scroll', 'keyboard',
+				'padding_left']
 		}
 		'Image' { name in ['source', 'path'] }
 		'Scroll' { name == 'persistent' }
 		'Repeater' { name == 'model' }
-		'Dropdown' { name == 'text' }
+		'Dropdown' { name in ['text', 'bind.text'] }
 		'Spinner' { name in ['text', 'bind.text', 'text_autoupdate'] }
 		'Slider' {
 			name in ['value', 'bind.value', 'min', 'max', 'step', 'orientation', 'padding',
@@ -282,15 +300,16 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 	}
 	values := vml_visual_enum_values(node, property.name)
 	if values.len > 0 {
+		if property.name == 'keyboard' && vml_visual_number(expr) != none { return }
 		if expr.kind == .path && expr.value.starts_with('.') {
-			if expr.value[1..] !in values {
-				return vml_visual_error(property, 'unsupported ${property.name} value `${expr.value}`')
-			}
-		} else if expr.kind == .literal || (expr.kind == .path && !expr.value.contains('.')) {
-			return vml_visual_error(property, '`${property.name}` requires a V enum value (.${values[0]})')
+			return vml_visual_error(property, 'VML enum values omit the dot; use `${expr.value[1..]}`')
+		}
+		if expr.kind == .literal {
+			return vml_visual_error(property, '`${property.name}` requires an enum value (${values[0]})')
 		}
 		return
 	}
+
 	if use == .bool_ { validate_vml_visual_bool(property, expr)! }
 	if expr.kind == .literal {
 		if use == .text && !expr.quoted && expr.value in ['true', 'false'] {
@@ -312,10 +331,7 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 		&& (expr.value in ['true', 'false'] || expr.value.contains('.')) {
 		return vml_visual_error(property, '`${property.name}` requires a #RRGGBB color or a typed integer')
 	}
-	if expr.kind == .path && !expr.value.contains('.') && !expr.value.starts_with('#')
-		&& property.name != 'id' && !(in_repeater && expr.value in ['item', 'index']) {
-		return vml_visual_error(property, 'unknown VML name `${expr.value}`; quote string literals')
-	}
+
 	if (expr.kind == .binary && expr.value in ['+', '-', '*', '/', '%']) || (expr.kind == .unary && expr.value == '-') {
 		if !isnil(expr.left) {
 			validate_vml_visual_value(node, property, expr.left, false, in_repeater)!
@@ -337,29 +353,36 @@ fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
 }
 
 fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater bool) ! {
+	if node.tag == 'Slot' { return }
+	if node.tag == '__Component' {
+		for child in node.children {
+			validate_compiled_vml_visual_scope(child, parent, in_repeater)!
+		}
+		return
+	}
 	if node.tag in ['Menu', 'MenuBar'] {
 		validate_compiled_vml_menu(node)!
 		return
 	}
 	if node.tag !in ['Screen', 'View', 'Absolute', 'Flex', 'Row', 'Column', 'Grid', 'Scroll',
-		'ScaledContent', 'Label', 'Run', 'TextInput', 'Image', 'Button', 'Checkbox', 'Dropdown',
-		'ProgressBar', 'Slider', 'Switch', 'Spinner', 'MessageBox', 'Repeater', 'MenuItem', 'Option'] {
+		'ScaledContent', 'Label', 'Run', 'TextInput', 'TextArea', 'Image', 'Button', 'Checkbox',
+		'Dropdown', 'ProgressBar', 'Slider', 'Switch', 'Spinner', 'MessageBox', 'Repeater', 'MenuItem',
+		'Option'] && !vml_widget_tag(node.tag) {
 		return vml_visual_node_error(node, 'unsupported VML element `${node.tag}`')
 	}
 	if node.tag == 'Label' && node.children.any(it.tag !in ['Run', 'MenuItem']) {
 		return vml_visual_node_error(node, 'Label children must be Run nodes')
 	}
-	if node.tag == 'Run' && parent != 'Label' {
-		return vml_visual_node_error(node, 'Run must be a child of Label')
+	if node.tag == 'TextInput' && node.children.any(it.tag == 'Run') {
+		return vml_visual_node_error(node, 'TextInput is single-line; use TextArea for Run content')
+	}
+	if node.tag == 'Run' && parent !in ['Label', 'TextArea'] {
+		return vml_visual_node_error(node, 'Run must be a child of Label or TextArea')
 	}
 	if node.tag == 'Run' && node.children.len > 0 {
 		return vml_visual_node_error(node, 'Run cannot contain children')
 	}
-	if node.tag in ['Grid', 'Flex', 'Row', 'Column'] && node.children.any(it.tag == 'Repeater') {
-		// Structural expansion belongs to the repeater lowering, before visual
-		// allocation; never treat a delegate as an ordinary layout child.
-		return vml_visual_node_error(node, 'Repeater layout expansion is unsupported')
-	}
+
 	mut seen := map[string]bool{}
 	for property in node.properties {
 		if property.name in ['x', 'y'] && parent != 'Absolute' {
@@ -372,11 +395,7 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 			return vml_visual_error(property, 'duplicate property `${property.name}`')
 		}
 		seen[property.name] = true
-		if property.declared_type.len > 0 {
-			if property.declared_type !in ['f64', 'f32', 'int', 'bool', 'string', 'color'] {
-				return vml_visual_error(property, 'unsupported computed type `${property.declared_type}`')
-			}
-		} else if !vml_visual_property_allowed(node, property.name, parent) {
+		if !vml_visual_property_allowed(node, property.name, parent) {
 			return vml_visual_error(property, 'unsupported property `${property.name}` on ${node.tag}')
 		}
 		if !property.name.starts_with('on_') && property.name != 'model' {
@@ -411,12 +430,13 @@ fn validate_vml_native_visual(node &VmlNode) ! {
 	}
 	for property in node.properties {
 		base := vml_visual_base_property(property.name)
-		if base != property.name || base in ['weight', 'letter_spacing', 'line_height',
-			'line_height_factor', 'baseline_offset', 'tabular_figures', 'font_family',
-			'background_color', 'strikethrough', 'shadow', 'outline', 'vertical_align', 'link',
-			'head_indent', 'first_line_indent', 'hyphenation_factor', 'border_left_color',
-			'border_top_color', 'border_right_color', 'border_bottom_color', 'border_pattern',
-			'dash_length', 'dash_gap', 'outline_color', 'outline_width', 'outline_offset'] {
+		if base != property.name || base in ['translate_x', 'translate_y', 'scale_x', 'scale_y',
+			'origin_x', 'origin_y', 'weight', 'letter_spacing', 'line_height', 'line_height_factor',
+			'baseline_offset', 'tabular_figures', 'font_family', 'background_color', 'strikethrough',
+			'shadow', 'outline', 'vertical_align', 'link', 'head_indent', 'first_line_indent',
+			'hyphenation_factor', 'border_left_color', 'border_top_color', 'border_right_color',
+			'border_bottom_color', 'border_pattern', 'dash_length', 'dash_gap', 'outline_color',
+			'outline_width', 'outline_offset'] {
 			return vml_visual_error(property, '`${property.name}` requires the custom renderer')
 		}
 	}
@@ -532,6 +552,7 @@ fn (c &VmlCompiler) visual_layout_config(node &VmlNode, frame string, properties
 	} else {
 		vml_prop(properties, 'orientation', 'ui2.LayoutOrientation.horizontal')
 	}}'
+	if 'spacing' in properties && 'gap' !in properties { fields << 'gap: ' + properties['spacing'] }
 	for pair in [['gap', 'gap'], ['line_gap', 'line_gap'], ['wrap', 'wrap'], ['justify', 'justify'],
 		['align_items', 'align']] {
 		if value := properties[pair[0]] { fields << '${pair[1]}: ${value}' }
@@ -539,40 +560,30 @@ fn (c &VmlCompiler) visual_layout_config(node &VmlNode, frame string, properties
 	return 'ui2.FlexConfig{${fields.join(', ')}}'
 }
 
-// Build preferred elements, call the shared allocation API, then build nested
-// children with their allocated constraints. Text is measured again at its
-// allocated width by ui2, which owns wrapping, control insets and font metrics.
-fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input string, declared_frame string, properties map[string]string, incoming VmlScope, placement VmlPlacement, default_key string) VmlScope {
+// Retain authored children and their typed layout rules once. ui2's LayoutTree
+// measures and allocates this tree, including wrapping at the allocated width.
+fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input string, frame string, properties map[string]string, incoming VmlScope, placement VmlPlacement, default_key string) VmlScope {
+	_ = input
+	_ = placement
 	suffix := vml_var(path)
 	grid := node.tag == 'Grid'
 	mut scope := vml_clone_scope(incoming)
-	visible := node.children.filter(it.tag !in ['MenuItem', 'Option'])
-	probe := 'vml_probe_${suffix}'
-	c.writeln('\t${probe} := ui2.rect(0, 0, ${if placement == .width_preferred {
-		input + '.width'
-	} else {
-		vml_prop(properties, 'width', input + '.width')
-	}}, ${vml_prop(properties, 'height', input + '.height')})')
 	items := 'vml_items_${suffix}'
 	spans := 'vml_spans_${suffix}'
+	children := 'vml_children_${suffix}'
 	c.writeln('\tmut ${items} := []ui2.${if grid { 'Element' } else { 'FlexChild' }}{}')
-	if grid { c.writeln('\tmut ${spans} := []ui2.GridSpan{}') }
-	mut preferred_scope := vml_clone_scope(incoming)
-	mut preferred_child_ids := []map[string]VmlNamedValue{cap: visible.len}
+	c.writeln('\tmut ${spans} := []ui2.GridSpan{}')
+	c.writeln('_ = ${spans}')
+	c.writeln('\tmut ${children} := []ui2.Element{}')
+	visible := node.children.filter(it.tag !in ['MenuItem', 'Option', 'Run'])
 	for index, child in visible {
-		child_path := '${path}_measure.${index}'
+		child_path := '${path}.${index}'
+		if child.tag == 'Repeater' { continue }
 		child_input := 'vml_input_${vml_var(child_path)}'
-		c.writeln('\t${child_input} := ${probe}')
-		child_scope := c.compile_node(child, child_path, child_input, preferred_scope, '', .preferred)
-		mut child_ids := map[string]VmlNamedValue{}
-		for id, named in child_scope.ids {
-			if previous := preferred_scope.ids[id] {
-				if previous.frame == named.frame { continue }
-			}
-			child_ids[id] = named
-		}
-		preferred_child_ids << child_ids
-		preferred_scope = child_scope
+		c.writeln('\t${child_input} := ui2.rect(0, 0, ${frame}.width, ${frame}.height)')
+		child_scope := c.compile_node(child, child_path, child_input, scope, '', .preferred)
+		for id, named in child_scope.ids { scope.ids[id] = named }
+		c.write_child_layout(child, 'vml_node_' + vml_var(child_path), vml_var(child_path), node.tag, child_scope)
 		child_properties := c.visual_child_properties(child, child_path)
 		element := 'vml_element_${vml_var(child_path)}'
 		c.writeln('\t${items} << ${if grid {
@@ -580,119 +591,19 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 		} else {
 			vml_flex_item(element, child_properties)
 		}}')
+		c.writeln('\t${children} << ${element}')
 		if grid {
 			c.writeln('\t${spans} << ui2.GridSpan{column_span: int(${vml_prop(child_properties, 'column_span', 'f64(1)')}), row_span: int(${vml_prop(child_properties, 'row_span', 'f64(1)')})}')
 		}
 	}
 	config := 'vml_config_${suffix}'
-	c.writeln('\t${config} := ${c.visual_layout_config(node, probe, properties, items, spans)}')
-	preferred_mode := placement in [.preferred, .width_preferred, .inherited_preferred]
-	available := if preferred_mode { probe } else { declared_frame }
-	initial := 'vml_initial_${suffix}'
-	c.writeln('\t${initial} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${config}, frame: ${available}}')
-	first := 'vml_first_frames_${suffix}'
-	grid_width := 'vml_grid_width_${suffix}'
-	if grid && preferred_mode {
-		c.writeln('\tvml_grid_natural_${suffix} := ui2.grid_preferred_size(${initial}, ${items}.map(it.frame)) or { panic(err) }')
-		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', 'vml_grid_natural_${suffix}.width')
-		c.writeln('\t${grid_width} := ${width}')
-		c.writeln('\t${first} := ui2.grid_frames(ui2.GridConfig{...${initial}, frame: ui2.rect(0, 0, ${grid_width}, vml_grid_natural_${suffix}.height)}, ${items}.len) or { panic(err) }')
-	} else {
-		c.writeln('\t${first} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(${initial}${if grid {
-			', ' + items + '.len'
-		} else {
-			''
-		}}) or { panic(err) }')
-	}
-	c.writeln('\t_ = ${first}')
-	if !grid || preferred_mode {
-		// Each pass sees only preceding siblings, using that pass's emitted names.
-		mut width_scope := vml_clone_scope(incoming)
-		for index, child in visible {
-			if vml_find_property(child, 'height') != none {
-				// This child is not rebuilt. Carry its own preferred ids (including
-				// descendants), without overwriting earlier width-pass siblings.
-				for id, named in preferred_child_ids[index] { width_scope.ids[id] = named }
-				continue
-			}
-			child_path := '${path}_width.${index}'
-			child_input := 'vml_input_${vml_var(child_path)}'
-			c.writeln('\t${child_input} := ui2.rect(0, 0, ${first}[${index}].width, ${probe}.height)')
-			width_scope = c.compile_node(child, child_path, child_input, width_scope, '', .width_preferred)
-			measurement := 'vml_element_${vml_var(child_path)}'
-			if grid {
-				c.writeln('\t${items}[${index}] = ui2.Element{...${items}[${index}], frame: ui2.rect(0, 0, ${items}[${index}].frame.width, ${measurement}.frame.height)}')
-			} else {
-				c.writeln('\t${items}[${index}] = ui2.FlexChild{...${items}[${index}], element: ui2.Element{...${items}[${index}].element, frame: ui2.rect(0, 0, ${items}[${index}].element.frame.width, ${measurement}.frame.height)}}')
-			}
-		}
-	}
-	measured := 'vml_measured_config_${suffix}'
-	// Natural width is selected once. Automatic columns and preferred rows must
-	// use that width after child-height measurement, just as final allocation does.
-	measurement_frame := if grid && preferred_mode {
-		', frame: ui2.rect(0, 0, ${grid_width}, ${initial}.frame.height)'
-	} else {
-		''
-	}
-	c.writeln('\t${measured} := ui2.${if grid { 'GridConfig' } else { 'FlexConfig' }}{...${initial}, children: ${items}${measurement_frame}}')
-	frame := if preferred_mode { 'vml_preferred_frame_${suffix}' } else { declared_frame }
-	if preferred_mode {
-		preferred := 'vml_preferred_size_${suffix}'
-		if grid {
-			c.writeln('\t${preferred} := ui2.grid_preferred_size(${measured}, ${items}.map(it.frame)) or { panic(err) }')
-		} else {
-			c.writeln('\t${preferred} := ui2.flex_preferred_size(${measured}) or { panic(err) }')
-		}
-		c.writeln('\t_ = ${preferred}')
-		preferred_width := if grid { grid_width } else { 'vml_preferred_width_' + suffix }
-		preferred_height := if grid {
-			preferred + '.height'
-		} else {
-			'vml_preferred_height_' + suffix
-		}
-		if !grid {
-			width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', preferred_width)
-			height := vml_layout_measured_axis(placement, properties, input, declared_frame, 'height', preferred_height)
-			c.writeln('\tmut ${preferred_width} := ${preferred}.width')
-			c.writeln('\tmut ${preferred_height} := ${preferred}.height')
-			c.writeln('\tif ${measured}.wrap && ${measured}.orientation == .horizontal {')
-			c.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, ${width}, 0)}) or { panic(err) }')
-			c.writeln('\t\t${preferred_height} = ${measured}.padding.top')
-			c.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.y + child_frame.height > ${preferred_height} { ${preferred_height} = child_frame.y + child_frame.height } }')
-			c.writeln('\t\t${preferred_height} += ${measured}.padding.bottom')
-			c.writeln('\t} else if ${measured}.wrap && ${measured}.orientation == .vertical {')
-			c.writeln('\t\tvml_wrap_frames_${suffix} := ui2.flex_frames(ui2.FlexConfig{...${measured}, frame: ui2.rect(0, 0, 0, ${height})}) or { panic(err) }')
-			c.writeln('\t\t${preferred_width} = ${measured}.padding.left')
-			c.writeln('\t\tfor child_frame in vml_wrap_frames_${suffix} { if child_frame.x + child_frame.width > ${preferred_width} { ${preferred_width} = child_frame.x + child_frame.width } }')
-			c.writeln('\t\t${preferred_width} += ${measured}.padding.right')
-			c.writeln('\t}')
-		}
-		width := vml_layout_measured_axis(placement, properties, input, declared_frame, 'width', preferred_width)
-		height := vml_layout_measured_axis(placement, properties, input, declared_frame, 'height', preferred_height)
-		c.writeln('\t${frame} := ui2.rect(${declared_frame}.x, ${declared_frame}.y, ${width}, ${height})')
-	}
-	frames := 'vml_frames_${suffix}'
-	c.writeln('\t${frames} := ui2.${if grid { 'grid_frames' } else { 'flex_frames' }}(ui2.${if grid {
-		'GridConfig'
-	} else {
-		'FlexConfig'
-	}}{...${measured}, frame: ${frame}}${if grid { ', ' + items + '.len' } else { '' }}) or { panic(err) }')
-	children := 'vml_children_${suffix}'
-	if node.id.len > 0 {
-		named := scope.ids[node.id] or { VmlNamedValue{} }
-		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named.props, prop_types: named.prop_types }
-	}
-	c.writeln('\tmut ${children} := []ui2.Element{}')
-	for index, child in visible {
-		child_path := '${path}.${index}'
-		child_input := 'vml_input_${vml_var(child_path)}'
-		c.writeln('\t${child_input} := ${frames}[${index}]')
-		child_scope := c.compile_node(child, child_path, child_input, scope, '', .allocated)
-		for id, named in child_scope.ids { scope.ids[id] = named }
-		c.writeln('\t${children} << vml_element_${vml_var(child_path)}')
-	}
-	c.compile_element(node, suffix, frame, children, properties, scope, default_key)
+	c.writeln('\t${config} := ${c.visual_layout_config(node, frame, properties, items, spans)}')
+	base := 'vml_layout_${suffix}'
+	c.writeln('\t${base} := ui2.${if grid { 'grid' } else { 'flex' }}(${config}) or { panic(err) }')
+	mutable := properties.clone()
+	c.compile_element(node, suffix + '_plain', frame, children, mutable, scope, default_key)
+	plain := 'vml_declaration_${suffix}_plain'
+	c.writeln('\tvml_declaration_${suffix} := ui2.Element{...${plain}, frame: ${base}.frame, children: ${children}, layout: ${base}.layout, layout_input: ${base}.layout_input}')
 	return scope
 }
 

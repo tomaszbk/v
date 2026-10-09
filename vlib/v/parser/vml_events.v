@@ -1,13 +1,16 @@
 module parser
 
 fn (c &VmlCompiler) control_id(node &VmlNode, suffix string, scope VmlScope) string {
+	if node.id.len == 0 && (node.properties.any(it.name.starts_with('bind.')) || node.properties.any(it.name == 'ref')) {
+		return c.node_identity(node, suffix, scope)
+	}
+	return vml_quote(node.id)
+}
+
+fn (c &VmlCompiler) node_identity(node &VmlNode, suffix string, scope VmlScope) string {
 	mut id := node.id
 	if id.len == 0 {
-		if node.properties.any(it.name.starts_with('bind.')) {
-			id = '__vml_control_${suffix}'
-		} else {
-			return "''"
-		}
+		id = '__vml_control_${vml_builder_path(suffix).replace('_base', '')}'
 	}
 	namespace := scope.special[if node.import_id { '__import_parent' } else { '__import' }] or { '' }
 	if namespace.len > 0 {
@@ -29,55 +32,48 @@ fn (mut c VmlCompiler) write_mutable_check(target string) {
 }
 
 fn (mut c VmlCompiler) write_action_type_checks(node &VmlNode, suffix string, scope VmlScope) {
+	_ = suffix
 	for property in node.properties {
-		if !property.name.starts_with('bind.') { c.write_model_path_checks(property.expr, scope) }
 		if property.name.starts_with('bind.') {
-			c.location = VmlLocation{ path: property.expr.source, line: property.expr.line, column: property.expr.column }
-			c.write_mutable_check(property.expr.value)
-			// A dead write checks existence, mutability and payload type without effects.
-			payload := match property.name {
-				'bind.text' { "''" }
-				'bind.value' { property.expr.value }
-				else { 'false' }
+			value := 'vml_binding_target_' + suffix + '_' + vml_var(property.name)
+			c.writeln('${value} := ' + c.expr(property.expr, scope, .raw))
+			c.writeln('_ = ${value}')
+			if property.name == 'bind.text' {
+				c.writeln("$if ${value} !is string { $compile_error('VML text binding must target a string') }")
+			} else if property.name in ['bind.checked', 'bind.active', 'bind.pressed'] {
+				c.writeln("$if ${value} !is bool { $compile_error('VML checked binding must target bool') }")
+			} else if property.name == 'bind.value' {
+				c.writeln("$if ${value} !is $int && ${value} !is $float { $compile_error('VML value binding must target a number') }")
 			}
-			if property.name == 'bind.value' {
-				c.writeln('\t$for field in app.fields {')
-				c.writeln('\t\t$if field.name == ${vml_quote(property.expr.value.all_after('app.'))} {')
-				c.writeln("\t\t\t$if field.typ !is $int && field.typ !is $float { $compile_error('VML value binding must target a numeric field') }")
-				c.writeln('\t\t}')
-				c.writeln('\t}')
+			if property.expr.value.starts_with('app.') {
+				c.write_mutable_check(property.expr.value)
+			} else if property.expr.value !in scope.writable {
+				c.writeln('$compile_error(' + vml_quote('binding source `${property.expr.value}` is read-only or unknown') + ')')
 			}
-			c.writeln('\tif false { ${property.expr.value} = ${payload} }')
+		} else {
+			c.write_model_path_checks(property.expr, scope)
 		}
-		if !vml_is_event(property.name) { continue }
-		expr := property.expr
-		c.location = VmlLocation{ path: expr.source, line: expr.line, column: expr.column }
-		if expr.kind == .assignment {
-			c.write_mutable_check(expr.left.value)
-			continue
-		}
-		if expr.kind != .call { continue }
-		method_name := expr.value.all_after('app.')
-		check_name := 'vml_action_check_${suffix}_${vml_var(property.name)}'
-		call_args := expr.args.map(c.expr(it, scope, .raw)).join(', ')
-		c.writeln('\tif false {')
-		c.writeln('\t\tmut ${check_name} := *app')
-		c.writeln('\t\t$for method in ${check_name}.methods {')
-		c.writeln('\t\t\t$if method.name == ${vml_quote(method_name)} {')
-		c.writeln('\t\t\t\t$if !method.is_pub { $compile_error(' + vml_quote('VML action method `${method_name}` must be public') + ') }')
-		c.writeln('\t\t\t\t$if method.typ !is fn () && method.typ !is fn (int) && method.typ !is fn (string) { $compile_error(' + vml_quote('VML action method `${method_name}` has an unsupported signature') + ') }')
-		c.writeln('\t\t\t}')
-		c.writeln('\t\t}')
-		c.writeln('\t\t${check_name}.${method_name}(${call_args})')
-		c.writeln('\t}')
+		if vml_is_event(property.name) { c.write_app_action_checks(property.expr) }
 	}
 }
 
 fn vml_callback_captures(expr &VmlExpr, scope VmlScope) []string {
-	mut captures := ['mut app']
+	mut captures := []string{}
+	if vml_expr_uses_path(expr, 'app') { captures << 'mut app' }
 	for base, variable in scope.special {
-		if !base.starts_with('__') && vml_expr_uses_path(expr, base) && variable !in captures {
-			captures << variable
+		if base.starts_with('__') || !vml_expr_uses_path(expr, base) { continue }
+		captured := if signal := scope.special['__signal_' + base] {
+			'mut ' + signal
+		} else {
+			variable
+		}
+		if setter := scope.writable[base] {
+			if !setter.contains('.') && setter.starts_with('vml_') && setter !in captures {
+				captures << setter
+			}
+		}
+		if (!captured.contains('.') && !captured.contains(' ')) || captured.starts_with('mut ') {
+			if captured !in captures { captures << captured }
 		}
 	}
 	for id, named in scope.ids {
@@ -87,9 +83,13 @@ fn vml_callback_captures(expr &VmlExpr, scope VmlScope) []string {
 			}
 		}
 		for field in ['x', 'y', 'width', 'height'] {
-			if field !in named.props && vml_expr_uses_path(expr, '${id}.${field}')
-				&& named.frame !in captures {
-				captures << named.frame
+			if vml_expr_uses_path(expr, '${id}.${field}') {
+				captured := if named.frame_signal.len > 0 {
+					'mut ' + named.frame_signal
+				} else {
+					named.frame
+				}
+				if captured !in captures { captures << captured }
 			}
 		}
 	}
@@ -97,39 +97,48 @@ fn vml_callback_captures(expr &VmlExpr, scope VmlScope) []string {
 }
 
 fn (c &VmlCompiler) event_callback(node &VmlNode, name string, scope VmlScope) string {
+	if c.effect_mode {
+		if value := c.event_references[(scope.special['__node_suffix'] or { '' }) + ':' + name] {
+			return value
+		}
+	}
 	action := vml_find_property(node, name)
 	binding := vml_binding_for_event(node, name)
 	if action == none && binding == none { return 'unsafe { nil }' }
-	mut fields := []string{}
+	mut body := '_ = event\n'
+	mut captures := []string{}
 	if property := binding {
-		fields << 'binding_property: ' + vml_quote(property.name.all_after('bind.'))
-		fields << 'binding_target: ' + vml_quote(property.expr.value)
+		captures << vml_callback_captures(property.expr, scope)
+		payload := match property.name {
+			'bind.text' { 'event.text' }
+			'bind.value' {
+				'ui2.vml_binding_number(' + c.expr(property.expr, scope, .raw) + ', event.value)'
+			}
+			else { 'event.checked' }
+		}
+		body += c.compile_write(property.expr.value, payload, scope) + '\n'
 	}
 	if property := action {
-		if property.expr.kind in [.assignment, .call] {
-			captures := vml_callback_captures(property.expr, scope)
-			mut body := '_ = event\n'
-			if fields.len > 0 {
-				body += 'ui2.compiled_vml_callback(mut app, ui2.CompiledVmlCallbackConfig{${fields.join(', ')}})(event)\n'
-			}
-			// Ordinary typed V executes against the borrowed model after the payload
-			// write. Only row/local values are captured when building the callback.
-			body += if property.expr.kind == .assignment {
-				'${property.expr.left.value} = ${c.expr(property.expr.right, scope, .raw)}'
+		captures << vml_callback_captures(property.expr, scope).filter(it !in captures)
+		if property.expr.kind == .path {
+			callback := c.expr(property.expr, scope, .raw)
+			body += 'ui2.vml_callback(${callback}' + if scope.component.len > 0 {
+				', refresh: false'
 			} else {
-				c.expr(property.expr, scope, .raw)
+				''
+			} + ')(event)\n'
+			if !callback.contains('.') && callback !in captures && (callback in c.callback_captures || callback.starts_with('vml_')) {
+				captures << callback
 			}
-			body += '\nui2.request_refresh()'
-			return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { ${body} }'
+		} else {
+			body += c.compile_action(property.expr, scope) + '\n'
 		}
-		// Explicit V callbacks are resolved by the checker, never by a global id.
-		callback := c.expr(property.expr, scope, .raw)
-		if fields.len == 0 {
-			return '(fn (callback ui2.ElementCallback) ui2.ElementCallback { return fn [callback] (event ui2.ElementEvent) { if callback != unsafe { nil } { callback(event) } } })(${callback})'
-		}
-		return '(fn [mut app] (callback ui2.ElementCallback) ui2.ElementCallback { bound := ui2.compiled_vml_callback(mut app, ui2.CompiledVmlCallbackConfig{${fields.join(', ')}}) return fn [bound, callback] (event ui2.ElementEvent) { bound(event) if callback != unsafe { nil } { callback(event) } } })(${callback})'
 	}
-	return 'ui2.compiled_vml_callback(mut app, ui2.CompiledVmlCallbackConfig{${fields.join(', ')}})'
+	if scope.component.len > 0 {
+		return '${scope.component}.callback(fn [${captures.join(', ')}] (event ui2.ElementEvent) ! { ${body} })'
+	}
+	body += 'ui2.request_refresh()'
+	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { ${body} }'
 }
 
 fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scope VmlScope) string {
@@ -144,6 +153,7 @@ fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scop
 		variable := 'vml_callback_${suffix}_${name}'
 		c.writeln('\t${variable} := ${c.event_callback(node, name, scope)}')
 		callbacks[name] = variable
+		c.event_references[suffix + ':' + name] = variable
 	}
 	if callbacks.len == 0 { return 'unsafe { nil }' }
 	mut captures := []string{}
@@ -184,4 +194,23 @@ fn (mut c VmlCompiler) write_model_path_checks(expr &VmlExpr, scope VmlScope) {
 	for part in expr.parts {
 		if !isnil(part.expr) { c.write_model_path_checks(part.expr, scope) }
 	}
+}
+
+fn (mut c VmlCompiler) write_app_action_checks(expr &VmlExpr) {
+	if expr.kind == .assignment && expr.left.value.starts_with('app.') {
+		c.write_mutable_check(expr.left.value)
+	}
+	if expr.kind in [.call, .path] && expr.value.starts_with('app.') && expr.value.count('.') == 1 {
+		method := expr.value.all_after('app.')
+		c.writeln('\t$for method in app.methods {')
+		c.writeln('\t$if method.name == ' + vml_quote(method) + ' {')
+		c.writeln('\t$if !method.is_pub { $compile_error(' + vml_quote('VML action method `${method}` must be public') + ') }')
+		if expr.kind == .call {
+			c.writeln('\t$if method.args.len != ${expr.args.len} { $compile_error(' + vml_quote('VML action `${method}` argument count does not match its declared signature') + ') }')
+		}
+		c.writeln('\t}\n}')
+	}
+	if !isnil(expr.left) { c.write_app_action_checks(expr.left) }
+	if !isnil(expr.right) { c.write_app_action_checks(expr.right) }
+	for argument in expr.args { c.write_app_action_checks(argument) }
 }

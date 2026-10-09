@@ -1305,6 +1305,11 @@ fn (t &Transformer) type_authority_has(name string) bool {
 // normalize_type_alias transforms normalize type alias data for transform.
 @[inline]
 fn (t &Transformer) normalize_type_alias(typ string) string {
+	if typ.contains('typeof(__vml_expr_') {
+		resolved := t.resolve_vml_inferred_type_text(typ)
+		if resolved != typ { return t.normalize_type_alias(resolved) }
+		return typ
+	}
 	if typ == '' || isnil(t.tc) {
 		return typ
 	}
