@@ -23,7 +23,7 @@ fn main() {
     assert fresh.id == checkbox.id && fresh.checked
     fresh.on_event(ui2.ElementEvent{ kind: .change, id: fresh.id, checked: false })
     assert !app.checked && !checkbox.compiled_node.element().checked
-    checkbox.on_event(ui2.ElementEvent{ kind: .tap, id: checkbox.id, checked: true })
+    checkbox.on_event(ui2.ElementEvent{ kind: .click, id: checkbox.id, checked: true })
     checkbox.on_event(ui2.ElementEvent{ kind: .submit, id: checkbox.id, checked: true })
     assert !app.checked
     println("checkbox change true/false and unrelated events PASS")
@@ -33,10 +33,10 @@ fn main() {
 fn test_checkbox_change_binds_before_action_and_keeps_tap_and_sibling_actions_separate() {
 	run_bounded_layout_fixture('checkbox_actions', 'Row(width: 200, height: 30, align_items: start) {
     View(width: 100, height: 24) {
-        Checkbox(id: "consent", width: 100, height: 24, bind.checked: app.checked, on_change: app.changed(app.note), on_tap: app.tapped())
+        Checkbox(id: "consent", width: 100, height: 24, bind.checked: app.checked, on_change: app.changed(app.note), on_click: app.tapped())
     }
     Absolute {
-        Button(width: consent.width, height: 24, text: ("Consent ñ"), on_tap: app.accept("Consent ñ"))
+        Button(width: consent.width, height: 24, text: ("Consent ñ"), on_click: app.accept("Consent ñ"))
     }
 }', 'import ui2
 @[heap]
@@ -76,12 +76,12 @@ fn main() {
     checkbox.on_event(ui2.ElementEvent{ kind: .change, id: checkbox.id, checked: false })
     assert !app.checked && app.observations == [true, false]
     assert app.notes == ["live true", "live false"] && app.taps == 0
-    checkbox.on_event(ui2.ElementEvent{ kind: .tap, id: checkbox.id, checked: true })
+    checkbox.on_event(ui2.ElementEvent{ kind: .click, id: checkbox.id, checked: true })
     assert app.taps == 1 && !app.checked && app.observations.len == 2
     checkbox.on_event(ui2.ElementEvent{ kind: .submit, id: checkbox.id, checked: true })
     button.on_event(ui2.ElementEvent{ kind: .change, id: button.id, checked: true })
     assert app.taps == 1 && !app.checked && app.observations.len == 2 && app.accepted == ""
-    button.on_event(ui2.ElementEvent{ kind: .tap, id: button.id })
+    button.on_event(ui2.ElementEvent{ kind: .click, id: button.id })
     assert app.accepted == "Consent ñ" && !app.checked && app.observations.len == 2
     println("checkbox binding-before-action, live argument and descendant reads PASS")
 }')
@@ -182,7 +182,7 @@ fn main() {
 
 fn test_nested_layout_build_work_is_bounded_and_fresh_per_build() {
 	for depth in [1, 2, 4, 8, 16] {
-		mut view := 'Label(width: app.leaf_width(), height: 20, text: "leaf", on_tap: app.accept(app.value))'
+		mut view := 'Label(width: app.leaf_width(), height: 20, text: "leaf", on_click: app.accept(app.value))'
 		for _ in 0 .. depth { view = 'Row(align_items: start) { ${view} }' }
 		run_bounded_layout_fixture('growth_${depth}', view, 'import ui2
 @[heap]
@@ -209,7 +209,7 @@ fn main() {
     assert leaf(first).frame == ui2.rect(0, 0, 30, 20)
     assert app.evaluations <= 8 * (${depth} + 1), app.evaluations.str()
     app.value = 45
-    leaf(first).on_event(ui2.ElementEvent{kind: .tap})
+    leaf(first).on_event(ui2.ElementEvent{kind: .click})
     assert app.received == 45
     previous := app.evaluations
     second := build(mut app)
@@ -389,7 +389,7 @@ fn run_sibling_geometry(tag string, config string, expected string, inner_x int,
     computed half := unit / 2
     Absolute(width: 400, height: 400) {
         ${tag}(id: "layout", x: 10, y: 15, width: 200, height: 80, ${config}) {
-            Label(id: "first", width: unit, height: 20, text: caption, bold: strong, color: ink, on_tap: app.accept(app.argument))
+            Label(id: "first", width: unit, height: 20, text: caption, bold: strong, color: ink, on_click: app.accept(app.argument))
             Absolute(id: "middle") {
                 Column(width: first.width, align_items: start) {
                     Absolute {
@@ -441,7 +441,7 @@ fn main() {
     assert app.received == 0 && app.submitted == ""
     app.geometry = &ui2.LayoutSize{width: 55}
     app.argument = 55
-    first.on_event(ui2.ElementEvent{kind: .tap, id: first.id})
+    first.on_event(ui2.ElementEvent{kind: .click, id: first.id})
     assert app.received == 55
     input := layout.children[2].children[0]
     assert input.id.len > 0 && input.id != "input"
@@ -901,7 +901,7 @@ fn main() {
 fn test_measured_view_keeps_explicit_zero_and_live_bindings_callbacks() {
 	run_intrinsic_sibling_fixture('descendant_live', 'Row(width: 300, height: 80, align_items: start) {
     View(width: 80, height: 30) {
-        Label(id: "inner", width: 0, height: 0, hidden: false, on_tap: app.accept(app.argument))
+        Label(id: "inner", width: 0, height: 0, hidden: false, on_click: app.accept(app.argument))
         TextInput(width: 40, height: 20, bind.text: app.name, on_submit: app.submit(app.name))
     }
     Absolute {
@@ -929,7 +929,7 @@ fn main() {
     assert inner.frame == ui2.Rect{} && !inner.hidden
     assert app.received == 0 && app.submitted == ""
     app.argument = 55
-    inner.on_event(ui2.ElementEvent{kind: .tap, id: inner.id})
+    inner.on_event(ui2.ElementEvent{kind: .click, id: inner.id})
     assert app.received == 55
     input := tree.children[0].children[1]
     input.on_event(ui2.ElementEvent{kind: .change, id: input.id, text: "canción"})

@@ -89,7 +89,7 @@ Button(
     focus_outline_width: 2,
     focus_outline_color: "#2563eb",
     pressed_background: "#93c5fd",
-    on_tap: app.save(),
+    on_click: app.save(),
 )
 ```
 
@@ -105,7 +105,7 @@ live application field when the event is handled.
 Checkbox(bind.checked: app.checked, on_change: app.changed())
 ```
 
-`on_tap` remains an independent tap action; it does not apply the checkbox binding.
+`on_click` remains an independent tap action; it does not apply the checkbox binding.
 Unrelated event kinds do not run the change binding or action. Callbacks belong to
 their element declarations; an event id does not select another element's action.
 

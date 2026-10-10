@@ -375,7 +375,7 @@ fn test_check_md_vml_fence_is_not_a_v_example() {
 ```vml
 Screen {
     Column {
-        Button { text: "Save" on_tap: app.save() }
+        Button { text: "Save" on_click: app.save() }
     }
 }
 ```
@@ -405,7 +405,7 @@ fn test_check_md_vml_fence_with_info_string_metadata_is_not_a_v_example() {
 
 ```vml title=example
 Screen {
-    Button { text: "Save" on_tap: app.save() }
+    Button { text: "Save" on_click: app.save() }
 }
 ```
 

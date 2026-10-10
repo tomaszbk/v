@@ -397,7 +397,7 @@ fn (mut p VmlSourceParser) parse_node() !&VmlNode {
 	return node
 }
 
-const vml_event_names = ['on_tap', 'on_change', 'on_active', 'on_submit', 'on_scroll', 'on_pointer_down',
+const vml_event_names = ['on_click', 'on_change', 'on_active', 'on_submit', 'on_scroll', 'on_pointer_down',
 	'on_pointer_drag', 'on_pointer_up', 'on_long_press', 'on_swipe_left', 'on_link', 'on_select',
 	'on_toggle', 'on_dismiss']
 
@@ -1540,7 +1540,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 	if menu_items.len > 0 {
 		mut entries := []string{cap: menu_items.len}
 		for index, item in menu_items {
-			id := c.event_callback(item, 'on_tap', scope)
+			id := c.event_callback(item, 'on_click', scope)
 			text := if property := vml_find_property(item, 'text') {
 				c.property_effect_value(item, property, vml_content_suffix(suffix, item), scope)
 			} else {
@@ -1857,7 +1857,7 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 			c.event_references[event_key] or { 'unsafe { nil }' }
 		} else {
 			reference := 'vml_message_action_${suffix}_${child_index}'
-			c.writeln('${reference} := ' + c.event_callback(child, 'on_tap', scope))
+			c.writeln('${reference} := ' + c.event_callback(child, 'on_click', scope))
 			c.event_references[event_key] = reference
 			reference
 		}

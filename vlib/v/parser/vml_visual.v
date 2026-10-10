@@ -194,7 +194,7 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 		'clickable', 'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation',
 		'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y', 'cursor', 'tooltip',
 		'secure', 'autocorrect', 'pad_left', 'accessibility_role', 'accessibility_label',
-		'accessibility_value', 'on_tap', 'on_change', 'on_active', 'on_submit'] {
+		'accessibility_value', 'on_click', 'on_change', 'on_active', 'on_submit'] {
 		return true
 	}
 	if name in vml_box_properties {

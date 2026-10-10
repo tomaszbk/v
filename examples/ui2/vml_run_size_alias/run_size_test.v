@@ -21,7 +21,7 @@ fn test_static_run_size_alias_overrides_inherited_font_size() ! {
 	defer { root.dispose_document() or { panic(err) } }
 	assert root.element().children[0].text_runs.map(it.style.size) == [f64(28), 18, 12]
 	assert root.element().children[0].text == 'InheritedStaticFont size'
-	root.element().children[2].on_event(ui2.ElementEvent{ kind: .tap })
+	root.element().children[2].on_event(ui2.ElementEvent{ kind: .click })
 	assert root.element().children[0].text_runs.map(it.style.size) == [f64(28), 18, 12]
 }
 
@@ -39,6 +39,6 @@ fn test_dynamic_run_size_alias_overrides_inherited_font_size_without_recreating_
 		assert current.children[1].text_runs.map(it.style.size) == [f64(count), f64(count) / 2]
 		assert current.children[1].text == 'InheritedDynamic'
 		assert app.count == count
-		current.children[2].on_event(ui2.ElementEvent{ kind: .tap })
+		current.children[2].on_event(ui2.ElementEvent{ kind: .click })
 	}
 }

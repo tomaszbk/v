@@ -6,7 +6,7 @@ Absolute(id: "root", width: 300, height: 200) {
     Row(width: 100, height: 30) {
         Label(id: "self", width: app.count + 4, flex_grow: 1, text: "width=${self.width}")
     }
-    Button(text: "Next", on_tap: app.count++)
+    Button(text: "Next", on_click: app.count++)
     Label { Run(text: app.next_run()) }
     Dropdown { Option(text: app.next_option()) }
     View { MenuItem(text: app.next_menu()) }

@@ -3,6 +3,6 @@ View() {
         Label(text: item.name, width: 100, height: 24)
     }
     Repeater(model: app.pointer_rows, key: item.id) {
-        Button(text: item.name, width: 100, height: 24, on_tap: app.select(item.id))
+        Button(text: item.name, width: 100, height: 24, on_click: app.select(item.id))
     }
 }

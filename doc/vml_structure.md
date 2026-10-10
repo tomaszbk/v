@@ -35,7 +35,7 @@ component Counter(title string = "Count", changed event(value int)) {
     Column(spacing: 12) {
         Label(text: title)
         Label(text: doubled)
-        Button(text: "Add", on_tap: increment)
+        Button(text: "Add", on_click: increment)
     }
 }
 ```
@@ -69,7 +69,7 @@ ordinary value keeps the input read-only. Editable local copies use `state`.
 component Editor(bind name string = "", changed event(value string)) {
     Column {
         TextInput(bind.text: name, on_change: changed(name))
-        Button(on_tap: { name = ""; changed(name) }, text: "Clear")
+        Button(on_click: { name = ""; changed(name) }, text: "Clear")
     }
 }
 ```
@@ -134,7 +134,7 @@ an empty public id. A component whose root uses `x` or `y` requires an
 Column {
     Label(text: "Rows")
     Repeater(model: app.rows, key: item.id) {
-        Button(text: item.name, on_tap: app.select(item.id))
+        Button(text: item.name, on_click: app.select(item.id))
     }
     Label(text: "End")
 }
@@ -157,7 +157,7 @@ scroll, IME and unchanged local edit buffers survive unrelated updates.
 ```text
 MenuBar {
     Menu(title: "File") {
-        MenuItem(id: "create", text: "New", shortcut: "cmd+n", on_tap: app.create)
+        MenuItem(id: "create", text: "New", shortcut: "cmd+n", on_click: app.create)
         MenuSeparator()
     }
 }

@@ -29,7 +29,7 @@ pub fn (mut app CombinedApp) record(value int) {
 }
 
 // tap observes a tap independently of change bindings.
-pub fn (mut app CombinedApp) tap(value int) {
+pub fn (mut app CombinedApp) click(value int) {
 	app.taps++
 	app.value = value
 }
@@ -47,9 +47,9 @@ fn test_visual_structure_callbacks_keep_locals_binding_order_and_event_routes() 
 	assert app.checked && app.calls == 1 && app.value == 116
 	controls[0].on_event(ui2.ElementEvent{ kind: .change, checked: false })
 	assert !app.checked && app.calls == 2 && app.value == 127
-	controls[0].on_event(ui2.ElementEvent{ kind: .tap, checked: true })
+	controls[0].on_event(ui2.ElementEvent{ kind: .click, checked: true })
 	assert !app.checked && app.calls == 2 && app.taps == 1 && app.value == 105
-	controls[1].on_event(ui2.ElementEvent{ kind: .tap })
+	controls[1].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.calls == 3 && app.value == 205
 	controls[3].on_event(ui2.ElementEvent{ kind: .scroll, value: 12 })
 	assert app.calls == 4 && app.value == 105 && app.taps == 1
@@ -60,7 +60,7 @@ fn test_visual_structure_callbacks_keep_locals_binding_order_and_event_routes() 
 	}
 	// The one change above consumes the Checkbox binding; Scroll ignores all of them.
 	assert app.calls == 5 && app.taps == 1
-	controls[3].on_event(ui2.ElementEvent{ kind: .tap })
+	controls[3].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.calls == 5 && app.taps == 2 && app.value == 100
 
 	retained := root.children[1].children[0].on_event
@@ -75,7 +75,7 @@ fn test_visual_structure_callbacks_keep_locals_binding_order_and_event_routes() 
 	assert reordered.children[2].id == id && reordered.children[2].key == root.children[1].key
 	app.rows = app.rows[..1]
 	app.count = 200
-	retained(ui2.ElementEvent{ kind: .tap })
+	retained(ui2.ElementEvent{ kind: .click })
 	assert app.value == 214
 }
 

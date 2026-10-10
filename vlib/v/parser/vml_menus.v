@@ -5,7 +5,7 @@ fn validate_compiled_vml_menu(node &VmlNode) ! {
 		'MenuBar', 'MenuSeparator' { []string{} }
 		'Menu' { ['title', 'text'] }
 		'MenuItem' {
-			['id', 'title', 'text', 'on_tap', 'shortcut', 'checked', 'enabled', 'separator']
+			['id', 'title', 'text', 'on_click', 'shortcut', 'checked', 'enabled', 'separator']
 		}
 		else {
 			return error('${node.source}:${node.line}:${node.column}: unexpected `${node.tag}` in menu')
@@ -92,7 +92,7 @@ fn (mut c VmlCompiler) application_menu_items(node &VmlNode, path string, scope 
 		fields := if child.tag == 'Menu' {
 			''
 		} else {
-			'id: ${c.control_id(child, child_path, local)}, on_select: ${c.event_callback(child, 'on_tap', local)}, shortcut: ${c.menu_property(child, 'shortcut', "''", .raw)}, checked: ${c.menu_property(child, 'checked', 'false', .raw)}, enabled: ${c.menu_property(child, 'enabled', 'true', .raw)}, separator: ${c.menu_property(child, 'separator', 'false', .raw)}, '
+			'id: ${c.control_id(child, child_path, local)}, on_select: ${c.event_callback(child, 'on_click', local)}, shortcut: ${c.menu_property(child, 'shortcut', "''", .raw)}, checked: ${c.menu_property(child, 'checked', 'false', .raw)}, enabled: ${c.menu_property(child, 'enabled', 'true', .raw)}, separator: ${c.menu_property(child, 'separator', 'false', .raw)}, '
 		}
 		name := 'vml_menu_item_${child_path}'
 		c.writeln('\t${name} := ui2.MenuItem{${fields}title: ${title}, items: ${nested}}')

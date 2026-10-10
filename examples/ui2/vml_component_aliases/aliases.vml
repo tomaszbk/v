@@ -11,7 +11,7 @@ component Aliases() {
         AnonymousCard(id: "second", key: "second-key", ref: anonymous, width: 200)
         NestedCard(id: "third", key: "third-key", ref: nested, width: card.width)
         View(id: "observer", width: first.width, height: second.height, x: third.width)
-        Button(on_tap: app.level = first.width + second.height)
+        Button(on_click: app.level = first.width + second.height)
         Repeater(model: app.rows, key: item.id) {
             Label(text: first.width)
         }

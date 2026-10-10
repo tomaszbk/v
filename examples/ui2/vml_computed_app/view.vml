@@ -10,6 +10,6 @@ component ComputedApp() {
         Label(text: caption)
         TextInput(bind.text: app.name)
         Label(text: seed)
-        Button(text: doubled, on_tap: count++)
+        Button(text: doubled, on_click: count++)
     }
 }

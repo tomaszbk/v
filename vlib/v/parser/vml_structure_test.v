@@ -15,7 +15,7 @@ fn test_vml_interpolated_paths_keep_physical_string_locations() {
 }
 
 fn test_vml_assignments_lower_only_writable_sources() {
-	root := parse_vml_source('View { Button(on_tap: app.count++) }')!
+	root := parse_vml_source('View { Button(on_click: app.count++) }')!
 	assert root.children[0].properties[0].expr.kind == .assignment
 	for source in ['Label(text: app.count = 1)', 'TextInput(on_text: app.save())'] {
 		if _ := parse_vml_source(source) {
@@ -23,7 +23,7 @@ fn test_vml_assignments_lower_only_writable_sources() {
 		}
 	}
 	for target in ['item.count', 'app.nested.count'] {
-		parse_vml_source('Button(on_tap: ${target} = 1)') or {
+		parse_vml_source('Button(on_click: ${target} = 1)') or {
 			assert err.msg().contains('assignment target `${target}` is read-only'), err.msg()
 			continue
 		}

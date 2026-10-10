@@ -162,7 +162,7 @@ fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scop
 	mut captures := []string{}
 	for _, variable in callbacks { captures << variable }
 	mut body := ''
-	if callback := callbacks['on_tap'] { body += '.tap { ${callback}(event) }\n' }
+	if callback := callbacks['on_click'] { body += '.click { ${callback}(event) }\n' }
 	mut change := ''
 	if node.tag == 'Switch' {
 		if callback := callbacks['on_active'] { change += '${callback}(event)\n' }

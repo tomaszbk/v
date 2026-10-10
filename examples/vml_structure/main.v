@@ -96,10 +96,10 @@ fn main() {
 	}
 	root := build(mut app)
 	root.children[4].on_event(ui2.ElementEvent{ kind: .change, text: 'Mañana' })
-	root.children[5].on_event(ui2.ElementEvent{ kind: .tap })
+	root.children[5].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.message == 'Mañana' && app.copied == 'Mañana' && app.count == 1
 	declarations := menus(mut app)
-	declarations[0].items[0].on_select(ui2.ElementEvent{ kind: .tap, id: 'create' })
+	declarations[0].items[0].on_select(ui2.ElementEvent{ kind: .click, id: 'create' })
 	assert app.count == 2
 	if '--window' in os.args {
 		ui2.run_compiled_vml(

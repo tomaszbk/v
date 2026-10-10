@@ -10,7 +10,7 @@ pub mut:
 }
 
 // tap increments the example's counter.
-pub fn (mut app VisualApp) tap() {
+pub fn (mut app VisualApp) click() {
 	app.count++
 }
 

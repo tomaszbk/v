@@ -51,11 +51,11 @@ fn test_invocation_ids_alias_real_private_anonymous_and_nested_roots() ! {
 	assert children[4].frame.width == 100 && children[4].frame.height == 201
 	assert children[4].frame.x == 77
 	assert children[6].text == f64(100).str()
-	children[1].children[1].on_event(ui2.ElementEvent{ kind: .tap })
+	children[1].children[1].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.level == 100
 	assert root.element().children[1].children[2].text == '1'
 	assert root.element().children[3].children[2].text == '0'
-	children[5].on_event(ui2.ElementEvent{ kind: .tap })
+	children[5].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.level == 301
 	mut owner := root.component
 	mut named := owner.ref[ui2.VmlView]('named')!
@@ -71,7 +71,7 @@ fn test_invocation_ids_alias_real_private_anonymous_and_nested_roots() ! {
 	assert root.element().children[1].compiled_node == actual
 	assert root.element().children[4].frame.width == 150
 	assert root.element().children[6].text == f64(150).str()
-	root.element().children[5].on_event(ui2.ElementEvent{ kind: .tap })
+	root.element().children[5].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.level == 351
 	root.dispose_document()!
 	assert !named.is_available() && !anonymous.is_available() && !nested.is_available()
@@ -89,9 +89,9 @@ fn test_invocation_keys_reconcile_actual_roots_and_preserve_private_state() ! {
 	assert first.key == 'a' && second.key == 'b'
 	assert a_ref.element()!.compiled_node == first.compiled_node
 	assert b_ref.element()!.compiled_node == second.compiled_node
-	first.children[1].on_event(ui2.ElementEvent{ kind: .tap })
-	first.children[1].on_event(ui2.ElementEvent{ kind: .tap })
-	second.children[1].on_event(ui2.ElementEvent{ kind: .tap })
+	first.children[1].on_event(ui2.ElementEvent{ kind: .click })
+	first.children[1].on_event(ui2.ElementEvent{ kind: .click })
+	second.children[1].on_event(ui2.ElementEvent{ kind: .click })
 	app.rows = [AliasRow{'b', 250}, AliasRow{'a', 150}]
 	root.component.invalidate_app()!
 	reordered := root.element().children
