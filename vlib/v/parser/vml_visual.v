@@ -355,6 +355,83 @@ fn validate_vml_visual_bool(property VmlProperty, expr &VmlExpr) ! {
 
 fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
 	validate_compiled_vml_visual_scope(node, parent, false)!
+	validate_vml_geometry_scope(node, parent, VmlScope{}, VmlScope{})!
+}
+
+// Layout inputs cannot depend on allocated element geometry except in Absolute.
+// Model/member paths and viewport predicates used outside layout remain ordinary
+// expressions. Track ids in the same lexical scope as lowering, including slots.
+fn vml_layout_dimension_property(name string) bool {
+	return name in ['x', 'y', 'width', 'height', 'min_width', 'min_height', 'max_width', 'max_height',
+		'flex_basis', 'gap', 'spacing', 'line_gap', 'padding', 'padding_left', 'padding_top',
+		'padding_right', 'padding_bottom', 'spacing_x', 'spacing_y', 'auto_columns_min_width',
+		'col_default_width', 'row_default_height', 'content_width', 'content_height', 'dialog_width',
+		'dialog_height']
+}
+
+fn vml_expr_uses_element_geometry(expr &VmlExpr, scope VmlScope) bool {
+	if expr.kind == .path {
+		parts := expr.value.split('.')
+		if parts.len >= 2 && parts[0] in scope.ids
+			&& parts[1] in ['x', 'y', 'width', 'height'] {
+			return true
+		}
+	}
+	if !isnil(expr.left) && vml_expr_uses_element_geometry(expr.left, scope) { return true }
+	if !isnil(expr.right) && vml_expr_uses_element_geometry(expr.right, scope) { return true }
+	if !isnil(expr.third) && vml_expr_uses_element_geometry(expr.third, scope) { return true }
+	for arg in expr.args {
+		if vml_expr_uses_element_geometry(arg, scope) { return true }
+	}
+	for part in expr.parts {
+		if !isnil(part.expr) && vml_expr_uses_element_geometry(part.expr, scope) { return true }
+	}
+	return false
+}
+
+fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, author VmlScope) !VmlScope {
+	if node.caller_content {
+		value := &VmlNode{ ...node, caller_content: false }
+		validate_vml_geometry_scope(value, parent, author, author)!
+		return incoming
+	}
+	mut scope := vml_clone_scope(incoming)
+	if node.tag != '__Component' && node.id.len > 0 {
+		scope.ids[node.id] = VmlNamedValue{}
+	}
+	for property in node.properties {
+		// Component arguments are data; only their shared child-layout arguments
+		// participate in the surrounding container's layout.
+		if node.tag == '__Component' && property.name !in vml_flex_child_properties { continue }
+		if parent != 'Absolute' && vml_layout_dimension_property(property.name)
+			&& vml_expr_uses_element_geometry(property.expr, scope) {
+			return vml_visual_error(property, 'element geometry in `${property.name}` requires a parent Absolute container')
+		}
+	}
+	if node.tag == '__Component' {
+		mut private := VmlScope{}
+		for child in node.children {
+			private = validate_vml_geometry_scope(child, parent, private, incoming)!
+		}
+		return incoming
+	}
+	child_parent := if node.tag == 'Repeater' { parent } else { node.tag }
+	for child in node.children {
+		if node.tag != 'Repeater' && child.tag == 'Repeater' { continue }
+		scope = validate_vml_geometry_scope(child, child_parent, scope, author)!
+	}
+	// Ordinary containers retain static children before registering list factories.
+	// A factory sees those ids, but its per-row ids do not escape to the container.
+	if node.tag != 'Repeater' {
+		for child in node.children {
+			if child.tag == 'Repeater' {
+				validate_vml_geometry_scope(child, child_parent, scope, author)!
+			}
+		}
+	} else {
+		return incoming
+	}
+	return vml_node_output_scope(node, incoming, scope)
 }
 
 fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater bool) ! {
