@@ -116,9 +116,9 @@ fn test_scroll_requires_explicit_handler_and_gesture_dispatch_is_once() {
 	assert app.calls == 0
 	gestures := [ui2.ElementEventKind.tap, .pointer_down, .pointer_drag, .pointer_up, .long_press,
 		.swipe_left, .link]
-	for kind in gestures {
+	for index, kind in gestures {
 		root.children[6].on_event(callback_event(kind))
-		assert app.calls == 1
+		assert app.calls == index + 1
 	}
 	app.calls = 0
 	app.count = 50
@@ -178,7 +178,8 @@ fn test_retained_imported_nested_row_callback_keeps_record_and_live_app() {
 	app.groups[0].rows.reverse_in_place()
 	app.groups.reverse_in_place()
 	app.count = 100
-	after := callback_rows(mut app)
+	before.compiled_node.component.invalidate_app() or { panic(err) }
+	after := before.compiled_node.element()
 	assert before.children[1].id == after.children[1].id
 	assert before.children[1].children[1].id == after.children[1].children[1].id
 	assert before.children[0].id != before.children[2].id
@@ -188,7 +189,7 @@ fn test_retained_imported_nested_row_callback_keeps_record_and_live_app() {
 	app.count = 200
 	retained(callback_event(.tap))
 	assert app.calls == 2 && app.received == 202
-	assert callback_rows(mut app).children.len == 0
+	assert before.compiled_node.element().children.len == 0
 }
 
 fn test_flat_context_menu_and_empty_application_menu_use_public_api() {

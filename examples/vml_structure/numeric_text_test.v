@@ -39,15 +39,20 @@ fn test_vml_formats_numeric_text_and_preserves_string_bindings() {
 	assert root.children[13].children[0].text == '7'
 	root.children[6].on_event(ui2.ElementEvent{ kind: .change, text: 'mañana' })
 	assert app.caption == 'mañana'
+	assert app.calls == 2
 	app.count = 9
 	app.ready = false
-	updated := numeric_text_build(mut app)
+	root.compiled_node.component.invalidate_app() or { panic(err) }
+	updated := root.compiled_node.element()
+	assert updated.children[0].compiled_node == root.children[0].compiled_node
+	assert updated.children[6].id == root.children[6].id
 	assert updated.children[0].text == '9'
 	assert updated.children[3].text == 'mañana'
 	assert updated.children[4].text == 'waiting'
 	assert updated.children[11].menu[0].title == 'waiting'
 	assert updated.children[13].children[1].text == 'waiting'
-	assert app.calls == 2
+	assert updated.children[5].text == '10'
+	assert app.calls == 3
 }
 
 fn test_vml_text_rejects_non_numeric_values_and_keeps_writeback_typed() {
@@ -66,15 +71,16 @@ fn main() {
     _ = \$vml("view.vml")
 }')!
 	for entry in [
-		['Label { text: app.ready }', 'VML text requires a string or number'],
-		['Label { text: app.values }', 'VML text requires a string or number'],
-		['Label { text: app.ready ? 1 : app.values }', 'VML text requires a string or number'],
-		['TextInput { bind.text: app.count }', 'string'],
-		['TextInput { placeholder: app.count }', 'string'],
-		['Label { text: "count: " + app.count }', 'cannot use `int`'],
+		['Label(text: app.ready)', 'VML text requires a string or number'],
+		['Label(text: app.values)', 'VML text requires a string or number'],
+		['Label(text: app.ready ? 1 : app.values)', 'VML text requires a string or number'],
+		['TextInput(bind.text: app.count)', 'string'],
+		['TextInput(placeholder: app.count)', 'string'],
+		['Label(text: "count: " + app.count)', 'cannot use `int`'],
 	] {
 		os.write_file(os.join_path(dir, 'view.vml'), entry[0])!
-		result := os.exec([@VEXE, '-check', os.join_path(dir, 'main.v')])
+		result := os.exec([@VEXE, '-b', 'c', '-cc', 'clang', '-o', os.join_path(dir, 'probe'),
+			os.join_path(dir, 'main.v')])
 		assert result.exit_code != 0, 'unexpectedly accepted ${entry[0]}'
 		assert result.output.contains(entry[1]), result.output
 	}

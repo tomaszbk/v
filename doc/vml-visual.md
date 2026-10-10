@@ -135,9 +135,11 @@ natural extent. For example, five 20-by-20 children offered width 300 with
 `auto_columns_min_width: 100` select width 60, then measure five rows and height 100.
 Authored heights and allocated frames retain their dimensions, including zero.
 
-Children can read an earlier sibling's geometry, including ids declared in its
-descendants. Geometry signals expose allocated logical frames; dependent
-properties react after ui2 resolves layout. Later siblings remain unavailable.
+Children of `Absolute` can use an earlier sibling's geometry in layout inputs,
+including ids declared in its descendants. Other layouts take dimensions from
+application data, component inputs or state. Geometry signals expose allocated
+logical frames and may be read in text, callbacks and viewport predicates.
+Dependent properties react after ui2 resolves layout. Later siblings remain unavailable.
 The compiler emits authored declarations and delegates measurement and final
 allocation to ui2's retained `LayoutTree`. It creates each node once and
 registers effects for dynamic properties. Window resize updates viewport and
@@ -167,13 +169,13 @@ and the same presentation diagnostics apply with or without that flag.
 With ui2 installed in the module search path:
 
 ```sh
-V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -d ui2_custom_rendering test \
+V_MACOS_V3_NO_FALLBACK=1 ./v -b c -cc clang -d ui2_custom_rendering test \
   examples/ui2/vml_visual
-V_MACOS_V3_NO_FALLBACK=1 ./v -new-compiler -gc boehm -d ui2_custom_rendering run \
+V_MACOS_V3_NO_FALLBACK=1 ./v -b c -cc clang -d ui2_custom_rendering run \
   examples/ui2/vml_visual
 ```
 
-The fixtures compare styles and geometry with ui2's public API and runtime conversion,
+The fixtures compare styles and geometry with ui2's public API and independent expected values,
 check independent layout coordinates and exercise typed actions and UTF-8 bindings.
 Focused regression fixtures cover unoffered Row/Column wrapping, padded Grid axes,
 automatic columns at the selected width and its fractional thresholds,

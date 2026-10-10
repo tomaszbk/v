@@ -1,7 +1,12 @@
-View {
-    Checkbox { id: check bind.checked: app.enabled on_change: app.checked_copy = app.enabled }
-    Switch { id: active bind.active: app.enabled on_change: app.checked_copy = app.enabled }
-    Slider { id: level bind.value: app.level on_change: app.last_level = app.level }
-    TextInput { multiline: false id: value bind.text: app.message on_change: app.select_text(app.message) on_submit: app.count = app.count + 1 }
-    Slider { id: quantity bind.value: app.quantity on_change: app.last_quantity = app.quantity }
+View() {
+    Checkbox(id: "check", bind.checked: app.enabled, on_change: app.checked_copy = app.enabled)
+    Switch(id: "active", bind.active: app.enabled, on_change: app.checked_copy = app.enabled)
+    Slider(id: "level", bind.value: app.level, on_change: app.last_level = app.level)
+    TextInput(
+        id: "value",
+        bind.text: app.message,
+        on_change: app.select_text(app.message),
+        on_submit: app.count = app.count + 1,
+    )
+    Slider(id: "quantity", bind.value: app.quantity, on_change: app.last_quantity = app.quantity)
 }

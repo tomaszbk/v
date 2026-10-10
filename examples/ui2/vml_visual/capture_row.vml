@@ -1,6 +1,6 @@
-module CaptureRow
-Row {
-    width: 160 height: 40 align_items: .start
-    Label { id: first text: "ñ" font_size: 12 }
-    Button { width: 40 height: 20 on_tap: app.observed = first.width + app.extra }
+component CaptureRow() {
+    Row(width: 160, height: 40, align_items: start) {
+        Label(id: "first", text: "ñ", font_size: 12)
+        Button(width: 40, height: 20, on_tap: app.observed = first.width + app.extra)
+    }
 }

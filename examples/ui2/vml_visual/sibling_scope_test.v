@@ -1,11 +1,10 @@
+// vtest vflags: -d ui2_custom_rendering
 module main
 
 import os
 
 fn test_checkbox_binding_uses_change_checked_payload_in_both_directions() {
-	run_bounded_layout_fixture('checkbox_binding', 'Checkbox {
-    id: consent width: 100 height: 24 bind.checked: app.checked
-}', 'import ui2
+	run_bounded_layout_fixture('checkbox_binding', 'Checkbox(id: "consent", width: 100, height: 24, bind.checked: app.checked)', 'import ui2
 @[heap]
 struct State {
 pub mut:
@@ -20,10 +19,10 @@ fn main() {
     // Synthetic typed events use the payload emitted by UI31 custom and AppKit checkboxes.
     checkbox.on_event(ui2.ElementEvent{ kind: .change, id: checkbox.id, checked: true })
     assert app.checked
-    fresh := build(mut app)
+    fresh := checkbox.compiled_node.element()
     assert fresh.id == checkbox.id && fresh.checked
     fresh.on_event(ui2.ElementEvent{ kind: .change, id: fresh.id, checked: false })
-    assert !app.checked && !build(mut app).checked
+    assert !app.checked && !checkbox.compiled_node.element().checked
     checkbox.on_event(ui2.ElementEvent{ kind: .tap, id: checkbox.id, checked: true })
     checkbox.on_event(ui2.ElementEvent{ kind: .submit, id: checkbox.id, checked: true })
     assert !app.checked
@@ -32,18 +31,13 @@ fn main() {
 }
 
 fn test_checkbox_change_binds_before_action_and_keeps_tap_and_sibling_actions_separate() {
-	run_bounded_layout_fixture('checkbox_actions', 'Row {
-    width: 200 height: 30 align_items: .start
-    View {
-        width: 100 height: 24
-        Checkbox {
-            id: consent width: 100 height: 24 bind.checked: app.checked
-            computed string caption: "Consent ñ"
-            on_change: app.changed(app.note)
-            on_tap: app.tapped()
-        }
+	run_bounded_layout_fixture('checkbox_actions', 'Row(width: 200, height: 30, align_items: start) {
+    View(width: 100, height: 24) {
+        Checkbox(id: "consent", width: 100, height: 24, bind.checked: app.checked, on_change: app.changed(app.note), on_tap: app.tapped())
     }
-    Button { width: consent.width height: 24 text: consent.caption on_tap: app.accept("Consent ñ") }
+    Absolute {
+        Button(width: consent.width, height: 24, text: ("Consent ñ"), on_tap: app.accept("Consent ñ"))
+    }
 }', 'import ui2
 @[heap]
 struct State {
@@ -69,9 +63,10 @@ fn main() {
     mut app := &State{}
     tree := build(mut app)
     checkbox := tree.children[0].children[0]
-    button := tree.children[1]
+    button := tree.children[1].children[0]
     assert checkbox.frame == ui2.rect(0, 0, 100, 24)
-    assert button.frame == ui2.rect(100, 0, 100, 24)
+    assert tree.children[1].frame == ui2.rect(100, 0, 100, 24)
+    assert button.frame == ui2.rect(0, 0, 100, 24)
     assert button.text == "Consent ñ"
     app.note = "live true"
     checkbox.on_event(ui2.ElementEvent{ kind: .change, id: checkbox.id, checked: true })
@@ -109,13 +104,11 @@ fn run_bounded_layout_fixture(name string, view string, program string) {
 }
 
 fn test_shared_builders_export_visible_children_to_parent_menu_declarations() {
-	run_bounded_layout_fixture('shared_menu_scope', 'Absolute {
-    width: 100 height: 30
-    Row {
-        width: 100 height: 30 align_items: .start
-        MenuItem { text: item.caption }
-        Label { id: item computed string caption: "Menu caption" width: 20 height: 20 }
-        MenuItem { text: "Width \${item.width}" }
+	run_bounded_layout_fixture('shared_menu_scope', 'Absolute(width: 100, height: 30) {
+    Row(width: 100, height: 30, align_items: start) {
+        MenuItem(text: ("Menu caption"))
+        Label(id: "item", width: 20, height: 20)
+        MenuItem(text: "Width \${item.width}")
     }
 }', 'import ui2
 fn main() {
@@ -128,19 +121,18 @@ fn main() {
 }
 
 fn test_vertical_wrap_omitted_width_and_following_nested_sibling() {
-	run_bounded_layout_fixture('vertical_wrap', 'Absolute {
-    width: 500 height: 200
-    Row {
-        width: 300 height: 80 align_items: .start
-        Column {
-            id: wrapped height: 40 wrap: true gap: 5 align_items: .start
-            Label { width: 30 height: 20 text: "a" }
-            Label { width: 30 height: 20 text: "b" }
-            Label { width: 30 height: 20 text: "c" }
+	run_bounded_layout_fixture('vertical_wrap', 'Absolute(width: 500, height: 200) {
+    Row(width: 300, height: 80, align_items: start) {
+        Column(id: "wrapped", height: 40, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20, text: "a")
+            Label(width: 30, height: 20, text: "b")
+            Label(width: 30, height: 20, text: "c")
         }
-        Row { width: 80 height: 30 Label { width: 20 height: 20 text: "next" } }
+        Row(width: 80, height: 30) {
+            Label(width: 20, height: 20, text: "next")
+        }
     }
-    Label { x: wrapped.width width: wrapped.width height: 20 text: "extent" }
+    Label(x: wrapped.width, width: wrapped.width, height: 20, text: "extent")
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -156,18 +148,26 @@ fn main() {
 }
 
 fn test_vertical_wrap_fractional_padding_and_distinct_gaps() {
-	run_bounded_layout_fixture('fractional_wrap', 'Absolute {
-    width: 500 height: 200
-    Row {
-        width: 400 height: 80 padding: 1.25 gap: 2.5 align_items: .start
-        Column {
-            height: 48 wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
-            padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
-            Label { width: 30.5 height: 21.25 text: "a" }
-            Label { width: 30.5 height: 21.25 text: "b" }
-            Label { width: 30.5 height: 21.25 text: "c" }
+	run_bounded_layout_fixture('fractional_wrap', 'Absolute(width: 500, height: 200) {
+    Row(width: 400, height: 80, padding: 1.25, gap: 2.5, align_items: start) {
+        Column(
+            height: 48,
+            wrap: true,
+            gap: 4.25,
+            line_gap: 6.75,
+            align_items: start,
+            padding_left: 2.5,
+            padding_right: 3.25,
+            padding_top: 1.5,
+            padding_bottom: 2.5,
+        ) {
+            Label(width: 30.5, height: 21.25, text: "a")
+            Label(width: 30.5, height: 21.25, text: "b")
+            Label(width: 30.5, height: 21.25, text: "c")
         }
-        Row { width: 80 height: 30 Label { width: 20 height: 20 text: "next" } }
+        Row(width: 80, height: 30) {
+            Label(width: 20, height: 20, text: "next")
+        }
     }
 }', 'import ui2
 fn main() {
@@ -182,8 +182,8 @@ fn main() {
 
 fn test_nested_layout_build_work_is_bounded_and_fresh_per_build() {
 	for depth in [1, 2, 4, 8, 16] {
-		mut view := 'Label { width: app.leaf_width() height: 20 text: "leaf" on_tap: app.accept(app.value) }'
-		for _ in 0 .. depth { view = 'Row { align_items: .start ${view} }' }
+		mut view := 'Label(width: app.leaf_width(), height: 20, text: "leaf", on_tap: app.accept(app.value))'
+		for _ in 0 .. depth { view = 'Row(align_items: start) { ${view} }' }
 		run_bounded_layout_fixture('growth_${depth}', view, 'import ui2
 @[heap]
 struct State {
@@ -222,14 +222,18 @@ fn main() {
 }
 
 fn test_shared_layout_builders_refresh_allocated_sibling_references() {
-	run_bounded_layout_fixture('shared_grid_scope', 'Absolute {
-    width: 300 height: 120
-    Grid {
-        width: 200 height: 100 columns: 2 rows: 1
-        View { id: seed height: 20 Label { width: 20 height: 20 text: "seed" } }
-        Row { align_items: .start Label { width: seed.width height: 20 text: "receiving" } }
+	run_bounded_layout_fixture('shared_grid_scope', 'Absolute(width: 300, height: 120) {
+    Grid(width: 200, height: 100, columns: 2, rows: 1) {
+        View(id: "seed", height: 20) {
+            Label(width: 20, height: 20, text: "seed")
+        }
+        Row(align_items: start) {
+            Absolute {
+                Label(width: seed.width, height: 20, text: "receiving")
+            }
+        }
     }
-    Label { x: seed.x width: seed.width height: 20 text: "following" }
+    Label(x: seed.x, width: seed.width, height: 20, text: "following")
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -244,22 +248,22 @@ fn main() {
 
 fn test_shared_layout_build_work_with_input_dependent_properties() {
 	for depth in [2, 4, 8, 12] {
-		mut view := 'Label { width: app.record(30) height: 20 text: "leaf" }'
+		mut view := 'Label(width: app.record(30), height: 20, text: "leaf")'
+		// Supply offered dimensions as data instead of reading a container's own geometry.
+		mut divisor := 1.0
+		for _ in 1 .. depth { divisor *= 4 }
 		for index in 0 .. depth {
-			view = 'Row {
-                id: level_${index}
-                computed f64 offered: level_${index}.width
-                width: level_${index}.offered / 2
-                height: 20 align_items: .start
-                ${view}
-            }'
+			width := if index == depth - 1 { 512.0 } else { 1024.0 / divisor }
+			view = 'Row(id: "level_${index}", width: app.offered * ${width} / 1024, height: 20, align_items: start) { ${view} }'
+			divisor /= 4
 		}
-		view = 'Absolute { width: 1024 height: 60 ${view} }'
+		view = 'Absolute(width: 1024, height: 60) { ${view} }'
 		run_bounded_layout_fixture('responsive_growth_${depth}', view, 'import ui2
 @[heap]
 struct State {
 pub mut:
     evaluations int
+    offered f64 = 1024
 }
 // record counts actual property evaluation, without changing its value.
 pub fn (mut app State) record(value f64) f64 { app.evaluations++; return value }
@@ -287,26 +291,27 @@ fn main() {
 fn sibling_fixture_root(name string) string {
 	root := os.join_path(os.vtmp_dir(), 'vml_siblings_${name}_${os.getpid()}')
 	os.mkdir_all(root) or { panic(err) }
-	return root
+	return os.real_path(root)
 }
 
 fn test_shared_builders_keep_slider_and_interaction_enum_types() {
-	run_bounded_layout_fixture('shared_enum_types', 'Absolute {
-    width: 300 height: 120
-    Row {
-        width: 150 height: 30 align_items: .start
-        Slider { width: 30 height: 20 orientation: .horizontal }
-        Slider { width: 30 height: 20 orientation: .vertical }
-        Button {
-            width: 30 height: 20 text: "button"
-            hover_border_pattern: .dashed focus_border_pattern: .solid
-            pressed_border_pattern: .dashed disabled_border_pattern: .solid
-        }
+	run_bounded_layout_fixture('shared_enum_types', 'Absolute(width: 300, height: 120) {
+    Row(width: 150, height: 30, align_items: start) {
+        Slider(width: 30, height: 20, orientation: horizontal)
+        Slider(width: 30, height: 20, orientation: vertical)
+        Button(
+            width: 30,
+            height: 20,
+            text: "button",
+            hover_border_pattern: dashed,
+            focus_border_pattern: solid,
+            pressed_border_pattern: dashed,
+            disabled_border_pattern: solid,
+        )
     }
-    Grid {
-        width: 150 height: 30 columns: 2 rows: 1
-        Slider { width: 30 height: 20 orientation: .horizontal }
-        Slider { width: 30 height: 20 orientation: .vertical }
+    Grid(width: 150, height: 30, columns: 2, rows: 1) {
+        Slider(width: 30, height: 20, orientation: horizontal)
+        Slider(width: 30, height: 20, orientation: vertical)
     }
 }', 'import ui2
 fn main() {
@@ -326,27 +331,22 @@ fn main() {
 }
 
 fn test_vertical_wrap_measured_and_inherited_container_widths() {
-	run_bounded_layout_fixture('inherited_vertical_wrap', 'Absolute {
-    width: 500 height: 120
-    View {
-        width: 0 height: 40
-        Column {
-            id: natural height: 40 wrap: true gap: 5 align_items: .start
-            Label { width: 30 height: 20 text: "a" }
-            Label { width: 30 height: 20 text: "b" }
-            Label { width: 30 height: 20 text: "c" }
+	run_bounded_layout_fixture('inherited_vertical_wrap', 'Absolute(width: 500, height: 120) {
+    View(width: 0, height: 40) {
+        Column(id: "natural", height: 40, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20, text: "a")
+            Label(width: 30, height: 20, text: "b")
+            Label(width: 30, height: 20, text: "c")
         }
     }
-    View {
-        width: 200 height: 40
-        Column {
-            id: inherited height: 40 wrap: true gap: 5 align_items: .start
-            Label { width: 30 height: 20 text: "a" }
-            Label { width: 30 height: 20 text: "b" }
-            Label { width: 30 height: 20 text: "c" }
+    View(width: 200, height: 40) {
+        Column(id: "inherited", height: 40, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20, text: "a")
+            Label(width: 30, height: 20, text: "b")
+            Label(width: 30, height: 20, text: "c")
         }
     }
-    Label { x: natural.width width: inherited.width height: 20 text: "following" }
+    Label(x: natural.width, width: inherited.width, height: 20, text: "following")
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -360,7 +360,7 @@ fn main() {
 }
 
 fn compile_sibling_fixture(root string) os.Result {
-	args := [@VEXE, '-new-compiler', '-nocache', '-path', '@vlib:@vmodules', '-cc', 'clang',
+	args := [@VEXE, '-b', 'c', '-nocache', '-path', '@vlib:@vmodules', '-cc', 'clang',
 		'-no-retry-compilation', '-d', 'ui2_custom_rendering', '-o', os.join_path(root, 'app'),
 		os.join_path(root, 'main.v')]
 	os.write_file(os.join_path(root, 'compile-command.txt'), args.join('\n')) or { panic(err) }
@@ -376,48 +376,34 @@ fn compile_sibling_fixture(root string) os.Result {
 }
 
 fn run_sibling_geometry(tag string, config string, expected string, inner_x int, inner_y int) {
+	inner_height := if tag == 'Grid' { 33 } else { 20 }
 	root := sibling_fixture_root(tag)
 	defer {
 		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
 	}
-	os.write_file(os.join_path(root, 'view.vml'), 'Absolute {
-    width: 400 height: 400
-    ${tag} {
-        id: layout
-        x: 10 y: 15 width: 200 height: 80
-        ${config}
-        Label {
-            id: first
-            computed f64 unit: app.geometry.width
-            computed string caption: app.name
-            computed bool strong: app.strong
-            computed color ink: app.ink
-            width: first.unit height: 20
-            text: first.caption bold: first.strong color: first.ink
-            on_tap: app.accept(app.argument)
-        }
-        Column {
-            id: middle
-            computed f64 half: first.unit / 2
-            width: first.width
-            align_items: .start
-            Label {
-                id: inner
-                width: middle.half height: first.height
-                font_size: 18
-                Run { text: first.caption bold: first.strong color: first.ink }
+	os.write_file(os.join_path(root, 'view.vml'), 'component Siblings() {
+    computed unit := app.geometry.width
+    computed caption := app.name
+    computed strong := app.strong
+    computed ink := app.ink
+    computed half := unit / 2
+    Absolute(width: 400, height: 400) {
+        ${tag}(id: "layout", x: 10, y: 15, width: 200, height: 80, ${config}) {
+            Label(id: "first", width: unit, height: 20, text: caption, bold: strong, color: ink, on_tap: app.accept(app.argument))
+            Absolute(id: "middle") {
+                Column(width: first.width, align_items: start) {
+                    Absolute {
+                        Label(id: "inner", width: half, height: first.height, font_size: 18) {
+                            Run(text: caption, bold: strong, color: ink)
+                        }
+                    }
+                }
+            }
+            Absolute {
+                TextInput(id: "input", width: half, height: inner.height, bind.text: app.name, on_submit: app.submit(app.name))
             }
         }
-        TextInput {
-            width: middle.half height: inner.height
-            bind.text: app.name
-            on_submit: app.submit(app.name)
-        }
-    }
-    Label {
-        x: middle.x y: inner.y
-        width: middle.half height: inner.height
-        text: first.caption
+        Label(x: middle.x, y: inner.y, width: half, height: inner.height, text: caption)
     }
 }') or { panic(err) }
 	os.write_file(os.join_path(root, 'main.v'), 'module main
@@ -443,13 +429,13 @@ fn main() {
     tree := build(mut app)
     layout := tree.children[0]
     assert layout.children.map(it.frame) == ${expected}
-    inner := layout.children[1].children[0]
-    assert inner.frame == ui2.rect(${inner_x}, ${inner_y}, 20, 20)
+    inner := layout.children[1].children[0].children[0].children[0]
+    assert inner.frame == ui2.rect(${inner_x}, ${inner_y}, 20, ${inner_height})
     assert inner.text_runs[0].text == "niñez"
     assert inner.text_runs[0].style.bold
     assert inner.text_runs[0].style.size == 18
     assert inner.text_runs[0].style.color == 0x123456
-    assert tree.children[1].frame == ui2.rect(layout.children[1].frame.x, ${inner_y}, 20, 20)
+    assert tree.children[1].frame == ui2.rect(layout.children[1].frame.x, ${inner_y}, 20, ${inner_height})
     assert tree.children[1].text == "niñez"
     first := layout.children[0]
     assert app.received == 0 && app.submitted == ""
@@ -457,16 +443,17 @@ fn main() {
     app.argument = 55
     first.on_event(ui2.ElementEvent{kind: .tap, id: first.id})
     assert app.received == 55
-    input := layout.children[2]
-    assert input.id.len > 0
+    input := layout.children[2].children[0]
+    assert input.id.len > 0 && input.id != "input"
     input.on_event(ui2.ElementEvent{kind: .change, id: input.id, text: "canción"})
     assert app.name == "canción"
     input.on_event(ui2.ElementEvent{kind: .submit, id: input.id, text: app.name})
     assert app.submitted == "canción"
-    fresh := build(mut app)
+    fresh := tree.compiled_node.element()
     assert fresh.children[0].children[0].text == "canción"
-    assert fresh.children[0].children[2].id == input.id
-    assert fresh.children[0].children[2].key == input.key
+    assert fresh.children[0].children[2].children[0].id == input.id
+    assert fresh.children[0].children[2].children[0].key == input.key
+    assert fresh.children[0].children[2].children[0].compiled_node == input.compiled_node
     assert fresh.children[1].frame.width == 27.5
     println("${tag} sibling geometry and live callbacks PASS")
 }') or { panic(err) }
@@ -480,22 +467,22 @@ fn main() {
 }
 
 fn test_row_sibling_scopes_with_skipped_height_and_nested_computed_properties() {
-	run_sibling_geometry('Row', 'padding: 4 gap: 6 align_items: .start',
+	run_sibling_geometry('Row', 'padding: 4, gap: 6, align_items: start',
 		'[ui2.rect(4, 4, 40, 20), ui2.rect(50, 4, 40, 20), ui2.rect(96, 4, 20, 20)]', 0, 0)
 }
 
 fn test_column_sibling_scopes_with_typed_model_reference_and_bindings() {
-	run_sibling_geometry('Column', 'padding: 4 gap: 6 align_items: .start',
+	run_sibling_geometry('Column', 'padding: 4, gap: 6, align_items: start',
 		'[ui2.rect(4, 4, 40, 20), ui2.rect(4, 30, 40, 20), ui2.rect(4, 56, 20, 20)]', 0, 0)
 }
 
 fn test_flex_sibling_scopes_with_independent_offsets() {
-	run_sibling_geometry('Flex', 'orientation: .horizontal padding: 4 gap: 6 align_items: .start',
+	run_sibling_geometry('Flex', 'orientation: horizontal, padding: 4, gap: 6, align_items: start',
 		'[ui2.rect(4, 4, 40, 20), ui2.rect(50, 4, 40, 20), ui2.rect(96, 4, 20, 20)]', 0, 0)
 }
 
 fn test_grid_sibling_scopes_and_final_allocated_coordinates() {
-	run_sibling_geometry('Grid', 'columns: 2 rows: 2 padding: 4 spacing: 6',
+	run_sibling_geometry('Grid', 'columns: 2, rows: 2, padding: 4, spacing: 6',
 		'[ui2.rect(4, 4, 93, 33), ui2.rect(103, 4, 93, 33), ui2.rect(4, 43, 93, 33)]', 0, 0)
 }
 
@@ -504,27 +491,28 @@ fn test_width_measurement_skips_only_the_current_child_scope() {
 	defer {
 		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
 	}
-	os.write_file(os.join_path(root, 'view.vml'), 'Absolute {
-    width: 300 height: 200
-    Column {
-        width: 300 height: 200 align_items: .start
-    Row {
-        id: row width: 300 gap: 5 align_items: .start
-        Label { id: fixed width: 40 height: 20 text: "Fixed" }
-        Column {
-            id: measured
-            computed f64 offered: measured.width
-            width: fixed.width align_items: .start
-            Label { id: descendant width: 40 height: 20 text: "Nested" }
-        }
-        Label { width: descendant.width height: 20 text: "Skipped" }
-        Column {
-            width: fixed.width align_items: .start
-            Label { width: 40 height: measured.offered text: "Last" }
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute(width: 300, height: 200) {
+    Column(width: 300, height: 200, align_items: start) {
+        Row(id: "row", width: 300, gap: 5, align_items: start) {
+            Label(id: "fixed", width: 40, height: 20, text: "Fixed")
+            Absolute(id: "measured") {
+                Column(width: fixed.width, align_items: start) {
+                    Label(id: "descendant", width: 40, height: 20, text: "Nested")
+                }
+            }
+            Absolute {
+                Label(width: descendant.width, height: 20, text: "Skipped")
+            }
+            Absolute {
+                Column(width: fixed.width, align_items: start) {
+                    Absolute {
+                        Label(width: 40, height: (measured.width), text: "Last")
+                    }
+                }
+            }
         }
     }
-    }
-    Label { x: measured.x width: descendant.width height: row.height text: "Final" }
+    Label(x: measured.x, width: descendant.width, height: row.height, text: "Final")
 }') or { panic(err) }
 	os.write_file(os.join_path(root, 'main.v'), 'import ui2
 fn main() {
@@ -552,34 +540,54 @@ fn test_invalid_sibling_references_keep_vml_positions_and_call_sites() {
 	os.write_file(source, 'import ui2\nfn main() { _ = $vml("view.vml") }') or { panic(err) }
 	for index, entry in [
 		[
-			'Row {\n    Label { id: first width: later.width height: 20 }\n    Label { id: later width: 40 height: 20 }\n}',
-			'2:23',
+			'Absolute() {
+    Label(id: "first", width: later.width, height: 20)
+    Label(id: "later", width: 40, height: 20)
+}',
+			'2:24',
 			'undefined variable: `later`',
 		],
 		[
-			'Column {\n    Label { id: first computed string caption: "bad" width: 40 height: 20 }\n    Label { width: first.caption height: 20 }\n}',
-			'3:13',
-			'cannot assign to field `width`: expected `f64`, not `string`',
+			'Absolute() {
+    Label(id: "first", width: 40, height: 20)
+    Label(width: ("bad"), height: 20)
+}',
+			'3:11',
+			'`width` requires a number',
 		],
 		[
-			'Flex {\n    Label { id: first width: 40 height: 20 }\n    Label { width: missing.width }\n}',
-			'3:13',
+			'Absolute() {
+    Label(id: "first", width: 40, height: 20)
+    Label(width: missing.width)
+}',
+			'3:11',
 			'undefined variable: `missing`',
 		],
 		[
-			'Grid { columns: 2\n    Label { id: first width: 40 height: 20 }\n    Label { width: first.absent }\n}',
-			'3:13',
-			'undefined variable: `first`',
+			'Absolute() {
+    Label(id: "first", width: 40, height: 20)
+    Label(width: first.absent)
+}',
+			'3:11',
+			'undefined ident: `first`',
 		],
 		[
-			'Row {\n    Label { id: first computed bool flag: true width: 40 height: 20 }\n    Label { width: first.flag }\n}',
-			'3:13',
-			'cannot assign to field `width`: expected `f64`, not `bool`',
+			'Absolute() {
+    Label(id: "first", width: 40, height: 20)
+    Label(width: (true))
+}',
+			'3:11',
+			'`width` requires a number',
 		],
 		[
-			'Row {\n    View { Label { id: inner computed string caption: "bad" text: "WWW" } }\n    Label { width: inner.caption height: 20 }\n}',
-			'3:13',
-			'cannot assign to field `width`: expected `f64`, not `string`',
+			'Absolute() {
+    View() {
+        Label(id: "inner", text: "WWW")
+    }
+    Label(width: ("bad"), height: 20)
+}',
+			'5:11',
+			'`width` requires a number',
 		],
 	] {
 		os.write_file(view, entry[0]) or { panic(err) }
@@ -609,10 +617,11 @@ fn run_intrinsic_sibling_fixture(name string, view string, program string) {
 }
 
 fn test_intrinsic_width_survives_explicit_height_skipped_sibling() {
-	run_intrinsic_sibling_fixture('intrinsic_skipped', 'Column {
-    width: 300 height: 100 gap: 7 align_items: .start
-    Label { id: first text: "WWW" height: 20 }
-    Label { text: "Copy" width: first.width height: 20 }
+	run_intrinsic_sibling_fixture('intrinsic_skipped', 'Column(width: 300, height: 100, gap: 7, align_items: start) {
+    Label(id: "first", text: "WWW", height: 20)
+    Absolute {
+        Label(text: "Copy", width: first.width, height: 20)
+    }
 }', 'import ui2
 fn main() {
     size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
@@ -623,14 +632,14 @@ fn main() {
 }
 
 fn test_intrinsic_leaf_and_unsized_nested_layout_expose_measured_geometry() {
-	run_intrinsic_sibling_fixture('intrinsic_nested', 'Absolute {
-    width: 300 height: 300
-    Column {
-        id: block gap: 7 align_items: .start
-        Label { id: first text: "WWW" }
-        Label { text: "Copy" width: first.width height: first.height }
+	run_intrinsic_sibling_fixture('intrinsic_nested', 'Absolute(width: 300, height: 300) {
+    Column(id: "block", gap: 7, align_items: start) {
+        Label(id: "first", text: "WWW")
+        Absolute {
+            Label(text: "Copy", width: first.width, height: first.height)
+        }
     }
-    Label { x: block.width y: block.height width: block.width height: block.height text: "Final" }
+    Label(x: block.width, y: block.height, width: block.width, height: block.height, text: "Final")
 }', 'import ui2
 fn main() {
     size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
@@ -645,15 +654,10 @@ fn main() {
 }
 
 fn test_width_pass_sibling_height_uses_wrapped_leaf_measurement() {
-	run_intrinsic_sibling_fixture('intrinsic_width_pass', 'Row {
-    width: 80 height: 200 align_items: .start
-    Label { id: first text: "WW WW WW WW" lines: 10 flex_basis: 40 flex_shrink: 0 }
-    Label {
-        id: second
-        computed f64 seen_height: first.height
-        width: first.width
-        line_height: second.seen_height
-        text: "Copy" flex_basis: 40 flex_shrink: 0
+	run_intrinsic_sibling_fixture('intrinsic_width_pass', 'Row(width: 80, height: 200, align_items: start) {
+    Label(id: "first", text: "WW WW WW WW", lines: 10, flex_basis: 40, flex_shrink: 0)
+    Absolute(flex_basis: 40, flex_shrink: 0) {
+        Label(id: "second", width: first.width, line_height: (first.height), text: "Copy")
     }
 }', 'import ui2
 fn main() {
@@ -663,29 +667,35 @@ fn main() {
     assert natural.width > 40 && wrapped.height > natural.height
     tree := $vml("view.vml")
     assert tree.children.map(it.frame) == [ui2.rect(0, 0, 40, wrapped.height), ui2.rect(40, 0, 40, wrapped.height)]
-    assert tree.children[1].text_style.line_height == wrapped.height
+    assert tree.children[1].children[0].text_style.line_height == wrapped.height
 }')
 }
 
 fn test_intrinsic_sibling_sizes_determine_wrapped_flex_autoheight() {
-	run_intrinsic_sibling_fixture('intrinsic_wrap', 'Absolute {
-    width: 300 height: 300
-    Flex {
-        id: flow width: app.width wrap: true gap: 5 line_gap: 9 align_items: .start
-        Label { id: first text: "WWW" }
-        Label { text: "Copy" width: first.width height: first.height }
-        Label { text: "Last" width: first.width height: first.height }
+	run_intrinsic_sibling_fixture('intrinsic_wrap', 'Absolute(width: 300, height: 300) {
+    Flex(id: "flow", width: app.width, wrap: true, gap: 5, line_gap: 9, align_items: start) {
+        Label(id: "first", text: "WWW")
+        Absolute {
+            Label(text: "Copy", width: first.width, height: first.height)
+        }
+        Absolute {
+            Label(text: "Last", width: first.width, height: first.height)
+        }
     }
-    Label { x: flow.width y: flow.height width: first.width height: first.height text: "Final" }
+    Label(x: flow.width, y: flow.height, width: first.width, height: first.height, text: "Final")
 }', 'import ui2
-struct State { width f64 }
+@[heap]
+struct State {
+pub mut:
+    width f64
+}
 fn build(mut app State) ui2.Element { return $vml("view.vml") }
 fn main() {
     size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
     assert size.width > 0 && size.height > 0
     width := size.width * 2 + 5
     height := size.height * 2 + 9
-    mut app := State{width: width}
+    mut app := &State{width: width}
     tree := build(mut app)
     flow := tree.children[0]
     assert flow.frame == ui2.rect(0, 0, width, height)
@@ -699,25 +709,22 @@ fn test_nested_grid_width_measurement_keeps_explicit_height_descendant_ids() {
 	defer {
 		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
 	}
-	os.write_file(os.join_path(root, 'view.vml'), 'Absolute {
-    width: 300 height: 200
-    Column {
-        width: 200 height: 120 align_items: .start
-        Grid {
-            id: grid width: 200 columns: 2
-            View {
-                width: 50 height: 20
-                Label { id: seed width: 50 height: 20 text: "Seed" }
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute(width: 300, height: 200) {
+    Column(width: 200, height: 120, align_items: start) {
+        Grid(id: "grid", width: 200, columns: 2) {
+            View(id: "cell", width: 50, height: 20) {
+                Label(id: "seed", width: 50, height: 20, text: "Seed")
             }
-            Column {
-                id: sized
-                computed f64 offered: sized.width
-                width: seed.width align_items: .start
-                Label { width: seed.width height: sized.offered text: "Sized" }
+            Absolute(id: "sized") {
+                Column(width: seed.width, align_items: start) {
+                    Absolute {
+                        Label(width: seed.width, height: cell.width, text: "Sized")
+                    }
+                }
             }
         }
     }
-    Label { x: sized.x width: seed.width height: grid.height text: "Final" }
+    Label(x: sized.x, width: seed.width, height: grid.height, text: "Final")
 }') or { panic(err) }
 	os.write_file(os.join_path(root, 'main.v'), 'import ui2
 fn main() {
@@ -738,10 +745,13 @@ fn main() {
 }
 
 fn test_auto_view_descendant_height_is_visible_to_following_sibling() {
-	run_intrinsic_sibling_fixture('descendant_auto', 'Row {
-    width: 300 height: 80 align_items: .start
-    View { Label { id: inner text: "WWW" } }
-    Label { width: 40 height: inner.height text: "Copy" }
+	run_intrinsic_sibling_fixture('descendant_auto', 'Row(width: 300, height: 80, align_items: start) {
+    View {
+        Label(id: "inner", text: "WWW")
+    }
+    Absolute {
+        Label(width: 40, height: inner.height, text: "Copy")
+    }
 }', 'import ui2
 fn main() {
     size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
@@ -754,10 +764,15 @@ fn main() {
 }
 
 fn test_nested_view_autoheight_keeps_offered_width_for_wrapping() {
-	run_intrinsic_sibling_fixture('descendant_fixed_width', 'Row {
-    width: 300 height: 200 align_items: .start
-    View { width: 120 View { Label { id: inner text: "WW WW WW WW WW WW" lines: 10 } } }
-    Label { width: 40 height: inner.height text: "Copy" }
+	run_intrinsic_sibling_fixture('descendant_fixed_width', 'Row(width: 300, height: 200, align_items: start) {
+    View(width: 120) {
+        View {
+            Label(id: "inner", text: "WW WW WW WW WW WW", lines: 10)
+        }
+    }
+    Absolute {
+        Label(width: 40, height: inner.height, text: "Copy")
+    }
 }', 'import ui2
 fn main() {
     text := "WW WW WW WW WW WW"
@@ -773,10 +788,15 @@ fn main() {
 }
 
 fn test_nested_view_autowidth_keeps_inherited_fixed_height() {
-	run_intrinsic_sibling_fixture('descendant_fixed_height', 'Column {
-    width: 300 height: 100 align_items: .start
-    View { height: 30 View { Label { id: inner text: "WWW" } } }
-    Label { width: inner.width height: 20 text: "Copy" }
+	run_intrinsic_sibling_fixture('descendant_fixed_height', 'Column(width: 300, height: 100, align_items: start) {
+    View(height: 30) {
+        View {
+            Label(id: "inner", text: "WWW")
+        }
+    }
+    Absolute {
+        Label(width: inner.width, height: 20, text: "Copy")
+    }
 }', 'import ui2
 fn main() {
     size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
@@ -788,15 +808,16 @@ fn main() {
 }
 
 fn test_view_measures_nested_layout_ids_with_inherited_width() {
-	run_intrinsic_sibling_fixture('descendant_layouts', 'Row {
-    width: 300 height: 100 align_items: .start
-    View { width: 100
-        Row { id: nested padding: 5 gap: 7 align_items: .start
-            Label { width: 20 height: 10 text: "A" }
-            Label { width: 30 height: 15 text: "B" }
+	run_intrinsic_sibling_fixture('descendant_layouts', 'Row(width: 300, height: 100, align_items: start) {
+    View(width: 100) {
+        Row(id: "nested", padding: 5, gap: 7, align_items: start) {
+            Label(width: 20, height: 10, text: "A")
+            Label(width: 30, height: 15, text: "B")
         }
     }
-    Label { width: 40 height: nested.height text: "Copy" }
+    Absolute {
+        Label(width: 40, height: nested.height, text: "Copy")
+    }
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -805,15 +826,16 @@ fn main() {
     assert nested.frame == ui2.rect(0, 0, 100, 25)
     assert nested.children.map(it.frame) == [ui2.rect(5, 5, 20, 10), ui2.rect(32, 5, 30, 15)]
 }')
-	run_intrinsic_sibling_fixture('descendant_grid', 'Row {
-    width: 300 height: 100 align_items: .start
-    View { width: 100
-        Grid { id: nested columns: 2
-            Label { width: 20 height: 10 text: "A" }
-            Label { width: 30 height: 15 text: "B" }
+	run_intrinsic_sibling_fixture('descendant_grid', 'Row(width: 300, height: 100, align_items: start) {
+    View(width: 100) {
+        Grid(id: "nested", columns: 2) {
+            Label(width: 20, height: 10, text: "A")
+            Label(width: 30, height: 15, text: "B")
         }
     }
-    Label { width: 40 height: nested.height text: "Copy" }
+    Absolute {
+        Label(width: 40, height: nested.height, text: "Copy")
+    }
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -825,25 +847,48 @@ fn main() {
 }
 
 fn test_generic_normal_containers_keep_fixed_axes_and_absolute_auto_axes() {
-	run_intrinsic_sibling_fixture('descendant_normal', 'View {
-    width: 400 height: 400
-    View { width: 120 height: 30 View { Label { text: "WWW" } } }
-    Scroll { width: 120 height: 30 View { Label { text: "WWW" } } }
-    Screen { width: 120 height: 30 View { Label { text: "WWW" } } }
-    ScaledContent { width: 120 height: 30 content_width: 70 content_height: 25
-        View { Label { text: "WWW" } }
+	run_intrinsic_sibling_fixture('descendant_normal', 'View(width: 400, height: 400) {
+    View(width: 120, height: 30) {
+        View() {
+            Label(text: "WWW")
+        }
     }
-    Absolute { width: 120 height: 30 View { Label { text: "WWW" } } }
-    View { width: 0 height: 0 Label { width: 0 height: 0 hidden: false text: "Zero" } }
+    Scroll(width: 120, height: 30) {
+        View() {
+            Label(text: "WWW")
+        }
+    }
+    Screen(width: 120, height: 30) {
+        View() {
+            Label(text: "WWW")
+        }
+    }
+    ScaledContent(width: 120, height: 30, content_width: 70, content_height: 25) {
+        View() {
+            Label(text: "WWW")
+        }
+    }
+    Absolute(width: 120, height: 30) {
+        View() {
+            Label(text: "WWW")
+        }
+    }
+    View(width: 0, height: 0) {
+        Label(width: 0, height: 0, hidden: false, text: "Zero")
+    }
 }', 'import ui2
 fn main() {
     size := ui2.measure_layout_text("WWW", ui2.TextStyle{}, -1) or { panic(err) }
     tree := $vml("view.vml")
-    for i in 0 .. 3 {
+    for i in [0, 2] {
         assert tree.children[i].children[0].frame == ui2.rect(0, 0, 120, 30)
         assert tree.children[i].children[0].children[0].frame == ui2.rect(0, 0, 120, 30)
     }
-    assert tree.children[2].frame == ui2.Rect{}
+    // Nested Screens keep authored dimensions; mounted roots use the viewport.
+    assert tree.children[2].frame == ui2.rect(0, 0, 120, 30)
+    // Scroll content fills width and retains its independently measured height.
+    assert tree.children[1].children[0].frame == ui2.rect(0, 0, 120, size.height)
+    assert tree.children[1].children[0].children[0].frame == ui2.rect(0, 0, 120, size.height)
     assert tree.children[3].frame == ui2.rect(0, 0, 120, 30)
     assert tree.children[3].children[0].children[0].frame == ui2.rect(0, 0, 70, 25)
     assert tree.children[4].frame == ui2.rect(0, 0, 120, 30)
@@ -854,13 +899,14 @@ fn main() {
 }
 
 fn test_measured_view_keeps_explicit_zero_and_live_bindings_callbacks() {
-	run_intrinsic_sibling_fixture('descendant_live', 'Row {
-    width: 300 height: 80 align_items: .start
-    View { width: 80 height: 30
-        Label { id: inner width: 0 height: 0 hidden: false on_tap: app.accept(app.argument) }
-        TextInput { width: 40 height: 20 bind.text: app.name on_submit: app.submit(app.name) }
+	run_intrinsic_sibling_fixture('descendant_live', 'Row(width: 300, height: 80, align_items: start) {
+    View(width: 80, height: 30) {
+        Label(id: "inner", width: 0, height: 0, hidden: false, on_tap: app.accept(app.argument))
+        TextInput(width: 40, height: 20, bind.text: app.name, on_submit: app.submit(app.name))
     }
-    Label { width: inner.width height: inner.height text: "Copy" }
+    Absolute {
+        Label(width: inner.width, height: inner.height, text: "Copy")
+    }
 }', 'import ui2
 @[heap]
 struct State {
@@ -890,7 +936,7 @@ fn main() {
     assert app.name == "canción"
     input.on_event(ui2.ElementEvent{kind: .submit, id: input.id, text: app.name})
     assert app.submitted == "canción"
-    fresh := build(mut app)
+    fresh := tree.compiled_node.element()
     assert fresh.children[0].children[1].text == "canción"
     assert fresh.children[0].children[1].id == input.id
     assert fresh.children[0].children[1].key == input.key
@@ -898,16 +944,15 @@ fn main() {
 }
 
 fn test_selected_auto_grid_width_remeasures_five_rows_and_exports_final_geometry() {
-	run_bounded_layout_fixture('selected_auto_grid_five', 'Absolute {
-    width: 300 height: 300
-    Grid { id: cells auto_columns_min_width: 100
-        Label { id: first width: 20 height: 20 computed string caption: "five rows ñ" }
-        Label { width: 20 height: 20 }
-        Label { width: 20 height: 20 }
-        Label { width: 20 height: 20 }
-        Label { id: last width: 20 height: 20 }
+	run_bounded_layout_fixture('selected_auto_grid_five', 'Absolute(width: 300, height: 300) {
+    Grid(id: "cells", auto_columns_min_width: 100) {
+        Label(id: "first", width: 20, height: 20)
+        Label(width: 20, height: 20)
+        Label(width: 20, height: 20)
+        Label(width: 20, height: 20)
+        Label(id: "last", width: 20, height: 20)
     }
-    Label { x: cells.width y: cells.height width: last.width height: last.height text: first.caption }
+    Label(x: cells.width, y: cells.height, width: last.width, height: last.height, text: ("five rows ñ"))
 }', 'import ui2
 fn main() {
     sizes := [ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20), ui2.rect(0, 0, 20, 20)]
@@ -922,22 +967,21 @@ fn main() {
     tree := $vml("view.vml")
     assert tree.children[0].frame == ui2.rect(0, 0, 60, 100)
     assert tree.children[0].children.map(it.frame) == one_column
-    // Authored child dimensions remain property references; cells exposes its measured axes.
-    assert tree.children[1].frame == ui2.rect(60, 100, 20, 20)
+    // Geometry references expose the final assigned child frames.
+    assert tree.children[1].frame == ui2.rect(60, 100, 60, 20)
     assert tree.children[1].text == "five rows ñ"
     println("selected width 60, one column, five rows of 20, height 100 PASS")
 }')
 }
 
 fn test_selected_auto_grid_width_thresholds_keep_natural_width_and_child_heights() {
-	run_bounded_layout_fixture('selected_auto_grid_thresholds', 'Absolute {
-    width: 300 height: 300
-    Grid { auto_columns_min_width: app.minimum
-        Label { width: app.child_width height: 20 }
-        Label { width: app.child_width height: 20 }
-        Label { width: app.child_width height: 20 }
-        Label { width: app.child_width height: 20 }
-        Label { width: app.child_width height: 20 }
+	run_bounded_layout_fixture('selected_auto_grid_thresholds', 'Absolute(width: 300, height: 300) {
+    Grid(auto_columns_min_width: app.minimum) {
+        Label(width: app.child_width, height: 20)
+        Label(width: app.child_width, height: 20)
+        Label(width: app.child_width, height: 20)
+        Label(width: app.child_width, height: 20)
+        Label(width: app.child_width, height: 20)
     }
 }', 'import ui2
 @[heap]
@@ -973,16 +1017,22 @@ fn main() {
 }
 
 fn test_selected_auto_grid_fractional_padding_spacing_and_column_cap() {
-	run_bounded_layout_fixture('selected_auto_grid_fractional', 'Absolute {
-    width: 300 height: 300
-    Grid { auto_columns_min_width: app.minimum max_columns: app.cap
-        padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
-        spacing_x: 2.5 spacing_y: 1.25
-        Label { width: 20.5 height: 10.25 }
-        Label { width: 20.5 height: 10.25 }
-        Label { width: 20.5 height: 10.25 }
-        Label { width: 20.5 height: 10.25 }
-        Label { width: 20.5 height: 10.25 }
+	run_bounded_layout_fixture('selected_auto_grid_fractional', 'Absolute(width: 300, height: 300) {
+    Grid(
+        auto_columns_min_width: app.minimum,
+        max_columns: app.cap,
+        padding_left: 2.5,
+        padding_right: 3.25,
+        padding_top: 1.5,
+        padding_bottom: 2.5,
+        spacing_x: 2.5,
+        spacing_y: 1.25,
+    ) {
+        Label(width: 20.5, height: 10.25)
+        Label(width: 20.5, height: 10.25)
+        Label(width: 20.5, height: 10.25)
+        Label(width: 20.5, height: 10.25)
+        Label(width: 20.5, height: 10.25)
     }
 }', 'import ui2
 @[heap]
@@ -1015,14 +1065,33 @@ fn main() {
 }
 
 fn test_selected_auto_grid_nested_height_measurement_has_bounded_fresh_child_builds() {
-	run_bounded_layout_fixture('selected_auto_grid_nested', 'Absolute {
-    width: 300 height: 300
-    Grid { auto_columns_min_width: 100
-        View { View { Label { width: app.leaf_width() height: 20 } } }
-        View { View { Label { width: app.leaf_width() height: 20 } } }
-        View { View { Label { width: app.leaf_width() height: 20 } } }
-        View { View { Label { width: app.leaf_width() height: 20 } } }
-        View { View { Label { width: app.leaf_width() height: 20 } } }
+	run_bounded_layout_fixture('selected_auto_grid_nested', 'Absolute(width: 300, height: 300) {
+    Grid(auto_columns_min_width: 100) {
+        View() {
+            View() {
+                Label(width: app.leaf_width(), height: 20)
+            }
+        }
+        View() {
+            View() {
+                Label(width: app.leaf_width(), height: 20)
+            }
+        }
+        View() {
+            View() {
+                Label(width: app.leaf_width(), height: 20)
+            }
+        }
+        View() {
+            View() {
+                Label(width: app.leaf_width(), height: 20)
+            }
+        }
+        View() {
+            View() {
+                Label(width: app.leaf_width(), height: 20)
+            }
+        }
     }
 }', 'import ui2
 @[heap]
@@ -1056,25 +1125,29 @@ fn main() {
 }
 
 fn test_selected_auto_grid_preserves_authored_inherited_and_allocated_zero_axes() {
-	run_bounded_layout_fixture('selected_auto_grid_axes', 'Absolute {
-    width: 300 height: 300
-    Grid { width: 0 height: 0 auto_columns_min_width: 100 padding: 1.25
-        Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+	run_bounded_layout_fixture('selected_auto_grid_axes', 'Absolute(width: 300, height: 300) {
+    Grid(width: 0, height: 0, auto_columns_min_width: 100, padding: 1.25) {
+        Label(width: 20, height: 20)
+        Label(width: 20, height: 20)
     }
-    Row { width: 0 height: 120 align_items: .start
-        Grid { auto_columns_min_width: 100 padding: 1.25
-            Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+    Row(width: 0, height: 120, align_items: start) {
+        Grid(auto_columns_min_width: 100, padding: 1.25) {
+            Label(width: 20, height: 20)
+            Label(width: 20, height: 20)
         }
     }
-    View { width: 60 height: 40
-        Grid { auto_columns_min_width: 100
-            Label { width: 20 height: 20 } Label { width: 20 height: 20 }
-            Label { width: 20 height: 20 } Label { width: 20 height: 20 }
-            Label { width: 20 height: 20 }
+    View(width: 60, height: 40) {
+        Grid(auto_columns_min_width: 100) {
+            Label(width: 20, height: 20)
+            Label(width: 20, height: 20)
+            Label(width: 20, height: 20)
+            Label(width: 20, height: 20)
+            Label(width: 20, height: 20)
         }
     }
-    Grid { height: 0 auto_columns_min_width: 100
-        Label { width: 20 height: 20 } Label { width: 20 height: 20 }
+    Grid(height: 0, auto_columns_min_width: 100) {
+        Label(width: 20, height: 20)
+        Label(width: 20, height: 20)
     }
 }', 'import ui2
 fn main() {
@@ -1096,14 +1169,15 @@ fn main() {
 }
 
 fn test_auto_grid_natural_padding_and_following_descendant_refs() {
-	run_bounded_layout_fixture('auto_grid_natural', 'Row {
-    width: 300 height: 100 align_items: .start
-    View { id: shell
-        Grid { id: cells columns: 2 padding: 10
-            Label { id: cell width: 20 height: 20 }
+	run_bounded_layout_fixture('auto_grid_natural', 'Row(width: 300, height: 100, align_items: start) {
+    View(id: "shell") {
+        Grid(id: "cells", columns: 2, padding: 10) {
+            Label(id: "cell", width: 20, height: 20)
         }
     }
-    Label { width: cells.width height: shell.height font_size: cell.width }
+    Absolute {
+        Label(width: cells.width, height: shell.height, font_size: cell.width)
+    }
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -1113,35 +1187,34 @@ fn main() {
     assert grid.frame == ui2.rect(0, 0, 60, 40)
     assert grid.children[0].frame == ui2.rect(10, 10, 20, 20)
     assert tree.children[1].frame == ui2.rect(60, 0, 60, 40)
-    assert tree.children[1].text_style.size == 20
+    assert tree.children[1].children[0].text_style.size == 20
     println("auto padded Grid natural axes and descendant references PASS")
 }')
 }
 
 fn test_auto_grid_constraint_axes_fractional_tracks_and_width_remeasurement() {
-	run_bounded_layout_fixture('auto_grid_constraints', 'Absolute {
-    width: 300 height: 300
-    View { width: 100 height: 60
-        Grid { id: inherited columns: 2 padding: 1.25 spacing_x: 2.5
-            Label { width: 20.5 height: 10 }
+	run_bounded_layout_fixture('auto_grid_constraints', 'Absolute(width: 300, height: 300) {
+    View(width: 100, height: 60) {
+        Grid(id: "inherited", columns: 2, padding: 1.25, spacing_x: 2.5) {
+            Label(width: 20.5, height: 10)
         }
     }
-    View {
-        Grid { width: 80 height: 30 columns: 2 padding: 1.25 spacing_x: 2.5
-            Label { width: 20.5 height: 10 }
+    View() {
+        Grid(width: 80, height: 30, columns: 2, padding: 1.25, spacing_x: 2.5) {
+            Label(width: 20.5, height: 10)
         }
     }
-    Row { width: 100 height: 60 align_items: .start
-        Grid { columns: 2 padding: 1.25 spacing_x: 2.5 flex_grow: 1
-            Label { width: 20.5 height: 10 }
+    Row(width: 100, height: 60, align_items: start) {
+        Grid(columns: 2, padding: 1.25, spacing_x: 2.5, flex_grow: 1) {
+            Label(width: 20.5, height: 10)
         }
     }
-    Row { width: 100 height: 200 align_items: .start
-        Grid { columns: 2 padding: 5 flex_grow: 1
-            Label { text: "WW WW WW WW WW WW" lines: 10 }
+    Row(width: 100, height: 200, align_items: start) {
+        Grid(columns: 2, padding: 5, flex_grow: 1) {
+            Label(text: "WW WW WW WW WW WW", lines: 10)
         }
     }
-    Label { x: inherited.width width: inherited.height height: 20 }
+    Label(x: inherited.width, width: inherited.height, height: 20)
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -1170,13 +1243,15 @@ fn test_auto_wrap_unoffered_main_axes_and_following_sibling_refs() {
 		'Column': '30, 45'
 	} {
 		run_bounded_layout_fixture('auto_wrap_${tag}', 'Absolute {
-    View { id: shell
-        ${tag} { id: flow wrap: true gap: 5 align_items: .start
-            Label { id: first width: 30 height: 20 }
-            Label { width: first.width height: first.height }
+    View(id: "shell") {
+        ${tag}(id: "flow", wrap: true, gap: 5, align_items: start) {
+            Label(id: "first", width: 30, height: 20)
+            Absolute {
+                Label(width: first.width, height: first.height)
+            }
         }
     }
-    Label { x: flow.width y: shell.height width: shell.width height: flow.height }
+    Label(x: flow.width, y: shell.height, width: shell.width, height: flow.height)
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -1193,37 +1268,79 @@ fn main() {
 }
 
 fn test_auto_wrap_fractional_padding_gaps_and_explicit_constraints() {
-	run_bounded_layout_fixture('auto_wrap_fractional', 'Absolute {
-    View { Row { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
-        padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
-        Label { width: 30.5 height: 21.25 }
-        Label { width: 30.5 height: 21.25 }
-    } }
-    View { Column { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
-        padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
-        Label { width: 30.5 height: 21.25 }
-        Label { width: 30.5 height: 21.25 }
-    } }
-    View { width: 36.25
-        Row { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
-            padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
-            Label { width: 30.5 height: 21.25 }
-            Label { width: 30.5 height: 21.25 }
+	run_bounded_layout_fixture('auto_wrap_fractional', 'Absolute() {
+    View() {
+        Row(
+            wrap: true,
+            gap: 4.25,
+            line_gap: 6.75,
+            align_items: start,
+            padding_left: 2.5,
+            padding_right: 3.25,
+            padding_top: 1.5,
+            padding_bottom: 2.5,
+        ) {
+            Label(width: 30.5, height: 21.25)
+            Label(width: 30.5, height: 21.25)
         }
     }
-    View { height: 25.25
-        Column { wrap: true gap: 4.25 line_gap: 6.75 align_items: .start
-            padding_left: 2.5 padding_right: 3.25 padding_top: 1.5 padding_bottom: 2.5
-            Label { width: 30.5 height: 21.25 }
-            Label { width: 30.5 height: 21.25 }
+    View() {
+        Column(
+            wrap: true,
+            gap: 4.25,
+            line_gap: 6.75,
+            align_items: start,
+            padding_left: 2.5,
+            padding_right: 3.25,
+            padding_top: 1.5,
+            padding_bottom: 2.5,
+        ) {
+            Label(width: 30.5, height: 21.25)
+            Label(width: 30.5, height: 21.25)
         }
     }
-    View { Row { width: 30 height: 70 wrap: true gap: 5 align_items: .start
-        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
-    } }
-    View { Column { width: 70 height: 20 wrap: true gap: 5 align_items: .start
-        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
-    } }
+    View(width: 36.25) {
+        Row(
+            wrap: true,
+            gap: 4.25,
+            line_gap: 6.75,
+            align_items: start,
+            padding_left: 2.5,
+            padding_right: 3.25,
+            padding_top: 1.5,
+            padding_bottom: 2.5,
+        ) {
+            Label(width: 30.5, height: 21.25)
+            Label(width: 30.5, height: 21.25)
+        }
+    }
+    View(height: 25.25) {
+        Column(
+            wrap: true,
+            gap: 4.25,
+            line_gap: 6.75,
+            align_items: start,
+            padding_left: 2.5,
+            padding_right: 3.25,
+            padding_top: 1.5,
+            padding_bottom: 2.5,
+        ) {
+            Label(width: 30.5, height: 21.25)
+            Label(width: 30.5, height: 21.25)
+        }
+    }
+    View() {
+        Row(width: 30, height: 70, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20)
+            Label(width: 30, height: 20)
+        }
+    }
+    View() {
+        Column(width: 70, height: 20, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20)
+            Label(width: 30, height: 20)
+        }
+    }
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -1242,23 +1359,36 @@ fn main() {
 }
 
 fn test_auto_wrap_and_grid_explicit_and_allocated_zero_are_not_natural_axes() {
-	run_bounded_layout_fixture('auto_axes_zero', 'Absolute {
-    View { Row { id: row width: 0 wrap: true gap: 5 align_items: .start
-        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
-    } }
-    View { Column { id: column height: 0 wrap: true gap: 5 align_items: .start
-        Label { width: 30 height: 20 } Label { width: 30 height: 20 }
-    } }
-    Row { width: 0 height: 50 align_items: .start
-        Row { wrap: true gap: 5 align_items: .start
-            Label { width: 30 height: 20 } Label { width: 30 height: 20 }
+	run_bounded_layout_fixture('auto_axes_zero', 'Absolute() {
+    View() {
+        Row(id: "row", width: 0, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20)
+            Label(width: 30, height: 20)
         }
     }
-    View { Grid { width: 0 columns: 2 Label { width: 20 height: 20 } } }
-    Row { width: 0 height: 50 align_items: .start
-        Grid { columns: 2 Label { width: 20 height: 20 } }
+    View() {
+        Column(id: "column", height: 0, wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20)
+            Label(width: 30, height: 20)
+        }
     }
-    Label { x: row.width width: column.height height: 20 }
+    Row(width: 0, height: 50, align_items: start) {
+        Row(wrap: true, gap: 5, align_items: start) {
+            Label(width: 30, height: 20)
+            Label(width: 30, height: 20)
+        }
+    }
+    View() {
+        Grid(width: 0, columns: 2) {
+            Label(width: 20, height: 20)
+        }
+    }
+    Row(width: 0, height: 50, align_items: start) {
+        Grid(columns: 2) {
+            Label(width: 20, height: 20)
+        }
+    }
+    Label(x: row.width, width: column.height, height: 20)
 }', 'import ui2
 fn main() {
     tree := $vml("view.vml")
@@ -1274,7 +1404,13 @@ fn main() {
 	defer {
 		if os.getenv('VML_SIBLING_KEEP_FIXTURES') != '1' { os.rmdir_all(root) or {} }
 	}
-	os.write_file(os.join_path(root, 'view.vml'), 'Absolute { View { Grid { width: 0 columns: 2 padding: 10 Label { width: 20 height: 20 } } } }')!
+	os.write_file(os.join_path(root, 'view.vml'), 'Absolute() {
+    View() {
+        Grid(width: 0, columns: 2, padding: 10) {
+            Label(width: 20, height: 20)
+        }
+    }
+}')!
 	os.write_file(os.join_path(root, 'main.v'), 'import ui2\nfn main() { _ = $vml("view.vml") }')!
 	build := compile_sibling_fixture(root)
 	assert build.exit_code == 0, build.output

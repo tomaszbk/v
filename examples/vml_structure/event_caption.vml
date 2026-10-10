@@ -1,2 +1,3 @@
-module EventCaption
-Label { id: caption text: item.name }
+component EventCaption(text string) {
+    Label(id: "caption", text: text)
+}

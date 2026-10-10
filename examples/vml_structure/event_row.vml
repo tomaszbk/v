@@ -1,7 +1,7 @@
-module EventRow
 import EventCaption
-View {
-    id: record
-    EventCaption {}
-    Button { id: select on_tap: app.record(item.id + app.count) }
+component EventRow(row_id int, caption string) {
+    View(id: "record") {
+        EventCaption(text: caption)
+        Button(id: "select", on_tap: app.record(row_id + app.count))
+    }
 }

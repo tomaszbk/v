@@ -1,13 +1,5 @@
-Grid {
-    id: grid
-    width: 320
-    height: 160
-    columns: 3
-    rows: 2
-    padding: 10
-    spacing_x: 10
-    spacing_y: 20
-    Label { id: spanning text: "Span" column_span: 2 }
-    Label { id: top_right text: "Right" }
-    Label { id: lower text: "Below" }
+Grid(id: "grid", width: 320, height: 160, columns: 3, rows: 2, padding: 10, spacing_x: 10, spacing_y: 20) {
+    Label(id: "spanning", text: "Span", column_span: 2)
+    Label(id: "top_right", text: "Right")
+    Label(id: "lower", text: "Below")
 }

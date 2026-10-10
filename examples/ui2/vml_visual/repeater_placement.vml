@@ -1,23 +1,22 @@
-Absolute {
-    width: 300 height: 200
-    Label { x: 0 text: "Niñez" font_size: 12 }
-    Repeater {
-        model: app.rows key: item.id
-        Label { x: index * 10 text: "Niñez" font_size: 12 }
+Absolute(width: 300, height: 200) {
+    Label(x: 0, text: "Niñez", font_size: 12)
+    Repeater(model: app.rows, key: item.id) {
+        Label(x: index * 10, text: "Niñez", font_size: 12)
     }
-    Repeater {
-        model: app.groups key: item.id
-        Repeater {
-            model: item.rows key: item.id
-            Label { x: index * 10 text: "Niñez" font_size: 12 }
+    Repeater(model: app.groups, key: item.id) {
+        Repeater(model: item.rows, key: item.id) {
+            Label(x: index * 10, text: "Niñez", font_size: 12)
         }
     }
-    Repeater {
-        model: app.rows key: item.id
-        Label { key: "zero-${item.id}" x: index * 10 text: "Niñez" width: 0 height: 0 }
+    Repeater(model: app.rows, key: "zero-${item.id}") {
+        Label(x: index * 10, text: "Niñez", width: 0, height: 0)
     }
-    View { Label { text: "Niñez" font_size: 12 } }
-    View {
-        Repeater { model: app.rows key: item.id Label { text: "Niñez" font_size: 12 } }
+    View() {
+        Label(text: "Niñez", font_size: 12)
+    }
+    View() {
+        Repeater(model: app.rows, key: item.id) {
+            Label(text: "Niñez", font_size: 12)
+        }
     }
 }

@@ -25,7 +25,7 @@ fn build(mut app VisualApp) ui2.Element {
 
 fn main() {
 	ui2.run_compiled_vml(ui2.CompiledVmlRunConfig[VisualApp]{
-		model:  VisualApp{}
+		model:  &VisualApp{}
 		build:  build
 		title:  'Compiled VML visual primitives'
 		width:  760

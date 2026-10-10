@@ -1,9 +1,7 @@
-View {
-    Repeater {
-        model: app.groups key: item.id
-        Repeater {
-            model: item.rows key: item.id
-            Button { id: nested text: item.name on_tap: app.select(item.id) }
+View() {
+    Repeater(model: app.groups, key: item.id) {
+        Repeater(model: item.rows, key: item.id) {
+            Button(id: "nested", text: item.name, on_tap: app.select(item.id))
         }
     }
 }
