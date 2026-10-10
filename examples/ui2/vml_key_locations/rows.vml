@@ -1,0 +1,5 @@
+Column {
+    Repeater(model: app.rows, key: item) {
+        Label(text: item)
+    }
+}

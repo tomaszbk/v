@@ -129,7 +129,8 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 		vml_array_literal('&ui2.CompiledVmlNode', results)
 	})
 	c.finish_scope_captures(capture_start, body_start, build_captures)
-	c.writeln('}) or { panic(err) }')
+	error_prefix := vml_quote('${node.source}:${node.line}:${node.column}: ')
+	c.writeln('}) or { panic(${error_prefix} + err.msg()) }')
 	mut captures := vml_callback_captures(model.expr, incoming)
 	dependency := if vml_expr_uses_path(model.expr, 'app') {
 		if ('mut ' + incoming.component) !in captures { captures << 'mut ' + incoming.component }
@@ -138,7 +139,7 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 		''
 	}
 	captures = vml_used_captures(dependency + source, captures)
-	c.writeln('vml_list_${suffix}.bind(fn [${captures.join(', ')}] () ![]${item_type} { ${dependency} return ${source} }) or { panic(err) }')
+	c.writeln('vml_list_${suffix}.bind(fn [${captures.join(', ')}] () ![]${item_type} { ${dependency} return ${source} }, source: ' + vml_quote(node.source) + ', line: ${node.line}, column: ${node.column}) or { panic(err) }')
 }
 
 fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {

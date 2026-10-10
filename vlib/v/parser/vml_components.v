@@ -486,8 +486,8 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 	owner := scope.component
 	variable := 'vml_node_${suffix}'
 	declaration := 'vml_declaration_${suffix}'
-	c.writeln('\tmut ${variable} := ${owner}.element(${declaration}, identity: ${c.node_identity(node, suffix, scope)}) or { panic(err) }')
-	c.writeln('\t${variable}.set_element_children(${declaration}.children) or { panic(err) }')
+	c.writeln('\tmut ${variable} := ${owner}.element(${declaration}, identity: ${c.node_identity(node, suffix, scope)}) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
+	c.writeln('\t${variable}.set_element_children(${declaration}.children) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
 	c.compile_structural_effect(node, suffix, scope)
 	if reference := vml_find_property(node, 'ref') {
 		ref_type := scope.special['__ref_' + reference.expr.value] or { '' }
