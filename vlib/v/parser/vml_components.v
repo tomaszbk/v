@@ -440,6 +440,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 	c.writeln('\tmut vml_node_${suffix} := vml_node_${suffix}_root')
 	c.writeln('\t_ = vml_node_${suffix}')
 	c.writeln('\tvml_element_${suffix} := vml_element_${suffix}_root')
+	c.writeln('\t_ = vml_element_${suffix}')
 	if reference := vml_find_property(node, 'ref') {
 		c.location = VmlLocation{ path: reference.expr.source, line: reference.line, column: reference.column }
 		mut control := root
@@ -480,7 +481,8 @@ fn (c &VmlCompiler) compile_action(expr &VmlExpr, scope VmlScope) string {
 				payload_values << argument
 			}
 			statements << (scope.special[expr.value] or { expr.value }) + '(' + payload_values.join(', ') + ')'
-			return 'if true {\n' + statements.join('\n') + '\n}'
+			// A block scopes the payload temporaries without a constant condition.
+			return '{\n' + statements.join('\n') + '\n}'
 		}
 	}
 	return c.expr(expr, scope, .raw)
