@@ -68,7 +68,7 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	build_captures << 'mut ' + parent
 	if geometry_parent != parent { build_captures << 'mut ' + geometry_parent }
 	build_captures << collection
-	c.writeln('mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string { _ = ${collection}; return ${vml_stringify(key_value)} }, fn [${build_captures.join(', ')}] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
+	c.writeln('mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string {${vml_capture_uses(key_captures)} _ = ${collection}; return ${vml_stringify(key_value)} }, fn [${build_captures.join(', ')}] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {${vml_capture_uses(build_captures)}')
 	c.writeln('mut ${signal} := ${signal}_input')
 	c.writeln('_ = ${collection}')
 	c.writeln('mut ${index} := ${owner}.state(' + vml_quote('@index') + ', 0)!')
@@ -127,7 +127,7 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	} else {
 		''
 	}
-	c.writeln('vml_list_${suffix}.bind(fn [${captures.join(', ')}] () ![]${item_type} { ${dependency} return ${source} }) or { panic(err) }')
+	c.writeln('vml_list_${suffix}.bind(fn [${captures.join(', ')}] () ![]${item_type} {${vml_capture_uses(captures)} ${dependency} return ${source} }) or { panic(err) }')
 }
 
 fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {
@@ -192,6 +192,6 @@ fn (mut c VmlCompiler) write_child_layout_effects(node &VmlNode, variable string
 		app_dependency := vml_expr_uses_path(property.expr, 'app')
 		if app_dependency { captures << 'mut ' + scope.component }
 		dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
-		c.writeln('${scope.component}.scope.effect(' + vml_quote('@child:' + variable + ':' + name) + ', fn [${captures.join(', ')}] () ! { ${dependency} current := ${variable}.child_rule(); ${variable}.set_child_layout(ui2.VmlChildLayout{...current, ${kind}: ui2.${typ}{...current.${kind}, ${field}: ${value}}})! }) or { panic(err) }')
+		c.writeln('${scope.component}.scope.effect(' + vml_quote('@child:' + variable + ':' + name) + ', fn [${captures.join(', ')}] () ! {${vml_capture_uses(captures)} ${dependency} current := ${variable}.child_rule(); ${variable}.set_child_layout(ui2.VmlChildLayout{...current, ${kind}: ui2.${typ}{...current.${kind}, ${field}: ${value}}})! }) or { panic(err) }')
 	}
 }

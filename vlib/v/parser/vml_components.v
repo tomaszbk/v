@@ -284,7 +284,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 					c.writeln('${listener} := ${value}')
 					captures = [listener]
 				}
-				c.writeln('\t${variable} := fn [${captures.join(', ')}] (${signature}) {')
+				c.writeln('\t${variable} := fn [${captures.join(', ')}] (${signature}) {${vml_capture_uses(captures)}')
 				for parameter_ in parameter.parameters { c.writeln('\t_ = ${parameter_.name}') }
 				if handler.expr.kind == .path {
 					types := parameter.parameters.map(it.typ).join(', ')
@@ -322,13 +322,13 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		variable := 'vml_input_${suffix}_${parameter.name}'
 		input_scope := if argument != none || binding != none { incoming } else { scope }
 		mut input_captures := vml_callback_captures(chosen, input_scope)
-		c.writeln('\tmut ${variable} := ${owner}.state_factory(' + vml_quote(parameter.name) + ', fn [${input_captures.join(', ')}] () !${parameter.typ} { return ${value} }) or { panic(err) }')
+		c.writeln('\tmut ${variable} := ${owner}.state_factory(' + vml_quote(parameter.name) + ', fn [${input_captures.join(', ')}] () !${parameter.typ} {${vml_capture_uses(input_captures)} return ${value} }) or { panic(err) }')
 		if argument != none || binding != none {
 			input_captures << 'mut ' + variable
 			app_dependency := vml_expr_uses_path(chosen, 'app')
 			if app_dependency { input_captures << 'mut ' + incoming.component }
 			dependency := if app_dependency { incoming.component + '.watch_app()!; ' } else { '' }
-			c.writeln('\t${owner}.scope.effect(' + vml_quote('@input:' + parameter.name) + ', fn [${input_captures.join(', ')}] () ! { ${dependency} ${variable}.set(${value})! }) or { panic(err) }')
+			c.writeln('\t${owner}.scope.effect(' + vml_quote('@input:' + parameter.name) + ', fn [${input_captures.join(', ')}] () ! {${vml_capture_uses(input_captures)} ${dependency} ${variable}.set(${value})! }) or { panic(err) }')
 		}
 		scope.special[parameter.name] = '${variable}.get() or { panic(err) }'
 		scope.special['__signal_' + parameter.name] = variable
@@ -340,7 +340,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			captures := vml_callback_captures(chosen, incoming)
 			mut all_captures := captures.clone()
 			all_captures << 'mut ' + variable
-			c.writeln('\t${setter} := fn [${all_captures.join(', ')}] (value ${parameter.typ}) ! {')
+			c.writeln('\t${setter} := fn [${all_captures.join(', ')}] (value ${parameter.typ}) ! {${vml_capture_uses(all_captures)}')
 			c.writeln(c.compile_write(chosen.value, 'value', incoming))
 			c.writeln('\t${variable}.set(value) or { panic(err) }\n}')
 			scope.writable[parameter.name] = setter
@@ -357,10 +357,10 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		value := c.expr(data.expr, scope, .raw)
 		if data.computed {
 			captures := vml_callback_captures(data.expr, scope)
-			c.writeln('\tmut ${variable} := ${owner}.computed[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) { return ${value} }) or { panic(err) }')
+			c.writeln('\tmut ${variable} := ${owner}.computed[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) {${vml_capture_uses(captures)} return ${value} }) or { panic(err) }')
 		} else {
 			captures := vml_callback_captures(data.expr, scope)
-			c.writeln('\tmut ${variable} := ${owner}.state_factory[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) { return ${value} }) or { panic(err) }')
+			c.writeln('\tmut ${variable} := ${owner}.state_factory[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) {${vml_capture_uses(captures)} return ${value} }) or { panic(err) }')
 			scope.writable[data.name] = variable + '.set'
 		}
 		scope.special[data.name] = '${variable}.get() or { panic(err) }'
@@ -376,7 +376,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		c.write_app_action_checks(body)
 		captures := vml_callback_captures(body, scope)
 		signature := function.parameters.map('${it.name} ${it.typ}').join(', ')
-		c.writeln('\t${variable} := fn [${captures.join(', ')}] (${signature}) { ${c.compile_action(body, function_scope)} }')
+		c.writeln('\t${variable} := fn [${captures.join(', ')}] (${signature}) {${vml_capture_uses(captures)} ${c.compile_action(body, function_scope)} }')
 		scope.special[function.name] = variable
 	}
 	for kind in ['mount', 'unmount', 'cleanup'] {
@@ -393,7 +393,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			' !'
 		} else {
 			''
-		} + ' { ' + c.compile_action(body, scope) + ' }) or { panic(err) }')
+		} + ' { ' + vml_capture_uses(captures) + c.compile_action(body, scope) + ' }) or { panic(err) }')
 	}
 	c.compile_node(node.children[0], path + '.root', input, scope, default_key, placement)
 	c.writeln('\tmut vml_node_${suffix} := vml_node_${suffix}_root')
@@ -487,7 +487,7 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 		} else {
 			'ui2.Element{...element, ${patch}}'
 		}
-		c.writeln('\t${variable}.effect(' + vml_quote(property.name) + ', fn [${captures.join(', ')}] (element ui2.Element) !ui2.Element { ${dependency} return ${updated} }) or { panic(err) }')
+		c.writeln('\t${variable}.effect(' + vml_quote(property.name) + ', fn [${captures.join(', ')}] (element ui2.Element) !ui2.Element {${vml_capture_uses(captures)} ${dependency} return ${updated} }) or { panic(err) }')
 	}
 	c.compile_content_effect(node, suffix, scope)
 	c.compile_child_segments(node, suffix, scope)

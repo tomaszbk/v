@@ -135,10 +135,10 @@ fn (c &VmlCompiler) event_callback(node &VmlNode, name string, scope VmlScope) s
 		}
 	}
 	if scope.component.len > 0 {
-		return '${scope.component}.callback(fn [${captures.join(', ')}] (event ui2.ElementEvent) ! { ${body} })'
+		return '${scope.component}.callback(fn [${captures.join(', ')}] (event ui2.ElementEvent) ! {${vml_capture_uses(captures)} ${body} })'
 	}
 	body += 'ui2.request_refresh()'
-	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { ${body} }'
+	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) {${vml_capture_uses(captures)} ${body} }'
 }
 
 fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scope VmlScope) string {
@@ -172,7 +172,7 @@ fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scop
 		callback := callbacks['on_${kind}'] or { '' }
 		if callback.len > 0 { body += '.${kind} { ${callback}(event) }\n' }
 	}
-	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { match event.kind { ${body} else {} } }'
+	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) {${vml_capture_uses(captures)} match event.kind { ${body} else {} } }'
 }
 
 fn (mut c VmlCompiler) write_model_path_checks(expr &VmlExpr, scope VmlScope) {
@@ -213,4 +213,14 @@ fn (mut c VmlCompiler) write_app_action_checks(expr &VmlExpr) {
 	if !isnil(expr.left) { c.write_app_action_checks(expr.left) }
 	if !isnil(expr.right) { c.write_app_action_checks(expr.right) }
 	for argument in expr.args { c.write_app_action_checks(argument) }
+}
+
+// vml_capture_uses marks closure captures as used. Captures are collected
+// conservatively from the VML scope, and `-prod` rejects unused captured locals.
+fn vml_capture_uses(captures []string) string {
+	mut uses := ''
+	for capture in captures {
+		uses += '_ = ${capture.trim_string_left('mut ')}; '
+	}
+	return uses
 }
