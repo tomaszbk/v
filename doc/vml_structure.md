@@ -87,6 +87,10 @@ argument count and types. The binding commits the event payload before an
 explicit action runs; actions batch signal writes. Event ids do not choose
 handlers, and unrelated event kinds do not invoke a binding.
 
+A `Switch` change invokes `on_active` first, then `on_change`, when both are
+provided. Each receives the original event once; `bind.active` writes the
+payload once before either handler runs.
+
 `mount { ... }`, `unmount { ... }` and `cleanup { ... }` register instance hooks.
 Mount runs once when attached; removal disposes owned effects and descendants.
 Unmount and cleanup can read the instance's existing state and memos. Callbacks

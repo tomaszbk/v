@@ -1,0 +1,8 @@
+Screen(id: "root") {
+    Column {
+        Switch(id: "both", bind.active: app.checked,
+            on_active: app.active_handler, on_change: app.change_handler)
+        Switch(id: "active", bind.active: app.checked, on_active: app.active_handler)
+        Switch(id: "change", bind.active: app.checked, on_change: app.change_handler)
+    }
+}
