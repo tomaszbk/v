@@ -1,0 +1,12 @@
+View {
+    Label(font_size: 28) {
+        Run(text: "Inherited")
+        Run(text: "Static", size: 18)
+        Run(text: "Font size", font_size: 12)
+    }
+    Label(font_size: app.count) {
+        Run(text: "Inherited")
+        Run(text: "Dynamic", size: app.count / 2)
+    }
+    Button(text: "Update", on_tap: app.count = app.count + 2)
+}
