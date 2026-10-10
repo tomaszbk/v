@@ -1411,7 +1411,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	c.write_action_type_checks(node, suffix, scope)
 	if node.tag in ['Flex', 'Row', 'Column', 'Grid'] {
 		result := c.compile_visual_layout(node, path, input, frame, properties, scope, placement, default_key)
-		c.retain_element(node, suffix, result)
+		c.retain_element(node, suffix, result, placement)
 		return vml_node_output_scope(node, incoming, result)
 	}
 	children := 'vml_children_${suffix}'
@@ -1463,7 +1463,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		c.prepare_visual_runs(node, suffix, mut properties, scope)
 	}
 	c.compile_element(node, suffix, frame, children, properties, scope, default_key)
-	c.retain_element(node, suffix, scope)
+	c.retain_element(node, suffix, scope, placement)
 	return vml_node_output_scope(node, incoming, scope)
 }
 

@@ -494,11 +494,14 @@ fn (c &VmlCompiler) event_payload_value(expr &VmlExpr, expected string, scope Vm
 	return c.expr(expr, scope, .raw)
 }
 
-fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlScope) {
+fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlScope, placement VmlPlacement) {
 	owner := scope.component
 	variable := 'vml_node_${suffix}'
 	declaration := 'vml_declaration_${suffix}'
-	c.writeln('\tmut ${variable} := ${owner}.element(${declaration}, identity: ${c.node_identity(node, suffix, scope)}) or { panic(err) }')
+	authored_width := vml_find_property(node, 'width') != none
+	authored_height := vml_find_property(node, 'height') != none
+	inherited := placement in [.normal, .inherited_preferred]
+	c.writeln('\tmut ${variable} := ${owner}.element(${declaration}, identity: ${c.node_identity(node, suffix, scope)}, authored_width: ${authored_width}, authored_height: ${authored_height}, inherit_width: ${inherited && !authored_width}, inherit_height: ${inherited && !authored_height}) or { panic(err) }')
 	c.writeln('\t${variable}.set_element_children(${declaration}.children) or { panic(err) }')
 	c.compile_structural_effect(node, suffix, scope)
 	if reference := vml_find_property(node, 'ref') {
