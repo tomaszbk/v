@@ -18,6 +18,7 @@ pub mut:
 	refs  map[string]&ui2.VmlRef[ui2.VmlView]
 }
 
+// remember stores each keyed component's root ref for identity checks after reconciliation.
 pub fn (mut app AliasApp) remember(name string, reference &ui2.VmlRef[ui2.VmlView]) {
 	app.refs[name] = reference
 }
