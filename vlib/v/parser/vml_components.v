@@ -378,8 +378,13 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		variable := 'vml_state_${suffix}_${data.name}'
 		value := c.expr(data.expr, scope, .raw)
 		if data.computed {
-			captures := vml_used_captures(value, vml_callback_captures(data.expr, scope))
-			c.writeln('\tmut ${variable} := ${owner}.computed[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) { return ${value} }) or { panic(err) }')
+			mut captures := vml_callback_captures(data.expr, scope)
+			app_dependency := vml_expr_uses_path(data.expr, 'app')
+			if app_dependency && ('mut ' + owner) !in captures { captures << 'mut ' + owner }
+			dependency := if app_dependency { owner + '.watch_app()!; ' } else { '' }
+			body := '${dependency} return ${value}'
+			captures = vml_used_captures(body, captures)
+			c.writeln('\tmut ${variable} := ${owner}.computed[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) { ${body} }) or { panic(err) }')
 		} else {
 			captures := vml_used_captures(value, vml_callback_captures(data.expr, scope))
 			c.writeln('\tmut ${variable} := ${owner}.state_factory[typeof(${value})](' + vml_quote(data.name) + ', fn [${captures.join(', ')}] () !typeof(${value}) { return ${value} }) or { panic(err) }')

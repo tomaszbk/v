@@ -1,0 +1,15 @@
+component ComputedApp() {
+    state seed := app.seed()
+    state count := 0
+    computed caption := app.caption()
+    computed unused := app.unused()
+    computed doubled := count * 2
+
+    Column(width: 240, height: 160) {
+        Label(text: caption)
+        Label(text: caption)
+        TextInput(bind.text: app.name)
+        Label(text: seed)
+        Button(text: doubled, on_tap: count++)
+    }
+}
