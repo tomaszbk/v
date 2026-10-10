@@ -161,12 +161,12 @@ fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scop
 	for _, variable in callbacks { captures << variable }
 	mut body := ''
 	if callback := callbacks['on_tap'] { body += '.tap { ${callback}(event) }\n' }
-	change := if node.tag == 'Switch' {
-		callbacks['on_active'] or { callbacks['on_change'] or { '' } }
-	} else {
-		callbacks['on_change'] or { '' }
+	mut change := ''
+	if node.tag == 'Switch' {
+		if callback := callbacks['on_active'] { change += '${callback}(event)\n' }
 	}
-	if change.len > 0 { body += '.change { ${change}(event) }\n' }
+	if callback := callbacks['on_change'] { change += '${callback}(event)\n' }
+	if change.len > 0 { body += '.change { ${change} }\n' }
 	if callback := callbacks['on_submit'] { body += '.submit { ${callback}(event) }\n' }
 	if callback := callbacks['on_scroll'] { body += '.scroll { ${callback}(event) }\n' }
 	for kind in ['pointer_down', 'pointer_drag', 'pointer_up', 'long_press', 'swipe_left', 'link'] {

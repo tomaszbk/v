@@ -1,5 +1,17 @@
 module parser
 
+fn test_switch_change_dispatches_both_callbacks_after_one_binding() {
+	root := parse_vml_source('Switch(bind.active: app.checked,
+        on_active: first, on_change: second)')!
+	mut compiler := VmlCompiler{ uses_app: true, callback_captures: ['first', 'second'] }
+	generated := compiler.compile(root)
+	assert generated.count('app.checked = event.checked') == 1, generated
+	dispatch := generated.all_after('match event.kind {').all_before('else {}')
+	assert dispatch.count('vml_callback_0_on_active(event)') == 1, dispatch
+	assert dispatch.count('vml_callback_0_on_change(event)') == 1, dispatch
+	assert dispatch.contains('.change { vml_callback_0_on_active(event)\nvml_callback_0_on_change(event)'), dispatch
+}
+
 fn test_keyed_repeater_captures_only_referenced_geometry_and_callbacks() {
 	root := parse_vml_source('Column(id: "outer") {
         View(id: "unrelated", width: 10, height: 20)
