@@ -11,9 +11,11 @@ fn test_run_size_alias_overrides_inherited_font_size_in_the_retained_effect() {
 }')!
 	mut compiler := VmlCompiler{ uses_app: true }
 	generated := compiler.compile(root)
+	initializer := generated.split_into_lines().filter(it.contains('mut vml_property_0_run_2_size_memo :='))[0]
+	assert initializer.contains('return ui2.LayoutSize{width: (ui2.LayoutSize{width: app.count}.width / f64(2))}.width'), initializer
 	effect := generated.all_after(".effect('@runs'")
 	assert effect.contains('size: ui2.LayoutSize{width: f64(18)}.width'), effect
-	assert effect.contains('size: ui2.LayoutSize{width: (ui2.LayoutSize{width: app.count}.width / f64(2))}.width'), effect
+	assert effect.contains('size: vml_property_0_run_2_size_memo.get()'), effect
 }
 
 fn test_shared_visual_builders_keep_every_generated_source_line() {
