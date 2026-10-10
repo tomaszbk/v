@@ -163,7 +163,10 @@ fn (mut c VmlCompiler) compile_structural_effect(node &VmlNode, suffix string, i
 			if reference !in captures { captures << reference }
 		}
 	}
-	c.writeln('${variable}.structure(' + vml_quote('@widget') + ', fn [${captures.join(', ')}] () !ui2.Element {')
+	prefix := '${variable}.structure(' + vml_quote('@widget') + ', fn '
+	capture_start := c.out.len + prefix.len
+	c.writeln(prefix + '[] () !ui2.Element {')
+	body_start := c.out.len
 	if c.uses_app { c.writeln('${scope.component}.watch_app()!') }
 	c.writeln('element := ${variable}.element()')
 	children := 'vml_widget_sources_' + suffix
@@ -189,6 +192,7 @@ fn (mut c VmlCompiler) compile_structural_effect(node &VmlNode, suffix string, i
 	}
 	c.effect_mode = false
 	c.writeln('return vml_declaration_${suffix}_effect')
+	c.finish_scope_captures(capture_start, body_start, captures)
 	c.writeln('}) or { panic(err) }')
 }
 
@@ -209,7 +213,10 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 	variable := 'vml_node_' + suffix
 	initial := 'vml_declaration_' + suffix
 	if menu.len > 0 { captures << initial }
-	c.writeln('${variable}.effect(' + vml_quote(if runs.len > 0 { '@runs' } else { '@menu' }) + ', fn [${captures.join(', ')}] (element ui2.Element) !ui2.Element {')
+	prefix := '${variable}.effect(' + vml_quote(if runs.len > 0 { '@runs' } else { '@menu' }) + ', fn '
+	capture_start := c.out.len + prefix.len
+	c.writeln(prefix + '[] (element ui2.Element) !ui2.Element {')
+	body_start := c.out.len
 	if app_dependency { c.writeln('${scope.component}.watch_app()!') }
 	if runs.len > 0 {
 		mut inherited := map[string]string{}
@@ -244,5 +251,6 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 		}
 		c.writeln('return ui2.Element{...element, menu: ' + vml_array_literal('ui2.MenuEntry', values) + '}')
 	}
+	c.finish_scope_captures(capture_start, body_start, captures)
 	c.writeln('}) or { panic(err) }')
 }

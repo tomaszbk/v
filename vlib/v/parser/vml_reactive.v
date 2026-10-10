@@ -1,5 +1,9 @@
 module parser
 
+import v.pref
+import v.scanner
+import v.token
+
 // Structural declarations register ordered child groups after their parent is
 // retained. ui2 owns reconciliation and per-key component lifetimes.
 fn (mut c VmlCompiler) compile_child_segments(node &VmlNode, suffix string, scope VmlScope) {
@@ -64,11 +68,16 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	mut key_captures := vml_callback_captures(key.expr, incoming)
 	key_captures << collection
 	key_value := c.expr(key.expr, key_scope, .raw)
+	key_body := '_ = ${collection}; return ${vml_stringify(key_value)}'
+	key_captures = vml_used_captures(key_body, key_captures)
 	mut build_captures := c.scope_captures(incoming)
 	build_captures << 'mut ' + parent
 	if geometry_parent != parent { build_captures << 'mut ' + geometry_parent }
 	build_captures << collection
-	c.writeln('mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string { _ = ${collection}; return ${vml_stringify(key_value)} }, fn [${build_captures.join(', ')}] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
+	prefix := 'mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string { ${key_body} }, fn '
+	capture_start := c.out.len + prefix.len
+	c.writeln(prefix + '[] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
+	body_start := c.out.len
 	c.writeln('mut ${signal} := ${signal}_input')
 	c.writeln('_ = ${collection}')
 	c.writeln('mut ${index} := ${owner}.state(' + vml_quote('@index') + ', 0)!')
@@ -119,6 +128,7 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	} else {
 		vml_array_literal('&ui2.CompiledVmlNode', results)
 	})
+	c.finish_scope_captures(capture_start, body_start, build_captures)
 	c.writeln('}) or { panic(err) }')
 	mut captures := vml_callback_captures(model.expr, incoming)
 	dependency := if vml_expr_uses_path(model.expr, 'app') {
@@ -127,6 +137,7 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	} else {
 		''
 	}
+	captures = vml_used_captures(dependency + source, captures)
 	c.writeln('vml_list_${suffix}.bind(fn [${captures.join(', ')}] () ![]${item_type} { ${dependency} return ${source} }) or { panic(err) }')
 }
 
@@ -146,6 +157,39 @@ fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {
 		if value !in captures { captures << value }
 	}
 	captures << c.callback_captures.filter(it !in captures)
+	return captures
+}
+
+// Lowered identifiers reflect the actual lexical scope, including nested item
+// aliases and callbacks. Scan the completed body so quoted ids and comments do
+// not turn unused outer bindings into captures.
+fn (mut c VmlCompiler) finish_scope_captures(capture_start int, body_start int, candidates []string) {
+	body := c.out.spart(body_start, c.out.len - body_start)
+	captures := vml_used_captures(body, candidates)
+	// Replacing only the capture list keeps the generated source-line mapping.
+	tail := c.out.cut_to(capture_start)
+	c.out.write_string('[' + captures.join(', ') + ']' + tail[2..])
+}
+
+fn vml_used_captures(body string, candidates []string) []string {
+	mut files := token.FileSet.new()
+	mut file := files.add_file('<vml-callback>', body.len)
+	file.index_lines(body)
+	mut lexer := scanner.new_scanner(&pref.Preferences{}, .normal)
+	lexer.init(file, body)
+	mut names := map[string]bool{}
+	mut previous := token.Token.eof
+	for {
+		kind := lexer.scan()
+		if kind == .eof { break }
+		if kind == .name && previous != .dot { names[lexer.lit] = true }
+		previous = kind
+	}
+	mut captures := []string{}
+	for candidate in candidates {
+		name := candidate.trim_string_left('mut ')
+		if name in names && candidate !in captures { captures << candidate }
+	}
 	return captures
 }
 
@@ -192,6 +236,8 @@ fn (mut c VmlCompiler) write_child_layout_effects(node &VmlNode, variable string
 		app_dependency := vml_expr_uses_path(property.expr, 'app')
 		if app_dependency { captures << 'mut ' + scope.component }
 		dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
-		c.writeln('${scope.component}.scope.effect(' + vml_quote('@child:' + variable + ':' + name) + ', fn [${captures.join(', ')}] () ! { ${dependency} current := ${variable}.child_rule(); ${variable}.set_child_layout(ui2.VmlChildLayout{...current, ${kind}: ui2.${typ}{...current.${kind}, ${field}: ${value}}})! }) or { panic(err) }')
+		body := '${dependency} current := ${variable}.child_rule(); ${variable}.set_child_layout(ui2.VmlChildLayout{...current, ${kind}: ui2.${typ}{...current.${kind}, ${field}: ${value}}})!'
+		captures = vml_used_captures(body, captures)
+		c.writeln('${scope.component}.scope.effect(' + vml_quote('@child:' + variable + ':' + name) + ', fn [${captures.join(', ')}] () ! { ${body} }) or { panic(err) }')
 	}
 }
