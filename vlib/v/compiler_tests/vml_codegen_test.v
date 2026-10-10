@@ -32,7 +32,7 @@ fn test_vml_lowers_to_direct_ui2_elements() {
         Label {
             text: "\${item.name}:\${index}"
             width: root.half
-            on_tap: app.select(item.id)
+            on_click: app.select(item.id)
         }
     }
 	ProgressBar { value: 25 max: 50 }
@@ -57,7 +57,7 @@ fn test_vml_lowers_to_direct_ui2_elements() {
 	}
 	Checkbox { text: "Ready" checked: true }
 	Rectangle { border_width: 2 border_right: 4 }
-	Button { text: "Select" on_tap: app.select(app.selected) }
+	Button { text: "Select" on_click: app.select(app.selected) }
 }') or { panic(err) }
 	source := "module main
 
@@ -133,19 +133,19 @@ fn main() {
 		model: app.items
 		key: item
 		Rectangle { id: repeated_first width: 77 }
-		Button { width: repeated_first.width on_tap: app.select(index + 1) }
+		Button { width: repeated_first.width on_click: app.select(index + 1) }
 	}
 	Label { text: 1 + 2 }
 	Label { text: app.count + 1 }
 	Label { text: "count:" + app.count }
 	Label { text: app.display_name() }
-	Button { on_tap: app.select(review_root.custom_selected) }
+	Button { on_click: app.select(review_root.custom_selected) }
 	Rectangle { width: app.content_width() background: review_root.accent }
 	Label { text: 4 - 1 }
 	Label { text: 3 * 4 }
 	Label { text: 8 / 2 }
 	Label { text: 7 % 4 }
-	Button { on_tap: app.select(-1) }
+	Button { on_click: app.select(-1) }
 	Label { text: app.ready && app.enabled }
 	Label { text: app.count > 0 }
 }') or { panic(err) }
@@ -254,19 +254,19 @@ fn main() {
 	expressions_run := os.exec([bin])
 	assert expressions_run.exit_code == 0, expressions_run.output
 	assert expressions_run.output.trim_space() == '9 1122867 }', expressions_run.output
-	os.write_file(os.join_path(root, 'form.vml'), 'Screen { MessageBox { Button { on_tap: app.missing() } } }') or { panic(err) }
+	os.write_file(os.join_path(root, 'form.vml'), 'Screen { MessageBox { Button { on_click: app.missing() } } }') or { panic(err) }
 	invalid := os.exec([v3_bin, '-new-compiler', '-gc', 'boehm', '-cc', 'clang', '-no-retry-compilation',
 		'-nocache', '-path', '${root}' + '|' + '${vml_codegen_vlib_dir}', '-b', 'c', '-o', bin,
 		main_path])
 	assert invalid.exit_code != 0, invalid.output
 	assert invalid.output.contains('missing'), invalid.output
-	os.write_file(os.join_path(root, 'form.vml'), 'Screen { Button { MenuItem { on_tap: app.missing() } } }') or { panic(err) }
+	os.write_file(os.join_path(root, 'form.vml'), 'Screen { Button { MenuItem { on_click: app.missing() } } }') or { panic(err) }
 	invalid_menu := os.exec([v3_bin, '-new-compiler', '-gc', 'boehm', '-cc', 'clang',
 		'-no-retry-compilation', '-nocache', '-path', '${root}' + '|' + '${vml_codegen_vlib_dir}',
 		'-b', 'c', '-o', bin, main_path])
 	assert invalid_menu.exit_code != 0, invalid_menu.output
 	assert invalid_menu.output.contains('missing'), invalid_menu.output
-	os.write_file(os.join_path(root, 'form.vml'), 'Screen { Button { on_tap: app.private_action() } }') or { panic(err) }
+	os.write_file(os.join_path(root, 'form.vml'), 'Screen { Button { on_click: app.private_action() } }') or { panic(err) }
 	invalid_private := os.exec([v3_bin, '-new-compiler', '-gc', 'boehm', '-cc', 'clang',
 		'-no-retry-compilation', '-nocache', '-path', '${root}' + '|' + '${vml_codegen_vlib_dir}',
 		'-b', 'c', '-o', bin, main_path])
@@ -387,19 +387,19 @@ fn main() { mut app := App{}; _ = build(mut app) }
 		'Label { text: true ? "ok" : app.missing }',
 		'Repeater { model: app.count key: item Label { text: "bad" } }',
 		'Repeater { model: app.items key: item Label { text: "bad" } }',
-		'Button { on_tap: app.readonly = 1 }',
-		'Button { on_tap: app.count = "wrong" }',
+		'Button { on_click: app.readonly = 1 }',
+		'Button { on_click: app.count = "wrong" }',
 		'Slider { bind.value: app.items }',
 		'TextInput { multiline: false on_text: app.select(1) }',
 		'TextField { text: \"removed\" }',
-		'Button { on_tap: app.unsupported(true) }',
-		'Button { on_tap: app.select("wrong") }',
-		'Button { on_tap: app.select(app.count ? 1 : 2) }',
-		'Button { on_tap: app.select(app.count == "7" ? 1 : 2) }',
-		'Button { on_tap: app.select(false || app.count == "7" ? 1 : 2) }',
-		'Button { on_tap: app.select(app.text + "bad") }',
+		'Button { on_click: app.unsupported(true) }',
+		'Button { on_click: app.select("wrong") }',
+		'Button { on_click: app.select(app.count ? 1 : 2) }',
+		'Button { on_click: app.select(app.count == "7" ? 1 : 2) }',
+		'Button { on_click: app.select(false || app.count == "7" ? 1 : 2) }',
+		'Button { on_click: app.select(app.text + "bad") }',
 		'Button { MenuItem { text: app.count } }',
-		'Repeater { model: app.items key: item.id Button { on_tap: app.select(item.missing) } }',
+		'Repeater { model: app.items key: item.id Button { on_click: app.select(item.missing) } }',
 	] {
 		os.write_file(import_path, 'module Content\nView {\n ${body}\n}')!
 		result := os.exec([@VEXE, '-new-compiler', '-gc', 'boehm', '-nocache', '-cc', 'clang',
@@ -408,7 +408,7 @@ fn main() { mut app := App{}; _ = build(mut app) }
 		assert result.output.contains('content.vml:3:'), result.output
 		assert !result.output.contains('<veb-template>:'), result.output
 	}
-	os.write_file(import_path, 'module Content\nView { Repeater { model: app.items key: item.id Button { on_tap: app.count = item.id } } }')!
+	os.write_file(import_path, 'module Content\nView { Repeater { model: app.items key: item.id Button { on_click: app.count = item.id } } }')!
 	valid := os.exec([@VEXE, '-nocache', '-path', root + '|' + vml_codegen_vlib_dir, '-o',
 		os.join_path(root, 'valid'), main_path])
 	assert valid.exit_code == 0, valid.output
@@ -419,7 +419,7 @@ fn main() { mut app := App{}; _ = build(mut app) }
 	os.write_file(main_path, main_source.replace('ui2.Element', '[]ui2.Menu'))!
 	os.write_file(os.join_path(root, 'main.vml'), 'import Content\nContent {}')!
 	for title, body in {
-		'valid':    'Menu { title: "File" MenuItem { text: "New" shortcut: "cmd+n" checked: false enabled: true on_tap: app.count = 1 } }'
+		'valid':    'Menu { title: "File" MenuItem { text: "New" shortcut: "cmd+n" checked: false enabled: true on_click: app.count = 1 } }'
 		'title':    'Menu { title: app.count }'
 		'shortcut': 'Menu { title: "File" MenuItem { text: "New" shortcut: app.count } }'
 		'checked':  'Menu { title: "File" MenuItem { text: "New" checked: app.count } }'

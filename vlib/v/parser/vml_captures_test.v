@@ -17,7 +17,7 @@ fn test_keyed_repeater_captures_only_referenced_geometry_and_callbacks() {
         View(id: "unrelated", width: 10, height: 20)
         Absolute(id: "list", width: 100, height: 80) {
             Repeater(model: app.rows, key: app.prefix + item.id) {
-                Button(width: list.width, text: item.name, on_tap: choose)
+                Button(width: list.width, text: item.name, on_click: choose)
             }
         }
     }')!
@@ -46,7 +46,7 @@ fn test_bound_input_readers_capture_getters_and_writers_capture_setters() {
 	definition := parse_vml_source('component Editor(bind text string = "") {
         computed copy := text
         fn clear() { text = "" }
-        Button(text: copy, on_tap: clear)
+        Button(text: copy, on_click: clear)
     }')!
 	invocation := parse_vml_source('TextInput(bind.text: app.name)')!
 	root := &VmlNode{ ...definition, properties: invocation.properties }
@@ -64,8 +64,8 @@ fn test_structural_effect_captures_current_inputs_and_event_references() {
 	root := parse_vml_source('Column(id: "outer") {
         View(id: "unrelated", width: 10, height: 20)
         ProgressBar(id: "progress", value: app.value, width: app.width)
-        ToggleButton(id: "toggle", text: "Toggle", on_tap: choose)
-        MessageBox(text: "Confirm") { Button(text: "OK", on_tap: choose) }
+        ToggleButton(id: "toggle", text: "Toggle", on_click: choose)
+        MessageBox(text: "Confirm") { Button(text: "OK", on_click: choose) }
     }')!
 	mut compiler := VmlCompiler{ uses_app: true, callback_captures: ['choose', 'unused'] }
 	generated := compiler.compile(root)
@@ -93,7 +93,7 @@ fn test_nested_repeater_does_not_capture_shadowed_outer_item_or_unused_state() {
         Column {
             Repeater(model: app.groups, key: item.id) {
                 Repeater(model: item.rows, key: item.id) {
-                    Button(text: item.name + "vml_state_0_unused", on_tap: selected = item.id)
+                    Button(text: item.name + "vml_state_0_unused", on_click: selected = item.id)
                 }
             }
         }

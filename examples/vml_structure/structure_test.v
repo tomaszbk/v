@@ -14,8 +14,8 @@ fn test_compiled_outputs_and_events_match_declarations() {
 	assert compiled.children.map(it.key) == ['', '1', '2', '', '']
 	assert compiled.children.map(it.frame) == [ui2.rect(0, 0, 280, 28), ui2.rect(0, 0, 100, 32),
 		ui2.rect(0, 0, 100, 32), ui2.rect(0, 0, 180, 32), ui2.rect(0, 0, 100, 32)]
-	compiled.children[2].on_event(event(.tap))
-	compiled.children[4].on_event(event(.tap))
+	compiled.children[2].on_event(event(.click))
+	compiled.children[4].on_event(event(.click))
 	compiled.children[3].on_event(ui2.ElementEvent{ kind: .change, text: 'mañana ñ' })
 	assert app.selected == 2 && app.count == 1
 	assert app.message == 'mañana ñ' && app.copied == 'mañana ñ'
@@ -34,12 +34,12 @@ fn test_keyed_rows_keep_ids_and_callbacks_across_reorder() {
 		assert child.id == after.children[3].children[index].id
 	}
 	assert before.children[0].children[0].id != before.children[1].children[0].id
-	after.children[3].children[1].on_event(event(.tap))
+	after.children[3].children[1].on_event(event(.click))
 	assert app.selected == 1
-	after.children[2].children[2].on_event(event(.tap))
+	after.children[2].children[2].on_event(event(.click))
 	assert app.selected == 2
 	// An action reads the live model, even when invoked through an older tree.
-	before.children[5].on_event(event(.tap))
+	before.children[5].on_event(event(.click))
 	assert app.count == 124
 }
 
@@ -49,7 +49,7 @@ fn test_nested_keys_encode_segments_without_separator_collisions() {
 	assert root.children.len == 2
 	assert root.children[0].key != root.children[1].key
 	assert root.children[0].id != root.children[1].id
-	root.children[1].on_event(event(.tap))
+	root.children[1].on_event(event(.click))
 	assert app.selected == 1
 	app.groups.reverse_in_place()
 	root.compiled_node.component.invalidate_app() or { panic(err) }
@@ -67,8 +67,8 @@ fn test_menus_match_public_api_and_route_typed_actions() {
 	assert actual[0].items[2].title == 'Selection'
 	assert actual[0].items[2].items[0].checked
 	assert !actual[0].items[2].items[1].enabled
-	actual[0].items[0].on_select(event(.tap))
-	actual[0].items[2].items[0].on_select(event(.tap))
+	actual[0].items[0].on_select(event(.click))
+	actual[0].items[2].items[0].on_select(event(.click))
 	assert app.count == 1 && app.selected == 7
 }
 
@@ -81,7 +81,7 @@ fn test_interface_and_pointer_arrays_check_declared_schemas_when_empty() {
 	assert root.children.len == 2
 	assert root.children[0].text == 'niño' && root.children[0].key == '3'
 	assert root.children[1].text == 'café' && root.children[1].key == '4'
-	root.children[1].on_event(event(.tap))
+	root.children[1].on_event(event(.click))
 	assert app.selected == 4
 }
 

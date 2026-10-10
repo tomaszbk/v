@@ -137,7 +137,7 @@ fn test_compiled_sparse_styles_preserve_false_zero_black_and_typed_events() {
 	assert patch.focus.border_left or { f64(1) } == 0
 	assert patch.focus.outline_width or { f64(0) } == 3
 	assert patch.disabled_text.color or { u32(1) } == 0
-	el.on_event(ui2.ElementEvent{ kind: .tap, id: el.id })
+	el.on_event(ui2.ElementEvent{ kind: .click, id: el.id })
 	assert app.count == 1
 	el.on_event(ui2.ElementEvent{ kind: .change, id: el.id })
 	assert app.count == 1

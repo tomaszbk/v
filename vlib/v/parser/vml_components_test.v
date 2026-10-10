@@ -11,7 +11,7 @@ fn test_vml_component_signature_state_handlers_lifecycle_slots_and_refs_parse_to
         cleanup { app.cleaned() }
         Column(id: "panel") {
             Label(text: doubled)
-            Button(ref: submit, text: title, on_tap: increment(1))
+            Button(ref: submit, text: title, on_click: increment(1))
             TextInput(bind.text: text)
             Slot {}
         }
@@ -138,9 +138,9 @@ fn test_vml_bare_enum_arguments_and_separate_text_editors() {
 
 fn test_vml_local_actions_and_unhandled_events_validate_declared_arity() {
 	for source in [
-		'component Bad(changed event(value int)) { Button(on_tap: changed()) }',
-		'component Bad(changed event(value int)) { Button(on_tap: changed(1, 2)) }',
-		'component Bad() { fn reset() {} Button(on_tap: reset(1)) }',
+		'component Bad(changed event(value int)) { Button(on_click: changed()) }',
+		'component Bad(changed event(value int)) { Button(on_click: changed(1, 2)) }',
+		'component Bad() { fn reset() {} Button(on_click: reset(1)) }',
 		'component Bad() { fn reset(step int) {} mount { reset() } View }',
 	] {
 		parse_vml_source(source) or {
@@ -153,10 +153,10 @@ fn test_vml_local_actions_and_unhandled_events_validate_declared_arity() {
 
 fn test_vml_callbacks_reject_literals_and_event_payloads_remain_typed_without_listeners() {
 	for source in [
-		'Button(on_tap: "save")',
-		'Button(on_tap: true)',
-		'Button(on_tap: 1)',
-		'Button(on_tap: [1, 2])',
+		'Button(on_click: "save")',
+		'Button(on_click: true)',
+		'Button(on_click: 1)',
+		'Button(on_click: [1, 2])',
 		'Counter(on_changed: "changed")',
 	] {
 		parse_vml_source(source) or {
@@ -165,17 +165,17 @@ fn test_vml_callbacks_reject_literals_and_event_payloads_remain_typed_without_li
 		}
 		assert false, 'accepted invalid callback: ${source}'
 	}
-	root := parse_vml_source('component Counter(changed event(value int)) { Button(on_tap: changed(true)) }')!
+	root := parse_vml_source('component Counter(changed event(value int)) { Button(on_click: changed(true)) }')!
 	mut compiler := VmlCompiler{}
 	generated := compiler.compile(root)
 	assert generated.contains('vml_payload_0 := true')
 	assert generated.contains('$if vml_payload_0 !is int')
 	assert generated.contains('vml_event_0_changed(vml_payload_0)')
-	enum_root := parse_vml_source('component Counter(changed event(value ui2.Align)) { Button(on_tap: changed(.right)) }')!
+	enum_root := parse_vml_source('component Counter(changed event(value ui2.Align)) { Button(on_click: changed(.right)) }')!
 	enum_generated := compiler.compile(enum_root)
 	assert enum_generated.contains('vml_payload_0 := ui2.Align.right')
 	assert enum_generated.contains('$if vml_payload_0 !is ui2.Align')
-	conditional := parse_vml_source('Button(on_tap: changed(true ? .right : .left))')!
+	conditional := parse_vml_source('Button(on_click: changed(true ? .right : .left))')!
 	assert compiler.event_payload_value(conditional.properties[0].expr.args[0], 'ui2.Align', VmlScope{}).contains('ui2.Align.left')
 }
 

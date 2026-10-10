@@ -18,7 +18,7 @@ fn test_component_ids_export_geometry_and_preserve_private_root_ids() {
 		assert card.frame.width == width
 		assert card.frame.height == width + 1
 		assert card.children[0].text == 'root=${width}'
-		card.children[1].on_event(ui2.ElementEvent{ kind: .tap })
+		card.children[1].on_event(ui2.ElementEvent{ kind: .click })
 		assert app.level == width
 	}
 	assert root.children[1].children[0].id != root.children[2].children[0].id

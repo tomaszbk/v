@@ -2,7 +2,7 @@ Absolute(id: "root", width: 300, height: 300) {
     View(id: "box", width: app.geometry_width, height: box.width * 2)
     View(width: box.width + 10, height: box.height + 1)
     Label(text: "${box.width}x${box.height}")
-    Button(text: "Resize", on_tap: app.resize())
+    Button(text: "Resize", on_click: app.resize())
     Row(width: 200, height: 20, align_items: start) {
         Label(id: "item", width: app.geometry_width, height: 20)
         MenuItem(text: "Width ${item.width}")

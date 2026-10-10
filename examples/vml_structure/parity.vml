@@ -2,8 +2,8 @@ import Caption
 View(width: 500, height: 400) {
     Caption(id: "heading", text: "Imported")
     Repeater(model: app.rows, key: item.id) {
-        Button(text: item.name, width: 100, height: 32, on_tap: app.select(item.id))
+        Button(text: item.name, width: 100, height: 32, on_click: app.select(item.id))
     }
     TextInput(id: "message", bind.text: app.message, on_change: app.copied = app.message, width: 180, height: 32)
-    Button(id: "increment", text: "Increment", width: 100, height: 32, on_tap: app.count = app.count + 1)
+    Button(id: "increment", text: "Increment", width: 100, height: 32, on_click: app.count = app.count + 1)
 }

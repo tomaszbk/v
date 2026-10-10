@@ -4,7 +4,7 @@ View(width: 300, height: 200) {
     Repeater(model: app.rows, key: item.id) {
         Row(id: "row", width: 160, height: 40, align_items: start) {
             Label(id: "first", text: item.name, font_size: 12)
-            Button(width: 40, height: 20, on_tap: app.observed = first.width + app.extra)
+            Button(width: 40, height: 20, on_click: app.observed = first.width + app.extra)
         }
     }
 }

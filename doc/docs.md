@@ -8776,7 +8776,7 @@ Screen {
     background: "#f8fafc"
     Column {
         Label { text: "Hello ${app.name}" }
-        Button { text: "Save" on_tap: app.save() }
+        Button { text: "Save" on_click: app.save() }
     }
 }
 ```
@@ -8807,7 +8807,7 @@ String literals may use either double (`"`) or single (`'`) quote delimiters. Es
 quote or a backslash with `\`; `\n` and `\t` are also supported.
 
 The `bind.text`, `bind.checked`, `bind.active`, and `bind.value` properties create two-way
-bindings to public mutable top-level fields on `app`. Event properties `on_tap`, `on_change`,
+bindings to public mutable top-level fields on `app`. Event properties `on_click`, `on_change`,
 `on_active`, and `on_submit` call a public `app` method with zero arguments, one `int`, or one
 `string`, returning nothing. They also support assignments such as `app.count = app.count + 1`.
 Bindings apply the event payload before the action runs. V checks paths and signatures, including

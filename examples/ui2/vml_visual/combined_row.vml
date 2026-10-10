@@ -1,6 +1,6 @@
 component CombinedRow(row_id int) {
     computed offset := row_id
     View(id: "row", key: row_id) {
-        Button(id: "row_action", on_tap: app.record(offset * 2 + app.count))
+        Button(id: "row_action", on_click: app.record(offset * 2 + app.count))
     }
 }

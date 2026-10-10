@@ -59,7 +59,7 @@ fn test_switch_calls_both_typed_handlers_in_order_and_binds_once() ! {
 		assert app.checked == !checked
 	}
 	assert app.active_calls == 2 && app.change_calls == 2
-	for kind in [ui2.ElementEventKind.tap, .submit, .scroll] {
+	for kind in [ui2.ElementEventKind.click, .submit, .scroll] {
 		control.on_event(ui2.ElementEvent{ kind: kind, checked: true })
 	}
 	assert app.active_calls == 2 && app.change_calls == 2
@@ -77,7 +77,7 @@ fn test_switch_active_handler_alone_receives_one_change_and_binding() ! {
 	assert app.active_calls == 1 && app.change_calls == 0
 	assert app.order == ['active'] && app.payloads == [event]
 	assert !app.checked
-	control.on_event(ui2.ElementEvent{ kind: .tap, checked: true })
+	control.on_event(ui2.ElementEvent{ kind: .click, checked: true })
 	assert app.active_calls == 1 && app.change_calls == 0 && !app.checked
 	root.dispose_document()!
 }
@@ -92,7 +92,7 @@ fn test_switch_change_handler_alone_receives_one_change_and_binding() ! {
 	assert app.active_calls == 0 && app.change_calls == 1
 	assert app.order == ['change'] && app.payloads == [event]
 	assert app.checked
-	control.on_event(ui2.ElementEvent{ kind: .tap, checked: false })
+	control.on_event(ui2.ElementEvent{ kind: .click, checked: false })
 	assert app.active_calls == 0 && app.change_calls == 1 && app.checked
 	root.dispose_document()!
 }

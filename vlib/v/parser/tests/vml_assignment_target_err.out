@@ -1,7 +1,7 @@
-vlib/v/parser/tests/vml_structure/invalid_assignment.vml:2:20: error: assignment target `app.nested.count` is read-only
+vlib/v/parser/tests/vml_structure/invalid_assignment.vml:2:22: error: assignment target `app.nested.count` is read-only
     1 | View {
-    2 |     Button(on_tap: app.nested.count = 1)
-      |                    ^
+    2 |     Button(on_click: app.nested.count = 1)
+      |                      ^
     3 | }
 called from vlib/v/parser/tests/vml_assignment_target_err.vv:2:9
     1 | fn main() {

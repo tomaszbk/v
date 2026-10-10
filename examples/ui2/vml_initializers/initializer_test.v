@@ -104,7 +104,7 @@ fn test_property_and_input_initializers_evaluate_once_then_once_per_action() ! {
 		assert app.option_calls == count - 6
 		assert app.menu_calls == count - 6
 		assert app.basis_calls == count - 6
-		current.children[3].on_event(ui2.ElementEvent{ kind: .tap })
+		current.children[3].on_event(ui2.ElementEvent{ kind: .click })
 		layout.patch('root', root.element())!
 	}
 }
@@ -152,7 +152,7 @@ fn test_self_and_sibling_geometry_remain_live_after_an_app_action() ! {
 	assert current.children[1].frame.height == 161
 	assert current.children[2].text == '80.0x160.0'
 	assert current.children[4].menu[0].title == 'Width 80.0'
-	current.children[3].on_event(ui2.ElementEvent{ kind: .tap })
+	current.children[3].on_event(ui2.ElementEvent{ kind: .click })
 	layout.patch('root', root.element())!
 	_ = layout.resolve(ui2.LayoutConstraints{}, ui2.measure_layout_text, ui2.LayoutEnvironment{})!
 	updated := root.element()

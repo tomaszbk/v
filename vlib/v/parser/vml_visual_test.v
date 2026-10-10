@@ -25,7 +25,7 @@ fn test_shared_visual_builders_keep_every_generated_source_line() {
     View(
         id: "local",
     ) {
-        Button(on_tap: app.record(app.count +(5)))
+        Button(on_click: app.record(app.count +(5)))
     }
     Label {
         Run(text: "mapped")

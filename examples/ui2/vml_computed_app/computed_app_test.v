@@ -54,7 +54,7 @@ fn test_computed_app_reads_refresh_after_binding_and_external_invalidation() ! {
 	assert external.children.map(it.text) == ['mañana', 'mañana', 'mañana', '10', '0']
 	assert app.caption_calls == 3 && app.seed_calls == 1 && app.unused_calls == 0
 
-	external.children[4].on_event(ui2.ElementEvent{ kind: .tap })
+	external.children[4].on_event(ui2.ElementEvent{ kind: .click })
 	local := root.element()
 	assert local.children[4].text == '2'
 	assert app.seed_calls == 1 && app.unused_calls == 0

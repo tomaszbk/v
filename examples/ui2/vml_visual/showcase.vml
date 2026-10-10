@@ -28,7 +28,7 @@ Screen(background: "#f1f5f9") {
                         border_color: "#2563eb",
                         hover_background: "#dbeafe",
                         pressed_background: "#93c5fd",
-                        on_tap: app.tap(),
+                        on_click: app.click(),
                     )
                     TextInput(
                         id: "name",

@@ -2,7 +2,7 @@ component NamedCard(x f64 = 0, y f64 = 0, width f64 = 100) {
     state count := 0
     View(id: "card", x: x, y: y, key: "private-key", width: width, height: width + 1) {
         Label(id: "caption", text: "root=${card.width}")
-        Button(id: "select", on_tap: { count++; app.level = card.width })
+        Button(id: "select", on_click: { count++; app.level = card.width })
         Label(text: count)
     }
 }

@@ -49,13 +49,13 @@ fn test_compound_arguments_read_live_model_after_binding() {
 	mut app := CallbackModel{}
 	root := callback_tree(mut app)
 	app.count = 100
-	root.children[0].on_event(callback_event(.tap))
+	root.children[0].on_event(callback_event(.click))
 	assert app.calls == 1 && app.received == 101
 	root.children[1].on_event(ui2.ElementEvent{ kind: .change, checked: true })
 	assert app.checked && app.calls == 2 && app.received == 11
 	root.children[14].on_event(ui2.ElementEvent{ kind: .change, text: 'niño' })
 	assert app.calls == 3 && app.received_text == 'niño café'
-	root.children[15].on_event(callback_event(.tap))
+	root.children[15].on_event(callback_event(.click))
 	assert app.choice == .right
 }
 
@@ -114,7 +114,7 @@ fn test_scroll_requires_explicit_handler_and_gesture_dispatch_is_once() {
 	root.children[6].on_event(callback_event(.scroll))
 	root.children[6].on_event(callback_event(.submit))
 	assert app.calls == 0
-	gestures := [ui2.ElementEventKind.tap, .pointer_down, .pointer_drag, .pointer_up, .long_press,
+	gestures := [ui2.ElementEventKind.click, .pointer_down, .pointer_drag, .pointer_up, .long_press,
 		.swipe_left, .link]
 	for index, kind in gestures {
 		root.children[6].on_event(callback_event(kind))
@@ -124,7 +124,7 @@ fn test_scroll_requires_explicit_handler_and_gesture_dispatch_is_once() {
 	app.count = 50
 	root.children[7].on_event(callback_event(.scroll))
 	assert app.calls == 1 && app.received == 52
-	root.children[7].on_event(callback_event(.tap))
+	root.children[7].on_event(callback_event(.click))
 	assert app.calls == 2 && app.received == 1
 	root.children[8].on_event(callback_event(.submit))
 	assert app.calls == 3 && app.received == 4
@@ -136,7 +136,7 @@ fn test_scroll_requires_explicit_handler_and_gesture_dispatch_is_once() {
 		root.children[9].on_event(callback_event(kind))
 	}
 	assert app.calls == 4 && app.count == 50
-	root.children[9].on_event(callback_event(.tap))
+	root.children[9].on_event(callback_event(.click))
 	assert app.count == 51
 }
 
@@ -164,7 +164,7 @@ fn test_binding_only_and_nil_named_callback_keep_payload() {
 		})
 	}
 	assert app.message == 'nil payload' && app.level == 42.5 && app.checked && app.active
-	root.children[16].on_event(callback_event(.tap))
+	root.children[16].on_event(callback_event(.click))
 	assert app.calls == 0
 }
 
@@ -183,11 +183,11 @@ fn test_retained_imported_nested_row_callback_keeps_record_and_live_app() {
 	assert before.children[1].id == after.children[1].id
 	assert before.children[1].children[1].id == after.children[1].children[1].id
 	assert before.children[0].id != before.children[2].id
-	retained(callback_event(.tap))
+	retained(callback_event(.click))
 	assert app.calls == 1 && app.received == 102
 	app.groups.clear()
 	app.count = 200
-	retained(callback_event(.tap))
+	retained(callback_event(.click))
 	assert app.calls == 2 && app.received == 202
 	assert before.compiled_node.element().children.len == 0
 }
@@ -199,6 +199,6 @@ fn test_flat_context_menu_and_empty_application_menu_use_public_api() {
 	assert root.children[13].menu.len == 1
 	assert root.children[13].menu[0].id == 'context'
 	app.count = 100
-	root.children[13].menu[0].on_select(callback_event(.tap))
+	root.children[13].menu[0].on_select(callback_event(.click))
 	assert app.calls == 1 && app.received == 106
 }

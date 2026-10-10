@@ -53,10 +53,10 @@ fn test_measured_geometry_callbacks_keep_imported_and_repeated_row_values() {
 	mut app := &CompositionApp{ rows: [CompositionRow{7, 'ñ'}, CompositionRow{9, 'Niñez'}] }
 	root := measured_sibling_capture(mut app)
 	app.extra = 100
-	root.children[0].children[1].on_event(ui2.ElementEvent{ kind: .tap })
+	root.children[0].children[1].on_event(ui2.ElementEvent{ kind: .click })
 	assert app.observed == root.children[0].children[0].frame.width + 100
 	for row in root.children[1..] {
-		row.children[1].on_event(ui2.ElementEvent{ kind: .tap })
+		row.children[1].on_event(ui2.ElementEvent{ kind: .click })
 		assert app.observed == row.children[0].frame.width + 100
 	}
 	retained := root.children[1].children[1].on_event
@@ -67,7 +67,7 @@ fn test_measured_geometry_callbacks_keep_imported_and_repeated_row_values() {
 	assert reordered.children[2].id == root.children[1].id
 	app.rows = []CompositionRow{}
 	app.extra = 200
-	retained(ui2.ElementEvent{ kind: .tap })
+	retained(ui2.ElementEvent{ kind: .click })
 	assert app.observed == width + 200
 }
 

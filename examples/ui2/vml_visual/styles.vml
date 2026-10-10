@@ -23,5 +23,5 @@ Button(
     pressed_background: "#22c55e",
     disabled_background: "#cccccc",
     disabled_color: "#000000",
-    on_tap: app.tap(),
+    on_click: app.click(),
 )

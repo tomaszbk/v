@@ -8,5 +8,5 @@ View {
         Run(text: "Inherited")
         Run(text: "Dynamic", size: app.count / 2)
     }
-    Button(text: "Update", on_tap: app.count = app.count + 2)
+    Button(text: "Update", on_click: app.count = app.count + 2)
 }

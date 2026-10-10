@@ -8,11 +8,11 @@ component CombinedCallbacks() {
                     id: "checked",
                     bind.checked: app.checked,
                     on_change: app.record(offset + app.count + (app.checked ? 11 : 22)),
-                    on_tap: app.tap(offset + app.count),
+                    on_click: app.click(offset + app.count),
                 )
-                Button(id: "compound", on_tap: app.record(offset + app.count * 2))
+                Button(id: "compound", on_click: app.record(offset + app.count * 2))
                 TextInput(id: "input", bind.text: app.message, on_change: app.named)
-                Scroll(id: "scroll", on_tap: app.tap(app.count), on_scroll: app.record(offset + app.count))
+                Scroll(id: "scroll", on_click: app.click(app.count), on_scroll: app.record(offset + app.count))
                 Label() {
                     Run(text: "Niñez", bold: false, weight: 0, letter_spacing: 0)
                 }
