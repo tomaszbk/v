@@ -49,20 +49,24 @@ fn (mut p Parser) remap_vml_source(first_node int, first_diagnostic int, locatio
 }
 
 // Generic guards let V validate declared list and key types even for empty lists.
-// They have no runtime effects and reuse the language's normal type checker.
+// They never run: the call sits behind a generated non-constant false, so V
+// type-checks it without reporting a constant condition in generated code.
 fn (mut c VmlCompiler) write_list_guard(value string, suffix string, array bool) {
 	name := '${c.guard_prefix}_${suffix}_' + if array { 'array' } else { 'key' }
 	c.guards << VmlGuard{ name: name, array: array, location: c.location }
-	c.writeln('\tif false { ${name}(${value}) }')
+	c.writeln('\tif ${c.guard_prefix}_unreachable() { ${name}(${value}) }')
 }
 
 fn (mut c VmlCompiler) write_field_guard(value string, field_name string, model_path string) {
 	name := '${c.guard_prefix}_field_${c.guards.len}'
 	c.guards << VmlGuard{ name: name, field_name: field_name, model_path: model_path, location: c.location }
-	c.writeln('\tif false { ${name}(${value}) }')
+	c.writeln('\tif ${c.guard_prefix}_unreachable() { ${name}(${value}) }')
 }
 
 fn (mut c VmlCompiler) write_list_guards() {
+	if c.guards.len > 0 {
+		c.writeln('fn ${c.guard_prefix}_unreachable() bool { return false }')
+	}
 	for guard in c.guards {
 		c.location = guard.location
 		c.writeln('fn ${guard.name}[T](value T) {')

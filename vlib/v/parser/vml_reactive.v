@@ -77,7 +77,8 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	capture_start := c.out.len + prefix.len
 	c.writeln(prefix + '[] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
 	body_start := c.out.len
-	c.writeln('mut ${signal} := ${signal}_input')
+	// Item closures read the list-owned signal through a mutable handle.
+	c.writeln('mut ${signal} := unsafe { ${signal}_input }')
 	c.writeln('_ = ${collection}')
 	c.writeln('mut ${index} := ${owner}.state(' + vml_quote('@index') + ', 0)!')
 	c.writeln('_ = ${index}')

@@ -110,7 +110,11 @@ fn test_vml_generated_item_paths_keep_import_source_location() {
 		if !binding.value.starts_with('vml_item_signal_') { continue }
 		item_bindings++
 		assert node.is_mut, 'reactive item reads require a mutable signal binding'
-		source := ast.child_node(&node, 1)
+		// The list-owned signal parameter is aliased through `unsafe { input }`.
+		mut source := ast.child_node(&node, 1)
+		for source.kind != .ident && source.children_count > 0 {
+			source = ast.child_node(source, source.children_count - 1)
+		}
 		assert source.kind == .ident && source.value == binding.value + '_input'
 	}
 	assert item_bindings == 1
