@@ -178,7 +178,13 @@ fn (mut c VmlCompiler) compile_structural_effect(node &VmlNode, suffix string, i
 	mut properties := map[string]string{}
 	for property in node.properties {
 		if property.name in ['id', 'ref'] || vml_is_event(property.name) { continue }
-		properties[property.name] = c.visual_property_value(node, property, property.expr, scope)
+		properties[property.name] = c.property_effect_value(node, property, suffix, scope)
+		captures << c.property_memo_capture(suffix, property.name)
+	}
+	for child in node.children {
+		if child.tag == 'Option' {
+			captures << c.property_memo_capture(vml_content_suffix(suffix, child), 'text')
+		}
 	}
 	c.effect_mode = true
 	if node.tag == 'MessageBox' {
@@ -222,14 +228,18 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 		mut inherited := map[string]string{}
 		for property in node.properties {
 			if property.name in vml_text_properties {
-				inherited[property.name] = c.visual_property_value(node, property, property.expr, scope)
+				inherited[property.name] = c.property_effect_value(node, property, suffix, scope)
+				captures << c.property_memo_capture(suffix, property.name)
 			}
 		}
 		mut values := []string{}
-		for child in runs {
+		for index, child in node.children {
+			if child.tag != 'Run' { continue }
 			mut properties := inherited.clone()
 			for property in child.properties {
-				properties[property.name] = c.visual_property_value(child, property, property.expr, scope)
+				child_suffix := '${suffix}_run_${index}'
+				properties[property.name] = c.property_effect_value(child, property, child_suffix, scope)
+				captures << c.property_memo_capture(child_suffix, property.name)
 			}
 			values << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'
 		}
@@ -239,7 +249,9 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 		mut values := []string{}
 		for index, child in menu {
 			text := if property := vml_find_property(child, 'text') {
-				c.expr(property.expr, scope, .text)
+				child_suffix := vml_content_suffix(suffix, child)
+				captures << c.property_memo_capture(child_suffix, property.name)
+				c.property_effect_value(child, property, child_suffix, scope)
 			} else {
 				"''"
 			}

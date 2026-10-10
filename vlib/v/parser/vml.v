@@ -1014,6 +1014,7 @@ mut:
 	slot_scopes           map[string]VmlScope
 	out                   strings.Builder
 	property_positions    map[string]VmlProperty
+	property_memos        map[string]string
 	guards                []VmlGuard
 	location              VmlLocation
 	locations             []VmlLocation
@@ -1359,34 +1360,13 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	mut properties := map[string]string{}
-	mut ordered_properties := vml_order_properties_by_dependencies(node.properties.filter(vml_property_is_geometry(it)), node.id)
-	ordered_properties << node.properties.filter(!vml_property_is_geometry(it))
-	for property in ordered_properties {
-		c.location = VmlLocation{ path: property.expr.source, line: property.line, column: property.column }
-		if property.name in ['id', 'ref']
-			|| property.name in vml_event_names {
-			continue
-		}
-		name := 'vml_property_${suffix}_${vml_var(property.name)}'
-		property_use := vml_property_use(property)
-		value := c.visual_property_value(node, property, property.expr, scope)
-		if property_use == .color
-			&& property.expr.kind in [.literal, .path]
-			&& property.expr.value.starts_with('#') && property.expr.value.len == 7 {
-			// Static colors can be used directly without a generated local.
-			properties[property.name] = value
-			continue
-		}
-		c.writeln('\t${name} := ${value}')
-		c.property_positions[name] = property
-		c.writeln('\t_ = ${name}')
+	for property in vml_order_properties_by_dependencies(node.properties.filter(vml_property_is_geometry(it)), node.id) {
+		name := c.write_property_initializer(node, property, suffix, scope)
 		properties[property.name] = name
-		if vml_property_is_geometry(property) {
-			named_props[property.name] = name
-			named_types[property.name] = vml_builder_property_type(node, property)
-			if node.id.len > 0 {
-				scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
-			}
+		named_props[property.name] = name
+		named_types[property.name] = vml_builder_property_type(node, property)
+		if node.id.len > 0 {
+			scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
 		}
 	}
 	frame := 'vml_frame_${suffix}'
@@ -1416,10 +1396,14 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		c.writeln('_ = ${geometry}')
 		scope.ids[node.id] = VmlNamedValue{ frame: frame, frame_signal: geometry, props: named_props.clone(), prop_types: named_types.clone() }
 	}
+	for property in node.properties.filter(!vml_property_is_geometry(it)) {
+		if property.name in ['id', 'ref'] || vml_is_event(property.name) { continue }
+		properties[property.name] = c.write_property_initializer(node, property, suffix, scope)
+	}
 	c.write_action_type_checks(node, suffix, scope)
 	if node.tag in ['Flex', 'Row', 'Column', 'Grid'] {
 		result := c.compile_visual_layout(node, path, input, frame, properties, scope, placement, default_key)
-		c.retain_element(node, suffix, scope)
+		c.retain_element(node, suffix, result)
 		return vml_node_output_scope(node, incoming, result)
 	}
 	children := 'vml_children_${suffix}'
@@ -1466,6 +1450,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		}
 		c.writeln('\t${children} << vml_element_${vml_var(child_path)}')
 	}
+	c.prepare_menu_initializers(node, suffix, scope)
 	if node.tag in ['Label', 'TextArea'] && node.children.any(it.tag == 'Run') {
 		c.prepare_visual_runs(node, suffix, mut properties, scope)
 	}
@@ -1549,7 +1534,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 		for index, item in menu_items {
 			id := c.event_callback(item, 'on_tap', scope)
 			text := if property := vml_find_property(item, 'text') {
-				c.expr(property.expr, scope, .text)
+				c.property_effect_value(item, property, vml_content_suffix(suffix, item), scope)
 			} else {
 				"''"
 			}
@@ -1564,7 +1549,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 				continue
 			}
 			text := if property := vml_find_property(option, 'text') {
-				c.expr(property.expr, scope, .text)
+				c.property_effect_value(option, property, vml_content_suffix(suffix, option), scope)
 			} else {
 				"''"
 			}
@@ -1575,14 +1560,14 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 	return '[]ui2.MenuEntry{}'
 }
 
-fn (c &VmlCompiler) option_values(node &VmlNode, scope VmlScope) string {
+fn (c &VmlCompiler) option_values(node &VmlNode, suffix string, scope VmlScope) string {
 	mut values := []string{}
 	for option in node.children {
 		if option.tag != 'Option' {
 			continue
 		}
 		value := if property := vml_find_property(option, 'text') {
-			c.expr(property.expr, scope, .text)
+			c.property_effect_value(option, property, vml_content_suffix(suffix, option), scope)
 		} else {
 			"''"
 		}
@@ -1840,7 +1825,7 @@ fn (mut c VmlCompiler) compile_spinner(node &VmlNode, suffix string, frame strin
 	c.writeln('\t\ton_event: ${action}')
 	c.writeln('\t\tframe: ${frame}')
 	c.writeln('\t\ttext: ${vml_value(properties, 'text', 'bind.text', "''")}')
-	c.writeln('\t\tvalues: ${c.option_values(node, scope)}')
+	c.writeln('\t\tvalues: ${c.option_values(node, suffix, scope)}')
 	c.writeln('\t\ttext_autoupdate: ${vml_prop(properties, 'text_autoupdate', 'false')}')
 	c.writeln('\t\tbox: ${box}')
 	c.writeln('\t\ttext_style: ${text_style}')

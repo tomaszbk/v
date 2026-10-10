@@ -59,7 +59,10 @@ fn test_structural_effect_captures_current_inputs_and_event_references() {
 	generated := compiler.compile(root)
 	headers := generated.split_into_lines().filter(it.contains(".structure('@widget',"))
 	assert headers.len == 3
-	assert headers[0].contains('mut app'), headers[0]
+	value_memo := generated.split_into_lines().filter(it.contains("('@property:0_1:value'"))[0]
+	assert value_memo.contains('mut app'), value_memo
+	assert headers[0].contains('mut vml_property_0_1_value_memo'), headers[0]
+	assert !headers[0].contains('mut app'), headers[0]
 	assert headers[0].contains('mut vml_node_0_1'), headers[0]
 	assert headers[0].contains('mut vml_root_component'), headers[0]
 	assert !headers[0].contains('vml_property_0_0_width'), headers[0]
