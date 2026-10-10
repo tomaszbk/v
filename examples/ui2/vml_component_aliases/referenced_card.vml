@@ -1,0 +1,6 @@
+import NamedCard
+component ReferencedCard(name string, width f64) {
+    ref target View
+    mount { app.remember(name, target) }
+    NamedCard(ref: target, width: width)
+}

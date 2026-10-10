@@ -726,7 +726,11 @@ fn parse_vml_source(source string) !&VmlNode {
 	mut parser := VmlSourceParser{ tokens: tokens }
 	root := parser.parse_vml_document()!
 	parser.take(.eof)!
-	validate_compiled_vml_visual(root, '')!
+	validate_compiled_vml_visual(root, if root.tag == '__Component' {
+		vml_unknown_component_parent
+	} else {
+		''
+	})!
 	validate_compiled_vml_node(root)!
 	return root
 }
@@ -981,6 +985,7 @@ fn vml_expr_uses_path(expr &VmlExpr, base string) bool {
 struct VmlNamedValue {
 	frame        string
 	frame_signal string
+	frame_node   string
 	props        map[string]string
 	prop_types   map[string]string
 }
@@ -1150,6 +1155,9 @@ fn (c &VmlCompiler) resolve_path(path string, scope VmlScope) (string, bool) {
 		return replacement + if parts.len > 1 { '.' + parts[1..].join('.') } else { '' }, true
 	}
 	if named := scope.ids[parts[0]] {
+		if parts.len == 2 && parts[1] in ['x', 'y', 'width', 'height'] && named.frame_node.len > 0 {
+			return '(' + named.frame_node + '.frame() or { panic(err) }).' + parts[1], true
+		}
 		if parts.len == 2 && parts[1] in ['x', 'y', 'width', 'height'] && named.frame_signal.len > 0 {
 			return '(' + named.frame_signal + '.get() or { panic(err) }).' + parts[1], true
 		}
