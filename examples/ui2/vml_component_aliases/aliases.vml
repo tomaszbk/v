@@ -1,0 +1,19 @@
+import NamedCard
+import AnonymousCard
+import NestedCard
+component Aliases() {
+    ref named View
+    ref anonymous View
+    ref nested View
+    Absolute {
+        View(id: "card", width: 77)
+        NamedCard(id: "first", x: 12, y: 13, key: "first-key", ref: named, width: 100)
+        AnonymousCard(id: "second", key: "second-key", ref: anonymous, width: 200)
+        NestedCard(id: "third", key: "third-key", ref: nested, width: card.width)
+        View(id: "observer", width: first.width, height: second.height, x: third.width)
+        Button(on_tap: app.level = first.width + second.height)
+        Repeater(model: app.rows, key: item.id) {
+            Label(text: first.width)
+        }
+    }
+}

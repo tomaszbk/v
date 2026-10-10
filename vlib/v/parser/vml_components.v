@@ -407,11 +407,37 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			''
 		} + ' { ' + action + ' }) or { panic(err) }')
 	}
-	c.compile_node(node.children[0], path + '.root', input, scope, default_key, placement)
+	key := if property := vml_find_property(node, 'key') {
+		c.visual_property_value(node, property, property.expr, incoming)
+	} else {
+		default_key
+	}
+	// Invocation keys belong to the actual root, before it is retained. A nested
+	// component forwards this same key instead of exposing its private root key.
+	root := if key.len > 0 {
+		&VmlNode{ ...node.children[0], properties: node.children[0].properties.filter(it.name != 'key') }
+	} else {
+		node.children[0]
+	}
+	c.compile_node(root, path + '.root', input, scope, key, placement)
 	c.writeln('\tmut vml_node_${suffix} := vml_node_${suffix}_root')
 	c.writeln('\t_ = vml_node_${suffix}')
 	c.writeln('\tvml_element_${suffix} := vml_element_${suffix}_root')
-	return incoming
+	if reference := vml_find_property(node, 'ref') {
+		c.location = VmlLocation{ path: reference.expr.source, line: reference.line, column: reference.column }
+		mut control := root
+		for control.tag == '__Component' { control = control.children[0] }
+		ref_type := incoming.special['__ref_' + reference.expr.value] or { '' }
+		if ref_type != control.tag {
+			c.writeln('$compile_error(' + vml_quote('ref `${reference.expr.value}` requires ${ref_type}; received ${control.tag}') + ')')
+		}
+		c.writeln(c.expr(reference.expr, incoming, .raw) + '.bind(vml_node_${suffix}) or { panic(err) }')
+	}
+	mut exported := vml_clone_scope(incoming)
+	if node.id.len > 0 {
+		exported.ids[node.id] = VmlNamedValue{ frame_node: 'vml_node_${suffix}' }
+	}
+	return exported
 }
 
 fn (c &VmlCompiler) compile_write(target string, value string, scope VmlScope) string {

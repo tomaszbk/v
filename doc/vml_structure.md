@@ -119,6 +119,15 @@ expire on disposal. They expose typed runtime operations such as
 `name_field.focus()!` and `name_field.set_text("ready")!`. Refs are excluded
 from binding and snapshot data. `TextInput` and `TextArea` are distinct types.
 
+An invocation such as `Card(id: "card", key: "item", ref: card_ref)` aliases the
+component's real root. `card.width` and the other geometry members read that
+root's reactive frame; geometry used as a layout input requires `Absolute`.
+The invocation key applies to the root, and a typed ref must match its control
+kind. The root keeps its private authored id and namespace; neither its other
+ids nor its private members become visible to the caller. Anonymous roots keep
+an empty public id. A component whose root uses `x` or `y` requires an
+`Absolute` parent at its invocation; imported definitions retain this requirement.
+
 ## Keyed child groups
 
 ```text

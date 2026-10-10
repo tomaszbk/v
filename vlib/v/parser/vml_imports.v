@@ -29,7 +29,11 @@ fn parse_compiled_vml_file(path string, expected_module string, stack []string) 
 	}
 	root = expand_compiled_vml_import(root, modules)!
 	if root.tag in ['Menu', 'MenuBar'] { validate_compiled_vml_menu(root)! }
-	validate_compiled_vml_visual(root, '')!
+	validate_compiled_vml_visual(root, if expected_module.len > 0 {
+		vml_unknown_component_parent
+	} else {
+		''
+	})!
 	validate_compiled_vml_node(root)!
 	return root
 }

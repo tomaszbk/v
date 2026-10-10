@@ -153,7 +153,13 @@ fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {
 	}
 	for _, named in scope.ids {
 		for _, property in named.props { if property !in captures { captures << property } }
-		value := if named.frame_signal.len > 0 { 'mut ' + named.frame_signal } else { named.frame }
+		value := if named.frame_node.len > 0 {
+			named.frame_node
+		} else if named.frame_signal.len > 0 {
+			'mut ' + named.frame_signal
+		} else {
+			named.frame
+		}
 		if value !in captures { captures << value }
 	}
 	captures << c.callback_captures.filter(it !in captures)

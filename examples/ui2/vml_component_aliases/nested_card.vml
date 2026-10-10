@@ -1,0 +1,4 @@
+import NamedCard
+component NestedCard(width f64 = 100) {
+    NamedCard(key: "nested-private-key", width: width)
+}

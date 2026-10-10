@@ -1,0 +1,6 @@
+import ReferencedCard
+Absolute {
+    Repeater(model: app.rows, key: item.id) {
+        ReferencedCard(name: item.id, key: item.id, width: item.width)
+    }
+}

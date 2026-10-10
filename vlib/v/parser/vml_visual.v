@@ -353,6 +353,10 @@ fn validate_vml_visual_bool(property VmlProperty, expr &VmlExpr) ! {
 	}
 }
 
+// Imported definitions validate descendants immediately; their root inherits
+// the actual parent when the component is expanded at its invocation.
+const vml_unknown_component_parent = '__ComponentParent'
+
 fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
 	validate_compiled_vml_visual_scope(node, parent, false)!
 	validate_vml_geometry_scope(node, parent, VmlScope{}, VmlScope{})!
@@ -403,7 +407,7 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 		// Component arguments are data; only their shared child-layout arguments
 		// participate in the surrounding container's layout.
 		if node.tag == '__Component' && property.name !in vml_flex_child_properties { continue }
-		if parent != 'Absolute' && vml_layout_dimension_property(property.name)
+		if parent !in ['Absolute', vml_unknown_component_parent] && vml_layout_dimension_property(property.name)
 			&& vml_expr_uses_element_geometry(property.expr, scope) {
 			return vml_visual_error(property, 'element geometry in `${property.name}` requires a parent Absolute container')
 		}
@@ -413,7 +417,8 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 		for child in node.children {
 			private = validate_vml_geometry_scope(child, parent, private, incoming)!
 		}
-		return incoming
+		if node.id.len > 0 { scope.ids[node.id] = VmlNamedValue{} }
+		return scope
 	}
 	child_parent := if node.tag == 'Repeater' { parent } else { node.tag }
 	for child in node.children {
@@ -467,7 +472,7 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 
 	mut seen := map[string]bool{}
 	for property in node.properties {
-		if property.name in ['x', 'y'] && parent != 'Absolute' {
+		if property.name in ['x', 'y'] && parent !in ['Absolute', vml_unknown_component_parent] {
 			return vml_visual_error(property, 'x/y require a parent Absolute container')
 		}
 		if property.name == 'orientation' && node.tag in ['Row', 'Column'] {
