@@ -14,6 +14,8 @@ fn build(mut app App) ui2.Element {
 
 `app` always refers to the calling application's live instance, including
 services and ordinary V methods. The generated callbacks borrow that instance.
+Each retained callback captures the signals, geometry and functions its body
+uses. Compiled documents support builds with V's `-W` flag.
 Use `ui2.run_compiled_vml` with the builder and the application's pointer. ui2
 creates the retained document once and updates affected properties and keyed
 child groups. Parsing, expression evaluation and layout are not interpreted at

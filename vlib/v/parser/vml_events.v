@@ -134,6 +134,7 @@ fn (c &VmlCompiler) event_callback(node &VmlNode, name string, scope VmlScope) s
 			body += c.compile_action(property.expr, scope) + '\n'
 		}
 	}
+	captures = vml_used_captures(body, captures)
 	if scope.component.len > 0 {
 		return '${scope.component}.callback(fn [${captures.join(', ')}] (event ui2.ElementEvent) ! { ${body} })'
 	}
