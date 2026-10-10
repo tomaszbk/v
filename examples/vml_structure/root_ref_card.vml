@@ -1,9 +1,7 @@
-module RootRefCard
-View {
-    id: card
-    height: card.width + card.increment
-    computed int increment: 1
-    width: 100
-    Label { id: caption text: "root=${card.width}" }
-    Button { id: select on_tap: app.level = card.width }
+component RootRefCard(width f64 = 100) {
+    computed increment := 1
+    View(id: "card", width: width, height: width + increment) {
+        Label(id: "caption", text: "root=${card.width}")
+        Button(id: "select", on_tap: app.level = card.width)
+    }
 }

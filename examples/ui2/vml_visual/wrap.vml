@@ -1,13 +1,14 @@
-Flex {
-    id: wrapping
-    orientation: .horizontal
-    width: 180
-    height: 90
-    wrap: true
-    gap: 10
-    line_gap: 15
-    align_items: .start
-    Label { text: "One" width: 80 height: 20 }
-    Label { text: "Two" width: 80 height: 20 }
-    Label { text: "Three" width: 80 height: 20 }
+Flex(
+    id: "wrapping",
+    orientation: horizontal,
+    width: 180,
+    height: 90,
+    wrap: true,
+    gap: 10,
+    line_gap: 15,
+    align_items: start,
+) {
+    Label(text: "One", width: 80, height: 20)
+    Label(text: "Two", width: 80, height: 20)
+    Label(text: "Three", width: 80, height: 20)
 }

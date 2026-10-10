@@ -1,27 +1,20 @@
 import Card
-View {
-    width: 620
-    height: 480
-    Card { id: first }
-    Card { id: second }
-    Repeater {
-        model: app.rows
-        key: item.id
-        View {
-            id: row
-            key: item.id
-            width: 300
-            height: 80
-            Label { id: name text: item.name width: 280 height: 24 }
-            Button { id: select text: "Select" width: 90 height: 32 on_tap: app.select(item.id) }
-            Button { id: assign text: "Assign" width: 90 height: 32 on_tap: app.selected = item.id }
+Absolute(width: 620, height: 480) {
+    Card(id: "first")
+    Card(id: "second")
+    Repeater(model: app.rows, key: item.id) {
+        View(id: "row", key: item.id, width: 300, height: 80) {
+            Label(id: "name", text: item.name, width: 280, height: 24)
+            Button(id: "select", text: "Select", width: 90, height: 32, on_tap: app.select(item.id))
+            Button(id: "assign", text: "Assign", width: 90, height: 32, on_tap: app.selected = item.id)
         }
     }
-    TextInput { multiline: false id: editor bind.text: app.message on_change: app.copied = app.message width: 300 height: 36 }
-    Button {
-        id: increment text: "Increment" width: 100 height: 36
-        on_tap: app.count = app.count + 1
-        MenuItem { id: reset text: "Reset" on_tap: app.count = 0 }
+    TextInput(id: "editor", bind.text: app.message, on_change: app.copied = app.message, width: 300, height: 36)
+    Button(id: "increment", text: "Increment", width: 100, height: 36, on_tap: app.count = app.count + 1) {
+        MenuItem(id: "reset", text: "Reset", on_tap: app.count = 0)
     }
-    Dropdown { id: choice text: "One" width: 100 height: 32 Option { text: "One" } Option { text: "Two" } }
+    Dropdown(id: "choice", text: "One", width: 100, height: 32) {
+        Option(text: "One")
+        Option(text: "Two")
+    }
 }

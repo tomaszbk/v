@@ -1,8 +1,6 @@
-module Card
 import Caption
-View {
-    id: card
-    width: 300
-    height: 60
-    Caption { id: explicit_caption text: "Imported caption" }
+component Card(x f64 = 0, y f64 = 0, width f64 = 300, height f64 = 60) {
+    View(id: "card", x: x, y: y, width: width, height: height) {
+        Caption(id: "explicit_caption", text: "Imported caption")
+    }
 }

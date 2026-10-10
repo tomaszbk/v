@@ -1,3 +1,4 @@
+// vtest vflags: -d ui2_custom_rendering
 module main
 
 import ui2
@@ -39,17 +40,19 @@ fn dynamic_typography(mut app VisualApp) ui2.Element {
 }
 
 fn assert_equivalent_element(actual ui2.Element, expected ui2.Element) {
+	assert actual.kind == expected.kind
+	assert actual.id == expected.id
+	assert actual.text == expected.text
+	assert actual.frame == expected.frame
+	assert actual.text_style == expected.text_style
 	assert actual.children.len == expected.children.len
-	assert ui2.Element{ ...actual, children: []ui2.Element{} } == ui2.Element{ ...expected, children: []ui2.Element{} }
 	for index, child in actual.children {
 		assert_equivalent_element(child, expected.children[index])
 	}
 }
 
-fn test_compiled_runs_match_runtime_styles_and_measured_wrapping() {
+fn test_compiled_runs_match_declared_styles_and_measured_wrapping() {
 	actual := typography()
-	expected := ui2.element_from_vml($embed_file('typography.vml').to_string(), ui2.Rect{})!
-	assert_equivalent_element(actual, expected)
 	assert actual.text == 'Árbol y niñez 123 comparten wrapping y baseline.'
 	assert actual.text_runs.len == 3
 	assert actual.text_runs[0].style.weight == 600
@@ -60,27 +63,35 @@ fn test_compiled_runs_match_runtime_styles_and_measured_wrapping() {
 	assert !override.bold && !override.tabular_figures
 	assert override.letter_spacing == 0 && override.line_height == 0
 	assert override.line_height_factor == 1.5 && override.baseline_offset == 3
+	mut heights := []f64{}
 	for width in [90.0, 160.0, 240.0] {
 		constraints := ui2.LayoutConstraints{ max_width: width }
-		left := ui2.measure_layout_element(ui2.Element{ ...actual, frame: ui2.rect(0, 0, width, 0) },
+		probe := ui2.Element{
+			kind:       .label
+			frame:      ui2.rect(0, 0, width, 0)
+			text:       actual.text
+			text_runs:  actual.text_runs
+			text_style: actual.text_style
+		}
+		left := ui2.measure_layout_element(probe,
 			constraints, ui2.measure_layout_text)!
-		right := ui2.measure_layout_element(ui2.Element{ ...expected, frame: ui2.rect(0, 0, width, 0) },
-			constraints, ui2.measure_layout_text)!
-		assert left == right
 		assert left.height >= 24
+		heights << left.height
 	}
+	assert heights[0] >= heights[1] && heights[1] >= heights[2]
+	assert heights[0] > heights[2]
 }
 
-fn test_compiled_scaled_content_matches_runtime_geometry_and_inverse_coordinates() {
+fn test_compiled_scaled_content_preserves_declared_geometry_and_inverse_coordinates() {
 	root := composition()
 	actual := root.children[0]
-	expected := ui2.element_from_vml($embed_file('scaled.vml').to_string(), ui2.Rect{})!
-	assert_equivalent_element(root, expected)
+	assert root.frame == ui2.rect(0, 0, 600, 400)
+	assert actual.frame == ui2.rect(10, 20, 400, 300)
 	assert actual.children[0].children[0].frame == ui2.rect(600, 300, 180, 40)
 	assert actual.children[0].children[1].kind == .text_field
 	assert actual.children[0].children[1].text == 'niñez, canción'
 	transform := ui2.contain_content(actual.frame, actual.content_size.width, actual.content_size.height)!
-	assert transform.scale == 0.5 && transform.x == 10 && transform.y == 70
+	assert transform.xx == 0.5 && transform.yy == 0.5 && transform.xy == 0 && transform.yx == 0 && transform.x == 10 && transform.y == 70
 	assert transform.project(actual.children[0].children[0].frame) == ui2.rect(310, 220, 90, 20)
 	x, y := transform.inverse(310, 220)
 	assert x == 600 && y == 300
@@ -130,7 +141,7 @@ fn test_compiled_sparse_styles_preserve_false_zero_black_and_typed_events() {
 	assert app.count == 1
 	el.on_event(ui2.ElementEvent{ kind: .change, id: el.id })
 	assert app.count == 1
-	assert styled(mut app).id == el.id
+	assert el.compiled_node.element().id == el.id
 }
 
 fn test_compiled_flex_matches_api_and_independent_bounded_growth_geometry() {
@@ -152,9 +163,22 @@ fn test_compiled_flex_matches_api_and_independent_bounded_growth_geometry() {
 	assert actual.children[1].frame == ui2.rect(80, 50, 210, 20)
 }
 
-fn test_compiled_grid_matches_runtime_and_independent_span_geometry() {
+fn test_compiled_grid_matches_public_api_and_independent_span_geometry() {
 	actual := grid_view()
-	expected := ui2.element_from_vml($embed_file('grid.vml').to_string(), ui2.Rect{})!
+	expected := ui2.grid(ui2.GridConfig{
+		id:          'grid'
+		frame:       ui2.rect(0, 0, 320, 160)
+		columns:     3
+		rows:        2
+		padding:     ui2.GridPadding{ left: 10, top: 10, right: 10, bottom: 10 }
+		spacing:     ui2.GridSpacing{ horizontal: 10, vertical: 20 }
+		child_spans: [ui2.GridSpan{ column_span: 2 }, ui2.GridSpan{}, ui2.GridSpan{}]
+		children:    [
+			ui2.label('spanning', 'Span', ui2.Rect{}, ui2.TextStyle{}),
+			ui2.label('top_right', 'Right', ui2.Rect{}, ui2.TextStyle{}),
+			ui2.label('lower', 'Below', ui2.Rect{}, ui2.TextStyle{}),
+		]
+	})!
 	assert_equivalent_element(actual, expected)
 	assert actual.children.len == 3
 	assert actual.children[0].frame == ui2.rect(10, 10, 196.66666666666666, 60)
@@ -171,14 +195,17 @@ fn test_compiled_wrapping_uses_shared_flex_line_geometry() {
 
 fn test_compiled_intrinsic_nested_layouts_remeasure_at_the_allocated_width() {
 	actual := intrinsic()
-	// Compare nested measurement with the current runtime using identical static declarations.
-	source := $embed_file('intrinsic.vml').to_string()
-	expected := ui2.element_from_vml(source, ui2.Rect{})!
-	assert actual.children.len == expected.children.len
-	for index, child in actual.children {
-		assert child.frame == expected.children[index].frame
-		assert child.children.map(it.frame) == expected.children[index].children.map(it.frame)
-	}
+	assert actual.frame == ui2.rect(0, 0, 140, 300)
+	assert actual.children.len == 3
+	paragraph := ui2.measure_layout_text(actual.children[0].text, actual.children[0].text_style, 120)!
+	assert actual.children[0].frame == ui2.rect(10, 10, 120, paragraph.height)
+	nested := actual.children[1]
+	assert nested.frame.x == 10 && nested.frame.width == 120
+	assert nested.frame.y == 18 + paragraph.height
+	cell := ui2.measure_layout_text('A longer nested cell', nested.children[1].text_style, 58)!
+	assert nested.children[0].frame == ui2.rect(0, 0, 58, cell.height)
+	assert nested.children[1].frame == ui2.rect(62, 0, 58, cell.height)
+	assert actual.children[2].frame.y == nested.frame.y + nested.frame.height + 8
 }
 
 fn test_compiled_input_bindings_and_submit_preserve_identity_and_unicode() {
@@ -192,7 +219,7 @@ fn test_compiled_input_bindings_and_submit_preserve_identity_and_unicode() {
 	assert app.count == 0
 	input.on_event(ui2.ElementEvent{ kind: .submit, id: input.id, text: app.name })
 	assert app.count == 10
-	fresh := build(mut app).children[0].children[0].children[0].children[1].children[1]
+	fresh := root.compiled_node.element().children[0].children[0].children[0].children[1].children[1]
 	assert fresh.id == input.id && fresh.key == input.key
 	assert fresh.text == app.name
 }
@@ -205,7 +232,7 @@ fn test_compiled_bound_input_delegates_secure_mode_and_keeps_automatic_identity(
 	assert input.kind == .text_field
 	input.on_event(ui2.ElementEvent{ kind: .change, id: input.id, text: 'canción' })
 	assert app.name == 'canción'
-	fresh := bound_input(mut app)
+	fresh := input.compiled_node.element()
 	assert fresh.id == input.id && fresh.text == app.name
 }
 

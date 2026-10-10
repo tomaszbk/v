@@ -1,27 +1,28 @@
-Label {
-    id: paragraph
-    width: 240
-    height: 120
-    font_size: 18
-    weight: 600
-    bold: true
-    letter_spacing: -0.5
-    line_height: 24
-    lines: 4
-    color: "#334155"
-    tabular_figures: true
-    Run { text: "Árbol y " }
-    Run {
-        text: "niñez 123 "
-        font_size: 12
-        weight: 0
-        bold: false
-        letter_spacing: 0
-        line_height: 0
-        line_height_factor: 1.5
-        baseline_offset: 3
-        color: "#000000"
-        tabular_figures: false
-    }
-    Run { text: "comparten wrapping y baseline." italic: true }
+Label(
+    id: "paragraph",
+    width: 240,
+    height: 120,
+    font_size: 18,
+    weight: 600,
+    bold: true,
+    letter_spacing: -0.5,
+    line_height: 24,
+    lines: 4,
+    color: "#334155",
+    tabular_figures: true,
+) {
+    Run(text: "Árbol y ")
+    Run(
+        text: "niñez 123 ",
+        font_size: 12,
+        weight: 0,
+        bold: false,
+        letter_spacing: 0,
+        line_height: 0,
+        line_height_factor: 1.5,
+        baseline_offset: 3,
+        color: "#000000",
+        tabular_figures: false,
+    )
+    Run(text: "comparten wrapping y baseline.", italic: true)
 }

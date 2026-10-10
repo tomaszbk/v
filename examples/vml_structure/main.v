@@ -76,10 +76,10 @@ fn named_change(event ui2.ElementEvent) {
 // select_text records the value observed after a binding write.
 pub fn (mut app App) select_text(value string) { app.copied = value }
 
-fn invalid_siblings(mut app App) ui2.Element { return $vml('invalid_siblings.vml') }
+fn invalid_siblings() ui2.Element { return $vml('invalid_siblings.vml') }
 
 fn main() {
-	mut app := App{ rows: [Row{1, 'First'}, Row{2, 'Second'}] }
+	mut app := &App{ rows: [Row{1, 'First'}, Row{2, 'Second'}] }
 	if '--duplicate-key' in os.args {
 		app.rows = [Row{1, 'first'}, Row{1, 'duplicate'}]
 		_ = build(mut app)
@@ -91,7 +91,7 @@ fn main() {
 		return
 	}
 	if '--duplicate-sibling' in os.args {
-		_ = invalid_siblings(mut app)
+		_ = invalid_siblings()
 		return
 	}
 	root := build(mut app)

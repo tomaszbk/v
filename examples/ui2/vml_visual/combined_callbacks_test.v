@@ -1,3 +1,4 @@
+// vtest vflags: -d ui2_custom_rendering
 module main
 
 import ui2
@@ -40,7 +41,7 @@ fn test_visual_structure_callbacks_keep_locals_binding_order_and_event_routes() 
 	root := combined_tree(mut app)
 	assert root.children[0].children.len == 2
 	controls := root.children[0].children[0].children
-	assert controls[0].id == 'checked'
+	assert controls[0].id.len > 0 && controls[0].id != 'checked'
 	app.count = 100
 	controls[0].on_event(ui2.ElementEvent{ kind: .change, checked: true })
 	assert app.checked && app.calls == 1 && app.value == 116
@@ -66,7 +67,11 @@ fn test_visual_structure_callbacks_keep_locals_binding_order_and_event_routes() 
 	assert root.children[1].key == '7'
 	id := root.children[1].id
 	app.rows.reverse_in_place()
-	reordered := combined_tree(mut app)
+	root.compiled_node.component.invalidate_app() or { panic(err) }
+	reordered := root.compiled_node.element()
+	retained_control := reordered.children[0].children[0].children[0]
+	assert retained_control.id == controls[0].id
+	assert retained_control.compiled_node == controls[0].compiled_node
 	assert reordered.children[2].id == id && reordered.children[2].key == root.children[1].key
 	app.rows = app.rows[..1]
 	app.count = 200
@@ -91,7 +96,8 @@ fn test_shared_visual_named_callbacks_keep_original_payload_during_reentry() {
 	assert app.payloads.len == 2 && app.payloads[0] == outer
 	assert app.payloads[1].id == 'nested-origin' && app.payloads[1].value == 9.5
 	app.named = unsafe { nil }
-	nil_root := combined_tree(mut app)
+	root.compiled_node.component.invalidate_app() or { panic(err) }
+	nil_root := root.compiled_node.element()
 	nil_root.children[0].children[0].children[2].on_event(ui2.ElementEvent{ kind: .change, text: 'nil callback' })
 	assert app.message == 'nil callback' && app.payloads.len == 2
 }

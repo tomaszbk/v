@@ -1,2 +1,3 @@
-module Caption
-Label { id: caption text: "Caption" width: 280 height: 28 }
+component Caption(text string = "Caption") {
+    Label(id: "caption", text: text, width: 280, height: 28)
+}

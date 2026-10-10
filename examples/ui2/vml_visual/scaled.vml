@@ -1,23 +1,17 @@
-Absolute {
-    width: 600 height: 400
-    ScaledContent {
-        id: composition
-        x: 10
-        y: 20
-        width: 400
-        height: 300
-        content_width: 800
-        content_height: 400
-        background: "#eef2ff"
-        Absolute {
-            width: 800 height: 400
-            Label { id: corner text: "Escala lógica" x: 600 y: 300 width: 180 height: 40 }
-            TextInput {
-                id: editor
-                text: "niñez, canción"
-                x: 20 y: 20 width: 200 height: 40
-                multiline: false
-            }
+Absolute(width: 600, height: 400) {
+    ScaledContent(
+        id: "composition",
+        x: 10,
+        y: 20,
+        width: 400,
+        height: 300,
+        content_width: 800,
+        content_height: 400,
+        background: "#eef2ff",
+    ) {
+        Absolute(width: 800, height: 400) {
+            Label(id: "corner", text: "Escala lógica", x: 600, y: 300, width: 180, height: 40)
+            TextInput(id: "editor", text: "niñez, canción", x: 20, y: 20, width: 200, height: 40)
         }
     }
 }

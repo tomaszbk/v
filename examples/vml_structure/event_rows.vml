@@ -1,10 +1,8 @@
 import EventRow
-View {
-    Repeater {
-        model: app.groups key: item.id
-        Repeater {
-            model: item.rows key: item.id
-            EventRow {}
+View() {
+    Repeater(model: app.groups, key: item.id) {
+        Repeater(model: item.rows, key: item.id) {
+            EventRow(row_id: item.id, caption: item.name)
         }
     }
 }

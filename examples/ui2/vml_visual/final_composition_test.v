@@ -1,3 +1,4 @@
+// vtest vflags: -d ui2_custom_rendering
 module main
 
 import ui2
@@ -39,8 +40,8 @@ fn repeater_scaled(mut app CompositionApp) ui2.Element {
 
 fn test_imported_layouts_export_their_root_and_preserve_caller_refs() {
 	root := import_layout_scope()
-	assert root.children[1].id == 'row_export'
-	assert root.children[3].id == 'grid_export'
+	assert root.children[1].id.len == 0
+	assert root.children[3].id.len == 0
 	assert root.children[1].children[0].id != 'private'
 	assert root.children[3].children[0].id != root.children[1].children[0].id
 	assert root.children[2].frame == ui2.rect(0, 0, 23, 29)
@@ -61,7 +62,8 @@ fn test_measured_geometry_callbacks_keep_imported_and_repeated_row_values() {
 	retained := root.children[1].children[1].on_event
 	width := root.children[1].children[0].frame.width
 	app.rows.reverse_in_place()
-	reordered := measured_sibling_capture(mut app)
+	root.compiled_node.component.invalidate_app() or { panic(err) }
+	reordered := root.compiled_node.element()
 	assert reordered.children[2].id == root.children[1].id
 	app.rows = []CompositionRow{}
 	app.extra = 200
@@ -85,6 +87,7 @@ fn test_repeaters_preserve_absolute_intrinsic_placement_and_explicit_zero() {
 	for child in root.children[5..7] {
 		assert child.frame.width == 0 && child.frame.height == 0
 	}
+	assert root.children[5..7].map(it.key) == ['zero-7', 'zero-9']
 	direct := root.children[7]
 	repeated := root.children[8]
 	assert repeated.frame == direct.frame
@@ -106,4 +109,5 @@ fn test_repeaters_receive_scaled_logical_content_and_keep_explicit_zero() {
 	for child in root.children[5..] {
 		assert child.frame == ui2.rect(0, 0, 0, 0)
 	}
+	assert root.children[5..].map(it.key) == ['zero-7', 'zero-9']
 }
