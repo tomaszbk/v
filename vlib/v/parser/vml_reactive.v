@@ -32,7 +32,7 @@ fn (mut c VmlCompiler) write_child_layout(node &VmlNode, variable string, suffix
 			'align_self_x',
 			'align_self_y',
 		] {
-			properties[property.name] = c.visual_property_value(node, property, property.expr, scope)
+			properties[property.name] = c.property_effect_value(node, property, suffix, scope)
 		}
 	}
 	rule := if parent in ['Flex', 'Row', 'Column'] {
@@ -46,7 +46,6 @@ fn (mut c VmlCompiler) write_child_layout(node &VmlNode, variable string, suffix
 	}
 	c.writeln('${variable}.set_child_layout(${rule}) or { panic(err) }')
 	c.write_child_layout_effects(node, variable, parent, scope)
-	_ = suffix
 }
 
 fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent string, geometry_parent string, parent_tag string, incoming VmlScope) {
@@ -236,8 +235,9 @@ fn (mut c VmlCompiler) write_child_layout_effects(node &VmlNode, variable string
 			'align_self_y' { 'align_y' }
 			else { name }
 		}
-		value := c.visual_property_value(node, property, property.expr, scope)
+		value := c.property_effect_value(node, property, variable.trim_string_left('vml_node_'), scope)
 		mut captures := vml_callback_captures(property.expr, scope)
+		captures << c.property_memo_capture(variable.trim_string_left('vml_node_'), property.name)
 		captures << 'mut ' + variable
 		app_dependency := vml_expr_uses_path(property.expr, 'app')
 		if app_dependency { captures << 'mut ' + scope.component }

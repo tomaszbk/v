@@ -565,12 +565,7 @@ fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inh
 		if child.tag != 'Run' { continue }
 		mut properties := inherited.clone()
 		for property in child.properties {
-			name := 'vml_property_${suffix}_run_${index}_${vml_var(property.name)}'
-			c.location = VmlLocation{ path: property.expr.source, line: property.line, column: property.column }
-			value := c.visual_property_value(child, property, property.expr, scope)
-			c.writeln('\t${name} := ${value}')
-			c.writeln('\t_ = ${name}')
-			c.property_positions[name] = property
+			name := c.write_property_initializer(child, property, '${suffix}_run_${index}', scope)
 			vml_set_run_property(mut properties, property.name, name)
 		}
 		runs << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'
@@ -687,6 +682,7 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 			c.writeln('\t${spans} << ui2.GridSpan{column_span: int(${vml_prop(child_properties, 'column_span', 'f64(1)')}), row_span: int(${vml_prop(child_properties, 'row_span', 'f64(1)')})}')
 		}
 	}
+	c.prepare_menu_initializers(node, suffix, scope)
 	config := 'vml_config_${suffix}'
 	c.writeln('\t${config} := ${c.visual_layout_config(node, frame, properties, items, spans)}')
 	base := 'vml_layout_${suffix}'
