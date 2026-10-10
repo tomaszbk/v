@@ -229,7 +229,8 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 		for child in runs {
 			mut properties := inherited.clone()
 			for property in child.properties {
-				properties[property.name] = c.visual_property_value(child, property, property.expr, scope)
+				vml_set_run_property(mut properties, property.name,
+					c.visual_property_value(child, property, property.expr, scope))
 			}
 			values << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'
 		}

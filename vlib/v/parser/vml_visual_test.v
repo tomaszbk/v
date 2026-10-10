@@ -3,6 +3,19 @@ module parser
 import os
 import v.pref
 
+fn test_run_size_alias_overrides_inherited_font_size_in_the_retained_effect() {
+	root := parse_vml_source('Label(font_size: 28) {
+    Run(text: "Inherited")
+    Run(text: "Static", size: 18)
+    Run(text: "Dynamic", size: app.count / 2)
+}')!
+	mut compiler := VmlCompiler{ uses_app: true }
+	generated := compiler.compile(root)
+	effect := generated.all_after(".effect('@runs'")
+	assert effect.contains('size: ui2.LayoutSize{width: f64(18)}.width'), effect
+	assert effect.contains('size: ui2.LayoutSize{width: (ui2.LayoutSize{width: app.count}.width / f64(2))}.width'), effect
+}
+
 fn test_shared_visual_builders_keep_every_generated_source_line() {
 	mut root := parse_vml_source('Grid(
     columns: 2,

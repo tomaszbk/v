@@ -566,8 +566,7 @@ fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inh
 			c.writeln('\t${name} := ${value}')
 			c.writeln('\t_ = ${name}')
 			c.property_positions[name] = property
-			properties[property.name] = name
-			if property.name == 'size' { properties.delete('font_size') }
+			vml_set_run_property(mut properties, property.name, name)
 		}
 		runs << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'
 	}
@@ -575,6 +574,11 @@ fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inh
 	c.writeln('\t${name} := ${vml_array_literal('ui2.TextRun', runs)}')
 	inherited['@runs'] = name
 	inherited['@run_text'] = "${name}.map(it.text).join('')"
+}
+
+fn vml_set_run_property(mut properties map[string]string, name string, value string) {
+	if name == 'size' { properties.delete('font_size') }
+	properties[name] = value
 }
 
 fn vml_layout_padding(properties map[string]string, typ string) string {
