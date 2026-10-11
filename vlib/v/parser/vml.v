@@ -1547,6 +1547,14 @@ fn (c &VmlCompiler) text_style(properties map[string]string) string {
 	return base
 }
 
+// Retained root nodes capture constructor defaults before their style effect.
+// Rich runs and owned widget parts still compose their authored text styles.
+fn (c &VmlCompiler) root_text_style(properties map[string]string) string {
+	mut unstyled := properties.clone()
+	unstyled.delete('style')
+	return c.text_style(unstyled)
+}
+
 fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) string {
 	menu_items := node.children.filter(it.tag == 'MenuItem')
 	if menu_items.len > 0 {
@@ -1674,7 +1682,7 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 		c.writeln('\t\tbox: ${c.box_style(properties)}')
 	}
 	if node.tag in ['Label', 'Button', 'Checkbox', 'Dropdown', 'TextInput', 'TextArea'] {
-		c.writeln('\t\ttext_style: ${c.text_style(properties)}')
+		c.writeln('\t\ttext_style: ${c.root_text_style(properties)}')
 	}
 	if node.tag in ['Label', 'TextArea'] && node.children.any(it.tag == 'Run') {
 		c.writeln('\t\ttext_runs: ${vml_prop(properties, '@runs', '[]ui2.TextRun{}')}')
@@ -1710,7 +1718,7 @@ fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame st
 		if value := properties[name] { c.writeln('\t\t${name}: ${value}') }
 	}
 	if value := properties['keyboard'] { c.writeln('\t\tkeyboard: int(${value})') }
-	c.writeln('\t\tbox: ${c.box_style(properties)}, text_style: ${c.text_style(properties)}')
+	c.writeln('\t\tbox: ${c.box_style(properties)}, text_style: ${c.root_text_style(properties)}')
 	c.writeln('\t}) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
 	c.writeln('\tvml_declaration_${suffix} := ui2.Element{ ...vml_text_input_${suffix}, key: ${key}')
 	if '@runs' in properties { c.writeln('text_runs: ' + properties['@runs']) }
@@ -1842,7 +1850,7 @@ fn (mut c VmlCompiler) compile_spinner(node &VmlNode, suffix string, frame strin
 	box := '${base}_box'
 	text_style := '${base}_text_style'
 	c.writeln('\t${box} := ${c.box_style(properties)}')
-	c.writeln('\t${text_style} := ${c.text_style(properties)}')
+	c.writeln('\t${text_style} := ${c.root_text_style(properties)}')
 	c.writeln('\t${base} := ui2.spinner(')
 	c.writeln('\t\tid: ${c.control_id(node, suffix, scope)}')
 	c.writeln('\t\ton_event: ${action}')

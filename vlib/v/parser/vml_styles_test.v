@@ -131,3 +131,19 @@ Column { Card(appearance: [surface]) Card() View(style: [app.card()]) }')!
 	assert generated.contains('ui2.compose_styles([app.card()])'), generated
 	assert generated.contains('ui2.style_padding('), generated
 }
+
+fn test_vml_text_constructor_defaults_are_unstyled_but_runs_and_owned_parts_compose_styles() {
+	root := parse_vml_source('Column {
+    Label(style: app.active ? [font_size(30)] : []) { Run(text: "Inherited") }
+    TextInput(style: app.active ? [font_size(30)] : [])
+    Spinner(style: app.active ? [font_size(30)] : [])
+    ToggleButton(style: app.active ? [font_size(30)] : [])
+}')!
+	mut compiler := VmlCompiler{}
+	generated := compiler.compile(root)
+	assert generated.contains('text_style: ui2.TextStyle{}'), generated
+	assert generated.contains('vml_spinner_0_2_text_style := ui2.TextStyle{}'), generated
+	assert generated.contains('text_style:ui2.TextStyle{},down_text_style:ui2.TextStyle{...ui2.apply_text_style('), generated
+	assert generated.contains('ui2.TextRun{text:'), generated
+	assert generated.contains('style: ui2.apply_text_style(ui2.TextStyle{},'), generated
+}

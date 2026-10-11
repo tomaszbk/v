@@ -222,7 +222,7 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 			constructor = 'ui2.tree_view(${config}) or {panic(err)}'
 		}
 		'ToggleButton' {
-			constructor = 'ui2.toggle_button(ui2.ToggleButtonConfig{id:${id},frame:${frame},on_event:${action},title:${vml_prop(properties, 'text', "''")},pressed:${vml_value(properties, 'pressed', 'bind.pressed', 'false')},group:${vml_prop(properties, 'group', "''")},allow_no_selection:${vml_prop(properties, 'allow_no_selection', 'true')},box:${box},down_box:${vml_widget_box(properties, 'down_background', 'u32(0x2563eb)', 'down_corner_radius', vml_prop(properties, 'corner_radius', 'f64(6)'))},text_style:${c.text_style(properties)},down_text_style:ui2.TextStyle{...${c.text_style(properties)},color:${vml_prop(properties, 'down_color', 'u32(0xffffff)')}},native_style:${vml_prop(properties, 'native', 'false')}})'
+			constructor = 'ui2.toggle_button(ui2.ToggleButtonConfig{id:${id},frame:${frame},on_event:${action},title:${vml_prop(properties, 'text', "''")},pressed:${vml_value(properties, 'pressed', 'bind.pressed', 'false')},group:${vml_prop(properties, 'group', "''")},allow_no_selection:${vml_prop(properties, 'allow_no_selection', 'true')},box:${box},down_box:${vml_widget_box(properties, 'down_background', 'u32(0x2563eb)', 'down_corner_radius', vml_prop(properties, 'corner_radius', 'f64(6)'))},text_style:${c.root_text_style(properties)},down_text_style:ui2.TextStyle{...${c.text_style(properties)},color:${vml_prop(properties, 'down_color', 'u32(0xffffff)')}},native_style:${vml_prop(properties, 'native', 'false')}})'
 		}
 		else { return false }
 	}
