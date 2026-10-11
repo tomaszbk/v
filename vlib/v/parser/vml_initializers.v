@@ -2,6 +2,7 @@ module parser
 
 fn vml_property_is_reactive(property VmlProperty, scope VmlScope) bool {
 	if property.expr.kind == .literal { return false }
+	if vml_style_uses_theme(property.expr) { return true }
 	if vml_expr_uses_path(property.expr, 'app') { return true }
 	for member, _ in scope.special {
 		if !member.starts_with('__') && vml_expr_uses_path(property.expr, member) { return true }
@@ -44,10 +45,13 @@ fn (mut c VmlCompiler) write_property_initializer(node &VmlNode, property VmlPro
 		app_dependency := vml_expr_uses_path(property.expr, 'app')
 		dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
 		mut captures := vml_callback_captures(property.expr, scope)
-		if app_dependency { captures << 'mut ' + scope.component }
+		if app_dependency || vml_style_uses_theme(property.expr) {
+			captures << 'mut ' + scope.component
+		}
 		captures = vml_used_captures(dependency + value, captures)
+		value_type := if property.name == 'style' { 'ui2.StylePatch' } else { 'typeof(${value})' }
 		key := '@property:' + vml_builder_path(suffix) + ':' + property.name
-		c.writeln('mut ${memo} := ${scope.component}.computed[typeof(${value})](' + vml_quote(key) + ', fn [${captures.join(', ')}] () !typeof(${value}) { ${dependency} return ${value} }) or { panic(err) }')
+		c.writeln('mut ${memo} := ${scope.component}.computed[${value_type}](' + vml_quote(key) + ', fn [${captures.join(', ')}] () !${value_type} { ${dependency} return ${value} }) or { panic(err) }')
 		c.property_memos[name] = memo
 		value = '${memo}.get() or { panic(err) }'
 	}

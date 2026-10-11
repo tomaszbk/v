@@ -110,7 +110,7 @@ fn test_vml_component_rejects_impure_computed_and_invalid_slot_event_declaration
 }
 
 fn test_vml_bare_enum_arguments_and_separate_text_editors() {
-	root := parse_vml_source('Column(align_items: start) { Label(text: "Count", align: right) TextInput(password: true) TextArea(disable_scroll: true) { Run(text: "rich") } }')!
+	root := parse_vml_source('Column(align_items: start) { Label(text: "Count", style: [text_align(right)]) TextInput(password: true) TextArea(disable_scroll: true) { Run(text: "rich") } }')!
 	assert root.properties[0].expr.value == 'start'
 	assert root.children[2].tag == 'TextArea'
 	mut compiler := VmlCompiler{}
@@ -120,7 +120,7 @@ fn test_vml_bare_enum_arguments_and_separate_text_editors() {
 	assert generated.contains('ui2.text_input(ui2.TextInputConfig{')
 	assert generated.contains('ui2.text_area(ui2.TextAreaConfig{')
 	for entry in [
-		['Label(align: .right)', 'omit the dot'],
+		['Label(style: [text_align(.right)])', 'omit the dot'],
 		['TextInput(multiline: false)', 'unsupported property `multiline`'],
 		['TextInput(disable_scroll: true)', 'unsupported property `disable_scroll`'],
 		['TextInput { Run(text: "rich") }', 'single-line'],
@@ -191,13 +191,13 @@ fn test_vml_direct_nested_repeaters_lower_to_nonvisual_keyed_fragments() {
 }
 
 fn test_vml_screen_retains_the_frame_used_to_seed_named_geometry_before_children() {
-	root := parse_vml_source('Screen(id: "root") { Absolute { Label(font_size: root.height / 10, text: "size") } }')!
+	root := parse_vml_source('Screen(id: "root") { Absolute { Label(text: "size", style: [font_size(root.height / 10)]) } }')!
 	mut compiler := VmlCompiler{}
 	generated := compiler.compile(root)
 	assert generated.contains(".geometry('root', vml_frame_0)")
 	assert generated.contains("kind: .screen\n\t\tid: 'root'\n\t\tframe: vml_frame_0")
 	geometry := generated.index(".geometry('root', vml_frame_0)") or { -1 }
-	child_property := generated.index('vml_property_0_0_0_font_size') or { -1 }
+	child_property := generated.index('vml_property_0_0_0_style') or { -1 }
 	assert child_property >= 0
 	assert geometry < child_property
 }

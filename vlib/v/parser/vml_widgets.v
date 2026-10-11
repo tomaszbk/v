@@ -213,7 +213,13 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 			metadata = 'tree: ui2.TreeViewNode{id:${id},text:${vml_prop(properties, 'text', vml_prop(properties, 'title', "''"))},on_event:${c.event_callback(node, 'on_select', scope)},on_toggle:${c.event_callback(node, 'on_toggle', scope)},expanded:${vml_prop(properties, 'expanded', 'false')},selected:${vml_prop(properties, 'selected', 'false')},enabled:${vml_prop(properties, 'enabled', 'true')},children:${children}.map(it.compiled_metadata.tree or {panic("TreeNode requires TreeNode children")})}'
 		}
 		'TreeView' {
-			constructor = 'ui2.tree_view(ui2.TreeViewConfig{id:${id},frame:${frame},box:${box},row_height:${vml_prop(properties, 'row_height', 'f64(36)')},spacing:${vml_prop(properties, 'spacing', 'f64(2)')},indent:${vml_prop(properties, 'indent', 'f64(24)')},disclosure_width:${vml_prop(properties, 'disclosure_width', 'f64(28)')},row_box:${vml_widget_box(properties, 'row_background', 'u32(0xffffff)', 'row_corner_radius', 'f64(4)')},selected_row_box:${vml_widget_box(properties, 'selected_background', 'u32(0xdbeafe)', 'row_corner_radius', 'f64(4)')},disclosure_box:${vml_widget_box(properties, 'disclosure_background', 'u32(0xffffff)', 'row_corner_radius', 'f64(4)')},text_style:ui2.TextStyle{color:${vml_prop(properties, 'color', 'u32(0x334155)')},size:${vml_prop(properties, 'font_size', 'f64(14)')}},selected_text_style:ui2.TextStyle{color:${vml_prop(properties, 'selected_color', 'u32(0x1d4ed8)')},size:${vml_prop(properties, 'font_size', 'f64(14)')},bold:true},disclosure_text_style:${vml_widget_text(properties, 'disclosure_color', 'u32(0x64748b)', 'font_size', 'f64(14)', false)},nodes:${children}.map(it.compiled_metadata.tree or {panic("TreeView requires TreeNode children")})}) or {panic(err)}'
+			base_config := 'ui2.TreeViewConfig{id:${id},frame:${frame},box:${box},row_height:${vml_prop(properties, 'row_height', 'f64(36)')},spacing:${vml_prop(properties, 'spacing', 'f64(2)')},indent:${vml_prop(properties, 'indent', 'f64(24)')},disclosure_width:${vml_prop(properties, 'disclosure_width', 'f64(28)')},row_box:${vml_widget_box(properties, 'row_background', 'u32(0xffffff)', 'row_corner_radius', 'f64(4)')},selected_row_box:${vml_widget_box(properties, 'selected_background', 'u32(0xdbeafe)', 'row_corner_radius', 'f64(4)')},disclosure_box:${vml_widget_box(properties, 'disclosure_background', 'u32(0xffffff)', 'row_corner_radius', 'f64(4)')},text_style:ui2.TextStyle{color:${vml_prop(properties, 'color', 'u32(0x334155)')},size:${vml_prop(properties, 'font_size', 'f64(14)')}},selected_text_style:ui2.TextStyle{color:${vml_prop(properties, 'selected_color', 'u32(0x1d4ed8)')},size:${vml_prop(properties, 'font_size', 'f64(14)')},bold:true},disclosure_text_style:${vml_widget_text(properties, 'disclosure_color', 'u32(0x64748b)', 'font_size', 'f64(14)', false)},nodes:${children}.map(it.compiled_metadata.tree or {panic("TreeView requires TreeNode children")})}'
+			config := if style := properties['style'] {
+				'ui2.style_tree_view(${base_config}, ${style}) or { panic(err) }'
+			} else {
+				base_config
+			}
+			constructor = 'ui2.tree_view(${config}) or {panic(err)}'
 		}
 		'ToggleButton' {
 			constructor = 'ui2.toggle_button(ui2.ToggleButtonConfig{id:${id},frame:${frame},on_event:${action},title:${vml_prop(properties, 'text', "''")},pressed:${vml_value(properties, 'pressed', 'bind.pressed', 'false')},group:${vml_prop(properties, 'group', "''")},allow_no_selection:${vml_prop(properties, 'allow_no_selection', 'true')},box:${box},down_box:${vml_widget_box(properties, 'down_background', 'u32(0x2563eb)', 'down_corner_radius', vml_prop(properties, 'corner_radius', 'f64(6)'))},text_style:${c.text_style(properties)},down_text_style:ui2.TextStyle{...${c.text_style(properties)},color:${vml_prop(properties, 'down_color', 'u32(0xffffff)')}},native_style:${vml_prop(properties, 'native', 'false')}})'
@@ -233,7 +239,7 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 		if name !in common { common[name] = '${temporary}.${name}' }
 	}
 	if 'native' !in common { common['native'] = '${temporary}.native_style' }
-	if 'pad_left' !in common { common['pad_left'] = '${temporary}.padding_left' }
+	common['@padding_left'] = '${temporary}.padding_left'
 	if !node.children.any(it.tag == 'MenuItem') { common['@menu'] = '${temporary}.menu' }
 	if !properties.keys().any(it.starts_with('hover_') || it.starts_with('focus_')
 		|| it.starts_with('pressed_') || it.starts_with('disabled_')) {

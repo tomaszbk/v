@@ -59,7 +59,7 @@ fn test_compiled_runs_match_declared_styles_and_measured_wrapping() {
 	assert actual.text_runs[0].style.size == 18
 	override := actual.text_runs[1].style
 	assert override.size == 12
-	assert override.weight == 0
+	assert override.weight == 400
 	assert !override.bold && !override.tabular_figures
 	assert override.letter_spacing == 0 && override.line_height == 0
 	assert override.line_height_factor == 1.5 && override.baseline_offset == 3
@@ -127,8 +127,8 @@ fn test_compiled_sparse_styles_preserve_false_zero_black_and_typed_events() {
 		hover:         ui2.BoxStylePatch{ bg: u32(0), transparent: false }
 		hover_text:    ui2.TextStylePatch{ color: u32(0xffffff) }
 		focus:         ui2.BoxStylePatch{ border_left: f64(0), outline_width: f64(3) }
-		pressed:       ui2.BoxStylePatch{ bg: u32(0x22c55e) }
-		disabled:      ui2.BoxStylePatch{ bg: u32(0xcccccc) }
+		pressed:       ui2.BoxStylePatch{ bg: u32(0x22c55e), transparent: false }
+		disabled:      ui2.BoxStylePatch{ bg: u32(0xcccccc), transparent: false }
 		disabled_text: ui2.TextStylePatch{ color: u32(0) }
 	}
 	assert patch.hover.bg or { u32(1) } == 0

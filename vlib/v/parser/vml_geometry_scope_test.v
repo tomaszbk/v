@@ -10,10 +10,10 @@ fn test_vml_layout_inputs_reject_element_geometry_outside_absolute() {
 		'Row(id: "root") { View(max_height: root.height) }',
 		'Row(id: "root") { View(flex_basis: root.width / 2) }',
 		'Column(id: "root", gap: root.width / 10) { View }',
-		'Grid(id: "root", columns: 2, padding: root.height / 20) { View }',
+		'Grid(id: "root", columns: 2, style: [padding(root.height / 20)]) { View }',
 		'Grid(id: "root", columns: 2, col_default_width: root.width / 2) { View }',
 		'Grid(id: "root", columns: 2, row_default_height: root.height / 2) { View }',
-		'Column(id: "root", padding_left: app.limit(root.width, 10)) { View }',
+		'Column(id: "root", style: [padding_left(app.limit(root.width, 10))]) { View }',
 		'Screen(id: "root") { View(width: app.wide ? 20 : -root.width) }',
 		'Column(id: "root") { Repeater(model: app.rows, key: item.id) { View(width: root.width) } }',
 		'Column { Repeater(model: app.rows, key: item.id) { View(width: anchor.width) } View(id: "anchor", width: 20) }',
@@ -34,7 +34,7 @@ fn test_vml_layout_inputs_reject_element_geometry_outside_absolute() {
 
 fn test_vml_absolute_children_allow_geometry_inputs_and_repeater_delegates() {
 	parse_vml_source('Absolute(id: "root") {
-    Column(width: root.width - 20, gap: root.height / 10, padding: root.width / 20) { View }
+    Column(width: root.width - 20, gap: root.height / 10, style: [padding(root.width / 20)]) { View }
     Grid(columns: 2, width: root.width, col_default_width: root.width / 2,
         row_default_height: root.height / 2) { View }
     Repeater(model: app.rows, key: item.id) { View(x: index * 10, width: root.width, height: item.height) }
@@ -49,7 +49,7 @@ fn test_vml_absolute_children_allow_geometry_inputs_and_repeater_delegates() {
 fn test_vml_model_dimensions_and_viewport_predicates_are_not_layout_geometry() {
 	parse_vml_source('Column(id: "root", gap: app.width / 10) {
     View(width: app.width, height: app.size.height, hidden: root.width < 150)
-    Grid(columns: root.width < 600 ? 1 : 2, padding: app.padding) { View }
+    Grid(columns: root.width < 600 ? 1 : 2, style: [padding(app.padding)]) { View }
     Repeater(model: app.rows, key: item.id) { View(width: item.width, height: item.height) }
 }')!
 	parse_vml_source('component Box(size Size) {

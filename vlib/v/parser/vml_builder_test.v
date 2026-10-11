@@ -32,7 +32,7 @@ fn test_vml_renderer_profile_matches_target_qualified_custom_flag() {
 	defer { os.rmdir_all(root) or {} }
 	view := os.join_path(root, 'view.vml')
 	source := os.join_path(root, 'main.v')
-	os.write_file(view, 'Label(weight: 600, text: "Example")')!
+	os.write_file(view, 'Label(text: "Example", style: [weight(600)])')!
 	os.write_file(source, 'fn main() { _ = $vml("view.vml") }')!
 	// Target preferences exercise classification only; they do not select,
 	// compile or execute a Linux/Windows backend on this host.
@@ -58,8 +58,8 @@ fn test_vml_renderer_profile_matches_target_qualified_custom_flag() {
 			assert parser.diagnostics.len == 1, '${entry}: ${parser.diagnostics}'
 			diagnostic := parser.diagnostics[0]
 			assert os.real_path(diagnostic.file) == os.real_path(view)
-			assert diagnostic.line == 1 && diagnostic.column == 7
-			assert diagnostic.message == '`weight` requires the custom renderer'
+			assert diagnostic.line == 1 && diagnostic.column == 32
+			assert diagnostic.message.contains('other weights require the custom renderer')
 			assert diagnostic.pos.id in parser.a.template_call_sites
 		}
 	}
