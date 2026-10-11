@@ -96,6 +96,7 @@ fn vml_set_source(mut node VmlNode, path string) {
 	node.source = path
 	for property in node.properties { vml_set_expr_source(mut property.expr, path) }
 	for data in node.data { vml_set_expr_source(mut data.expr, path) }
+	for style in node.styles { vml_set_expr_source(mut style.expr, path) }
 	for input in node.inputs {
 		if !isnil(input.default_value) { vml_set_expr_source(mut input.default_value, path) }
 	}

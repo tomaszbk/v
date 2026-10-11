@@ -7,7 +7,7 @@ Absolute(width: 600, height: 400) {
         height: 300,
         content_width: 800,
         content_height: 400,
-        background: "#eef2ff",
+        style: [background("#eef2ff")],
     ) {
         Absolute(width: 800, height: 400) {
             Label(id: "corner", text: "Escala lógica", x: 600, y: 300, width: 180, height: 40)

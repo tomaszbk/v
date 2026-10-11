@@ -117,7 +117,7 @@ fn vml_property_patch(node &VmlNode, name string, value string) ?string {
 		'source', 'path' { 'image_path' }
 		'native' { 'native_style' }
 		'persistent' { 'persistent_scrollbars' }
-		'pad_left' { 'padding_left' }
+		'track_inset' { 'padding' }
 		'min' { 'min_value' }
 		'max' { 'max_value' }
 		else { name }
@@ -197,7 +197,11 @@ fn (mut c VmlCompiler) compile_structural_effect(node &VmlNode, suffix string, i
 		c.compile_widget(node, suffix + '_effect', 'frame', children, properties, scope, 'element.key', 'element.on_event')
 	}
 	c.effect_mode = false
-	c.writeln('return vml_declaration_${suffix}_effect')
+	if style := properties['style'] {
+		c.writeln('return ui2.apply_style(vml_declaration_${suffix}_effect, ${style})!')
+	} else {
+		c.writeln('return vml_declaration_${suffix}_effect')
+	}
 	c.finish_scope_captures(capture_start, body_start, captures)
 	c.writeln('}) or { panic(err) }')
 }
@@ -208,7 +212,9 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 	if runs.len == 0 && menu.len == 0 { return }
 	mut expressions := []&VmlExpr{}
 	for property in node.properties {
-		if property.name in vml_text_properties { expressions << property.expr }
+		if property.name in vml_text_properties || property.name == 'style' {
+			expressions << property.expr
+		}
 	}
 	for child in runs { expressions << child.properties.map(it.expr) }
 	for child in menu { if title := vml_find_property(child, 'text') { expressions << title.expr } }
@@ -227,7 +233,7 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 	if runs.len > 0 {
 		mut inherited := map[string]string{}
 		for property in node.properties {
-			if property.name in vml_text_properties {
+			if property.name in vml_text_properties || property.name == 'style' {
 				inherited[property.name] = c.property_effect_value(node, property, suffix, scope)
 				captures << c.property_memo_capture(suffix, property.name)
 			}
@@ -238,7 +244,13 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 			mut properties := inherited.clone()
 			for property in child.properties {
 				child_suffix := '${suffix}_run_${index}'
-				vml_set_run_property(mut properties, property.name, c.property_effect_value(child, property, child_suffix, scope))
+				value := c.property_effect_value(child, property, child_suffix, scope)
+				if property.name == 'style' {
+					parent_style := vml_prop(properties, 'style', 'ui2.StylePatch{}')
+					properties['style'] = 'ui2.compose_styles([${parent_style}, ${value}])'
+				} else {
+					vml_set_run_property(mut properties, property.name, value)
+				}
 				captures << c.property_memo_capture(child_suffix, property.name)
 			}
 			values << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'

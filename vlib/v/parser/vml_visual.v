@@ -54,11 +54,11 @@ fn vml_visual_property_use(name string) ?VmlExprUse {
 	if base in ['weight', 'letter_spacing', 'line_height', 'line_height_factor', 'baseline_offset',
 		'dash_length', 'dash_gap', 'outline_width', 'outline_offset', 'content_width', 'content_height',
 		'gap', 'line_gap', 'opacity', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x',
-		'origin_y', 'padding_left', 'padding_top', 'padding_right', 'padding_bottom', 'flex_basis',
-		'flex_grow', 'flex_shrink', 'min_width', 'min_height', 'max_width', 'max_height', 'columns',
-		'cols', 'rows', 'max_columns', 'auto_columns_min_width', 'column_span', 'row_span', 'spacing_x',
-		'spacing_y', 'col_default_width', 'row_default_height', 'border_width', 'border_left',
-		'border_top', 'border_right', 'border_bottom', 'radius', 'corner_radius'] {
+		'origin_y', 'track_inset', 'padding_left', 'padding_top', 'padding_right', 'padding_bottom',
+		'flex_basis', 'flex_grow', 'flex_shrink', 'min_width', 'min_height', 'max_width', 'max_height',
+		'columns', 'cols', 'rows', 'max_columns', 'auto_columns_min_width', 'column_span', 'row_span',
+		'spacing_x', 'spacing_y', 'col_default_width', 'row_default_height', 'border_width',
+		'border_left', 'border_top', 'border_right', 'border_bottom', 'radius', 'corner_radius'] {
 		return .number
 	}
 	if base in ['transparent', 'tabular_figures', 'wrap', 'col_force_default', 'row_force_default',
@@ -132,6 +132,7 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 // Each conditional arm has its own expected type. The checker must validate
 // inactive arms too, while runtime evaluates only the selected arm.
 fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, expr &VmlExpr, scope VmlScope) string {
+	if property.name == 'style' { return c.style_expr(expr, node, scope) }
 	if property.name == 'key' {
 		return vml_stringify(c.expr(expr, scope, .raw))
 	}
@@ -188,13 +189,14 @@ fn vml_visual_enum_values(node &VmlNode, name string) []string {
 }
 
 fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
+	if name == 'style' { return node.tag !in ['Repeater', 'Menu', 'MenuBar', 'MenuItem', 'Option'] }
 	if node.tag == 'Run' { return name == 'text' || name in vml_text_properties }
 	if vml_widget_property_allowed(node, name, parent) { return true }
 	if vml_is_event(name) { return name != 'on_submit' || node.tag == 'TextInput' }
 	if name in ['id', 'ref', 'key', 'x', 'y', 'width', 'height', 'hidden', 'enabled', 'native',
 		'clickable', 'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation', 'opacity',
 		'motion', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y', 'cursor',
-		'tooltip', 'secure', 'autocorrect', 'pad_left', 'accessibility_role', 'accessibility_label',
+		'tooltip', 'secure', 'autocorrect', 'accessibility_role', 'accessibility_label',
 		'accessibility_value', 'on_click', 'on_change', 'on_active', 'on_submit'] {
 		return true
 	}
@@ -244,7 +246,7 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 		'Dropdown' { name in ['text', 'bind.text'] }
 		'Spinner' { name in ['text', 'bind.text', 'text_autoupdate'] }
 		'Slider' {
-			name in ['value', 'bind.value', 'min', 'max', 'step', 'orientation', 'padding',
+			name in ['value', 'bind.value', 'min', 'max', 'step', 'orientation', 'track_inset',
 				'value_track', 'value_track_color', 'thumb_color', 'track_width', 'thumb_size']
 		}
 		'Switch' {
@@ -411,6 +413,9 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 		// Component arguments are data; only their shared child-layout arguments
 		// participate in the surrounding container's layout.
 		if node.tag == '__Component' && property.name !in vml_flex_child_properties { continue }
+		if parent !in ['Absolute', vml_unknown_component_parent] && property.name == 'style' && vml_style_uses_layout_geometry(property.expr, scope) {
+			return vml_visual_error(property, 'element geometry in style padding requires a parent Absolute container')
+		}
 		if parent !in ['Absolute', vml_unknown_component_parent] && vml_layout_dimension_property(property.name)
 			&& vml_expr_uses_element_geometry(property.expr, scope) {
 			return vml_visual_error(property, 'element geometry in `${property.name}` requires a parent Absolute container')
@@ -486,6 +491,16 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 			return vml_visual_error(property, 'duplicate property `${property.name}`')
 		}
 		seen[property.name] = true
+		if property.name == 'style' {
+			if !vml_visual_property_allowed(node, 'style', parent) {
+				return vml_visual_error(property, 'unsupported property `style` on ${node.tag}')
+			}
+			validate_vml_style_expr(node, property.expr, false, false)!
+			continue
+		}
+		if vml_direct_appearance(property.name) {
+			return vml_visual_error(property, 'presentation argument `${property.name}` was replaced by `style: [...]`')
+		}
 		if !vml_visual_property_allowed(node, property.name, parent) {
 			return vml_visual_error(property, 'unsupported property `${property.name}` on ${node.tag}')
 		}
@@ -520,18 +535,38 @@ fn validate_vml_native_visual(node &VmlNode) ! {
 		return vml_visual_node_error(node, '${node.tag} requires the custom renderer')
 	}
 	for property in node.properties {
-		base := vml_visual_base_property(property.name)
-		if base != property.name || base in ['opacity', 'motion', 'translate_x', 'translate_y',
-			'scale_x', 'scale_y', 'origin_x', 'origin_y', 'weight', 'letter_spacing', 'line_height',
-			'line_height_factor', 'baseline_offset', 'tabular_figures', 'font_family',
-			'background_color', 'strikethrough', 'shadow', 'outline', 'vertical_align', 'link',
-			'head_indent', 'first_line_indent', 'hyphenation_factor', 'border_left_color',
-			'border_top_color', 'border_right_color', 'border_bottom_color', 'border_pattern',
-			'dash_length', 'dash_gap', 'outline_color', 'outline_width', 'outline_offset'] {
-			return vml_visual_error(property, '`${property.name}` requires the custom renderer')
+		if property.name == 'style' {
+			validate_vml_style_expr(node, property.expr, true, false)!
+		} else {
+			validate_vml_native_property(property)!
 		}
 	}
 	for child in node.children { validate_vml_native_visual(child)! }
+}
+
+fn validate_vml_native_property(property VmlProperty) ! {
+	if property.expr.kind == .conditional {
+		validate_vml_native_property(VmlProperty{ ...property, expr: property.expr.right })!
+		validate_vml_native_property(VmlProperty{ ...property, expr: property.expr.third })!
+		return
+	}
+	base := vml_visual_base_property(property.name)
+	if base == 'weight' {
+		if value := vml_visual_number(property.expr) {
+			if value !in [0.0, 400.0, 700.0] {
+				return vml_visual_error(property, 'native weight supports 400 or 700; other weights require the custom renderer')
+			}
+		}
+	}
+	if base != property.name || base in ['opacity', 'motion', 'translate_x', 'translate_y', 'scale_x',
+		'scale_y', 'origin_x', 'origin_y', 'letter_spacing', 'line_height', 'line_height_factor',
+		'baseline_offset', 'tabular_figures', 'font_family', 'background_color', 'strikethrough',
+		'shadow', 'outline', 'vertical_align', 'link', 'head_indent', 'first_line_indent',
+		'hyphenation_factor', 'border_left_color', 'border_top_color', 'border_right_color',
+		'border_bottom_color', 'border_pattern', 'dash_length', 'dash_gap', 'outline_color',
+		'outline_width', 'outline_offset'] {
+		return vml_visual_error(property, '`${property.name}` requires the custom renderer')
+	}
 }
 
 fn (c &VmlCompiler) visual_box_style(properties map[string]string, prefix string, patch bool) string {
@@ -570,7 +605,12 @@ fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inh
 		mut properties := inherited.clone()
 		for property in child.properties {
 			name := c.write_property_initializer(child, property, '${suffix}_run_${index}', scope)
-			vml_set_run_property(mut properties, property.name, name)
+			if property.name == 'style' {
+				parent_style := vml_prop(properties, 'style', 'ui2.StylePatch{}')
+				properties['style'] = 'ui2.compose_styles([${parent_style}, ${name}])'
+			} else {
+				vml_set_run_property(mut properties, property.name, name)
+			}
 		}
 		runs << 'ui2.TextRun{text: ${vml_prop(properties, 'text', "''")}, style: ${c.text_style(properties)}}'
 	}

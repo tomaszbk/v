@@ -3,19 +3,19 @@ module parser
 import os
 import v.pref
 
-fn test_run_size_alias_overrides_inherited_font_size_in_the_retained_effect() {
-	root := parse_vml_source('Label(font_size: 28) {
+fn test_run_style_overrides_inherited_font_size_in_the_retained_effect() {
+	root := parse_vml_source('Label(style: [font_size(28)]) {
     Run(text: "Inherited")
-    Run(text: "Static", size: 18)
-    Run(text: "Dynamic", size: app.count / 2)
+    Run(text: "Static", style: [font_size(18)])
+    Run(text: "Dynamic", style: [font_size(app.count / 2)])
 }')!
 	mut compiler := VmlCompiler{ uses_app: true }
 	generated := compiler.compile(root)
-	initializer := generated.split_into_lines().filter(it.contains('mut vml_property_0_run_2_size_memo :='))[0]
-	assert initializer.contains('return ui2.LayoutSize{width: (ui2.LayoutSize{width: app.count}.width / f64(2))}.width'), initializer
+	initializer := generated.split_into_lines().filter(it.contains('mut vml_property_0_run_2_style_memo :='))[0]
+	assert initializer.contains('ui2.style_font_size(ui2.LayoutSize{width: (ui2.LayoutSize{width: app.count}.width / f64(2))}.width)'), initializer
 	effect := generated.all_after(".effect('@runs'")
-	assert effect.contains('size: ui2.LayoutSize{width: f64(18)}.width'), effect
-	assert effect.contains('size: vml_property_0_run_2_size_memo.get()'), effect
+	assert effect.contains('ui2.style_font_size(ui2.LayoutSize{width: f64(18)}.width)'), effect
+	assert effect.contains('vml_property_0_run_2_style_memo.get()'), effect
 }
 
 fn test_shared_visual_builders_keep_every_generated_source_line() {
@@ -112,10 +112,10 @@ fn test_selected_auto_grid_measurement_keeps_shared_nested_child_source() {
 fn test_vml_visual_errors_include_the_property_location_and_check_inactive_arms() {
 	for entry in [
 		['Label(tracking: 2)', 'unsupported property `tracking` on Label', '1', '7'],
-		['Label(weight: true ? 400 : "heavy")', '`weight` requires a number', '1', '7'],
-		['Label(tabular_figures: false ? true : 1)', 'requires bool', '1', '7'],
-		['Label(align: .right)', 'VML enum values omit the dot', '1', '7'],
-		['Label(align: "right")', 'requires an enum value', '1', '7'],
+		['Label(style: [weight(true ? 400 : "heavy")])', '`weight` requires a number', '1', '15'],
+		['Label(style: [tabular_figures(false ? true : 1)])', 'requires bool', '1', '15'],
+		['Label(style: [text_align(.right)])', 'VML enum values omit the dot', '1', '15'],
+		['Label(style: [text_align("right")])', 'requires an enum value', '1', '15'],
 		['Label(text: true)', '`text` requires a string or number', '1', '7'],
 		['View(units: "logical")', 'unsupported property `units`', '1', '6'],
 		['Run(text: "orphan")', 'Run must be a child of Label', '1', '1'],
@@ -138,11 +138,10 @@ fn test_vml_visual_lowering_produces_valid_v_syntax() {
 	defer { os.rmdir_all(root_path) or {} }
 	for index, source in [
 		'Label(
-    font_size: 18,
-    bold: true,
+    style: [font_size(18), weight(700)],
 ) {
     Run(text: "Parent")
-    Run(text: "Override", size: 12, bold: false)
+    Run(text: "Override", style: [font_size(12), weight(400)])
 }',
 		'Flex(
     width: 200,
@@ -208,12 +207,12 @@ fn test_vml_visual_native_profile_checks_the_entire_tree() {
 		'Label {
     Run(text: "Rich")
 }',
-		'Button(hover_background: "#000000")',
-		'Label(weight: false ? 0 : 700)',
+		'Button(style: [hover([background("#000000")])])',
+		'Label(style: [weight(false ? 0 : 600)])',
 	] {
 		root := parse_vml_source(source)!
 		validate_vml_native_visual(root) or {
-			assert err.msg().contains('requires the custom renderer'), err.msg()
+			assert err.msg().contains('custom renderer'), err.msg()
 			assert err.msg().contains('column'), err.msg()
 			continue
 		}
@@ -227,7 +226,7 @@ fn test_vml_visual_parser_diagnostic_points_to_vml_file_and_call_site() {
 	defer { os.rmdir_all(root) or {} }
 	view := os.join_path(root, 'view.vml')
 	source := os.join_path(root, 'main.v')
-	os.write_file(view, 'Label(font_size: "large")')!
+	os.write_file(view, 'Label(style: [font_size("large")])')!
 	os.write_file(source, 'fn main() { _ = $vml("view.vml") }')!
 	mut prefs := pref.new_preferences()
 	prefs.user_defines << 'ui2_custom_rendering'
@@ -237,7 +236,7 @@ fn test_vml_visual_parser_diagnostic_points_to_vml_file_and_call_site() {
 	diagnostic := parser.diagnostics[0]
 	assert os.real_path(diagnostic.file) == os.real_path(view)
 	assert diagnostic.line == 1
-	assert diagnostic.column == 7
+	assert diagnostic.column == 15
 	assert diagnostic.message.contains('requires a number')
 	assert diagnostic.pos.id in parser.a.template_call_sites
 }

@@ -1,6 +1,7 @@
 module parser
 
 fn vml_builder_property_type(node &VmlNode, property VmlProperty) string {
+	if property.name == 'style' { return 'ui2.StylePatch' }
 	if vml_visual_integer_property(property) { return 'int' }
 	return match vml_property_use(property) {
 		.number { 'f64' }

@@ -54,7 +54,7 @@ fn (mut p VmlSourceParser) parse_vml_parameters() ![]VmlParameter {
 	return parameters
 }
 
-fn (mut p VmlSourceParser) parse_vml_document() !&VmlNode {
+fn (mut p VmlSourceParser) parse_vml_component_document() !&VmlNode {
 	if p.at().text != 'component' { return p.parse_node() }
 	token := p.take(.name)!
 	name := p.take(.name)!
@@ -88,7 +88,9 @@ fn (mut p VmlSourceParser) parse_vml_document() !&VmlNode {
 	p.take(.rpar)!
 	p.take(.lbrace)!
 	for p.at().kind !in [.rbrace, .eof] {
-		if p.at().text in ['state', 'computed'] {
+		if p.at().text == 'style' {
+			component.styles << p.parse_vml_style()!
+		} else if p.at().text in ['state', 'computed'] {
 			kind := p.take(.name)!
 			data_name := p.take(.name)!
 			p.take(.declare)!
@@ -128,12 +130,18 @@ fn (mut p VmlSourceParser) parse_vml_document() !&VmlNode {
 
 fn validate_vml_component_names(node &VmlNode) ! {
 	mut names := map[string]bool{}
-	names['app'] = true
+	for name in ['app', 'color', 'spacing', 'radius', 'typography'] { names[name] = true }
 	for input in node.inputs {
 		if input.name in names {
 			return error('duplicate/reserved component member `${input.name}`')
 		}
 		names[input.name] = true
+	}
+	for style in node.styles {
+		if style.name in names {
+			return error('duplicate/reserved component member `${style.name}`')
+		}
+		names[style.name] = true
 	}
 	for data in node.data {
 		if data.name in names { return error('duplicate/reserved component member `${data.name}`') }
@@ -270,6 +278,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 	parent := incoming.component
 	c.slot_scopes[owner] = incoming
 	c.writeln('\tmut ${owner} := ${parent}.child(' + vml_quote(vml_builder_path(path)) + ') or { panic(err) }')
+	c.prepare_style_tokens(node, owner)
 	mut scope := VmlScope{ component: owner, special: map[string]string{}, writable: map[string]string{}, ids: map[string]VmlNamedValue{} }
 	for parameter in node.inputs {
 		c.location = VmlLocation{ path: node.source, line: parameter.line, column: parameter.column }
@@ -330,10 +339,20 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		} else if property := argument {
 			c.location = VmlLocation{ path: chosen.source, line: property.line, column: property.column }
 		}
-		value := c.expr(chosen, if argument != none || binding != none { incoming } else { scope }, .raw)
+		value := if parameter.typ == 'ui2.StylePatch' {
+			c.style_expr(chosen, node, if argument != none || binding != none {
+				incoming
+			} else {
+				scope
+			})
+		} else {
+			c.expr(chosen, if argument != none || binding != none { incoming } else { scope }, .raw)
+		}
 		variable := 'vml_input_${suffix}_${parameter.name}'
 		input_scope := if argument != none || binding != none { incoming } else { scope }
-		mut input_captures := vml_used_captures(value, vml_callback_captures(chosen, input_scope))
+		mut input_candidates := vml_callback_captures(chosen, input_scope)
+		if vml_style_uses_theme(chosen) { input_candidates << 'mut ' + input_scope.component }
+		mut input_captures := vml_used_captures(value, input_candidates)
 		if argument != none || binding != none {
 			app_dependency := vml_expr_uses_path(chosen, 'app')
 			if app_dependency { input_captures << 'mut ' + incoming.component }
@@ -510,6 +529,14 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 	inherited := placement in [.normal, .inherited_preferred]
 	c.writeln('\tmut ${variable} := ${owner}.element(${declaration}, identity: ${c.node_identity(node, suffix, scope)}, authored_width: ${authored_width}, authored_height: ${authored_height}, inherit_width: ${inherited && !authored_width}, inherit_height: ${inherited && !authored_height}) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
 	c.writeln('\t${variable}.set_element_children(${declaration}.children) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
+	if property := vml_find_property(node, 'style') {
+		value := c.property_effect_value(node, property, suffix, scope)
+		mut captures := vml_callback_captures(property.expr, scope)
+		captures << c.property_memo_capture(suffix, 'style')
+		if vml_style_uses_theme(property.expr) { captures << 'mut ' + owner }
+		captures = vml_used_captures(value, captures)
+		c.writeln('${variable}.style(fn [${captures.join(', ')}] () !ui2.StylePatch { return ${value} }) or { panic(err) }')
+	}
 	c.compile_structural_effect(node, suffix, scope)
 	if reference := vml_find_property(node, 'ref') {
 		ref_type := scope.special['__ref_' + reference.expr.value] or { '' }

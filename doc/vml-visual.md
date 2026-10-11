@@ -5,7 +5,7 @@ Build the compiler and its standard library from the same revision. Layout, font
 measurement, rendering, interaction patches and editor state are implemented by ui2.
 VML parsing happens during compilation; the application does not interpret these files.
 
-Use bare VML enum names (`align: right`), quoted strings, numeric values and bool conditions.
+Use bare VML enum names (`text_align(right)`), quoted strings, numeric values and bool conditions.
 String interpolation is explicit: `text: "Count ${app.count}"`. Display text accepts
 numbers and strings; other properties have no implicit string/number conversion.
 Unknown elements, properties, enum values and inferred declaration types
@@ -14,29 +14,28 @@ identify the VML file, line and column and retain the enclosing `$vml` call site
 
 ## Typography and Run
 
-Text controls accept the fields of `ui2.TextStyle`: `color`, `background_color`,
-`font_size` (or `size`), `font_family`, `weight`, `letter_spacing`, `line_height`,
-`line_height_factor`, `baseline_offset`, `tabular_figures`, `bold`, `italic`,
-`underline`, `strikethrough`, `shadow`, `outline`, `vertical_align`, `link`, `align`,
-`valign`, `head_indent`, `first_line_indent`, `hyphenation_factor` and `lines`.
+Text controls use `style: [...]` with typed helpers: `foreground`, `text_background`,
+`font_size`, `font_family`, `weight`, `letter_spacing`, `line_height`,
+`line_height_factor`, `baseline_offset`, `tabular_figures`, `italic`,
+`underline`, `strikethrough`, `shadow`, `text_outline`, `vertical_align`, `link`, `text_align`,
+`text_valign`, `head_indent`, `first_line_indent`, `hyphenation_factor` and `lines`.
+Use `weight(700)` for bold and `weight(400)` for regular text.
 Sizes are logical units. Device DPI and composition scaling remain separate.
 
 `Label` accepts either `text` or `Run` children. A Run is a text segment, not an
 element: it has no identity, frame or input handler. Each Run inherits omitted
-typography fields from its Label. Explicit false, zero, black and an alternate
-`size` spelling override the inherited value. Wrapping and mixed baselines use
+typography fields from its Label. Explicit false, zero and black
+override the inherited value. Wrapping and mixed baselines use
 ui2's rich text measurement and rendering.
 
 ```vml
 Label(
     width: 240,
     height: 100,
-    font_size: 18,
-    weight: 600,
-    lines: 4,
+    style: [font_size(18), weight(600), lines(4)],
 ) {
     Run(text: "An inherited segment ")
-    Run(text: "and an override", size: 12, weight: 0, bold: false, baseline_offset: 3)
+    Run(text: "and an override", style: [font_size(12), weight(400), baseline_offset(3)])
 }
 ```
 
@@ -66,15 +65,15 @@ ScaledContent(
 
 ## Box and interaction styles
 
-Containers, Label, Button, Dropdown, TextInput and Spinner accept box properties.
-They lower to `ui2.BoxStyle`: `background`, `radius` (or `corner_radius`),
+Containers and controls accept box helpers through `style: [...]`.
+They compose `ui2.StylePatch` values: `background`, `radius`,
 `transparent`, `border_color`, `border_width`, per-side border widths and colors,
-`border_pattern: solid` or `dashed`, `dash_length`, `dash_gap`, `outline_color`,
+`border_pattern(solid)` or `border_pattern(dashed)`, `dash_length`, `dash_gap`, `outline_color`,
 `outline_width` and `outline_offset`. Color literals use `#RRGGBB`; dynamic colors
 are typed integers.
 
-Prefix a box property with `hover_`, `focus_`, `pressed_` or `disabled_` to produce
-a sparse `ui2.BoxStylePatch`. Prefix `color` for a `ui2.TextStylePatch`. Omitted
+Use `hover([...])`, `focus([...])`, `pressed([...])` or `disabled([...])` to produce
+a sparse interaction patch with box helpers and `foreground`. Omitted
 fields remain absent; explicit false, zero and black are preserved. ui2 owns state
 precedence and keeps these patches from changing layout.
 
@@ -83,15 +82,45 @@ Button(
     text: "Save",
     width: 120,
     height: 40,
-    radius: 8,
-    hover_background: "#000000",
-    hover_color: "#ffffff",
-    focus_outline_width: 2,
-    focus_outline_color: "#2563eb",
-    pressed_background: "#93c5fd",
     on_click: app.save(),
+    style: [
+        radius(8),
+        hover([background("#000000"), foreground("#ffffff")]),
+        focus([outline_width(2), outline_color("#2563eb")]),
+        pressed([background("#93c5fd")]),
+    ],
 )
 ```
+
+## Named styles, variants and theme tokens
+
+A file or component body can declare `style name = [...]`. Names can refer to
+other styles, including later declarations; duplicate names, member collisions
+and cycles are errors. Lists compose in order, so the last supplied field wins.
+Style values are typed `ui2.StylePatch`; a component can accept an input of that
+type and application methods can return it.
+
+```vml
+style card = [background(color.surface), padding(spacing.medium), radius(radius.medium)]
+style highlighted = [card, background(color.accent)]
+
+component Card(active bool = false) {
+    View(style: [active ? highlighted : card]) {
+        Label(text: "Content", style: [font_size(typography.body)])
+    }
+}
+
+Column(spacing: 12) { Card() Card(active: true) }
+```
+
+`color`, `spacing`, `radius` and `typography` are reserved token namespaces.
+Their values read the owning component's theme signals. ui2 supplies default
+tokens and inherits local theme overrides; `set_vml_theme(element, theme)` and
+`CompiledVmlComponent.set_theme(theme)` update existing styled nodes. The runner's
+`theme` configuration supplies startup tokens, including custom names.
+Style changes update retained elements; dropping a field restores its original
+unstyled value. Presentation arguments such as `background:`, `color:`,
+`corner_radius:`, `bold:` and `font_size:` are rejected.
 
 ## Bindings and actions
 
@@ -112,8 +141,9 @@ their element declarations; an event id does not select another element's action
 ## Flex and Grid
 
 `Flex` uses `orientation: horizontal` or `vertical`. `Row` and `Column` select
-those orientations. Container fields include `padding`, `padding_left`, `padding_top`,
-`padding_right`, `padding_bottom`, `gap`, `line_gap`, `wrap`, `justify` and `align_items`.
+those orientations. Container fields include `gap`, `line_gap`, `wrap`, `justify`
+and `align_items`. Padding uses `style: [padding(...)]` or the per-side helpers
+`padding_left`, `padding_top`, `padding_right` and `padding_bottom`.
 Children accept `flex_basis`, `flex_grow`, `flex_shrink`, `min_width`, `min_height`,
 `max_width`, `max_height` and `align_self`. Enum values match `ui2.FlexJustify` and
 `ui2.LayoutAlignment`. Explicit dimensions supply preferred sizes; omitted leaf
@@ -146,9 +176,10 @@ registers effects for dynamic properties. Window resize updates viewport and
 geometry dependencies without recreating components.
 
 `Grid` accepts `columns` (or `cols`), `rows`, `auto_columns_min_width`, `max_columns`,
-`padding` and per-side padding, `spacing` (or `spacing_x`/`spacing_y`),
+`spacing` (or `spacing_x`/`spacing_y`),
 `col_default_width`, `row_default_height`, `col_force_default`, `row_force_default`
-and the full `ui2.GridOrientation` enum. Children accept `column_span` and `row_span`.
+and the full `ui2.GridOrientation` enum. Padding uses the same style helpers.
+Children accept `column_span` and `row_span`.
 The compiler calls ui2's layout functions and does not reproduce their algorithms.
 Keyed Repeater groups flatten into the container alongside static siblings before
 allocation, with each child retaining its typed layout constraints.
@@ -181,11 +212,13 @@ requires the custom profile and produces a diagnostic in the native profile.
 
 On macOS and Windows, compile visual presentation with `-d ui2_custom_rendering`.
 Linux and Android use the custom renderer. Native compilation rejects ScaledContent,
-Run, numeric weights, tracking, custom line heights, baseline offsets, tabular figures,
+Run, weights other than 400 or 700, tracking, custom line heights, baseline offsets,
+tabular figures,
 custom font families, text backgrounds and advanced text decoration, paragraph indents,
 per-side border colors, border-pattern declarations, outlines and interaction patches. It reports
 the declaration rather than silently dropping it. Native platform appearance is not
-promised to match custom rendering.
+promised to match custom rendering. Native validation also checks each control's
+supported fields at runtime when applying typed or dynamic style values.
 On iOS, `ui2_custom_rendering` does not select a custom renderer: UIKit remains native,
 and the same presentation diagnostics apply with or without that flag.
 

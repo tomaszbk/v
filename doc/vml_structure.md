@@ -23,7 +23,9 @@ runtime; ui2 owns signals, lifecycle, layout, rendering and editor state.
 
 ## Component declarations
 
-Each component lives in a `.vml` file. Import names resolve to `Name.vml` or
+Components live in `.vml` files. A document can declare local components before
+its root element; imported files expose their final component declaration.
+Import names resolve to `Name.vml` or
 `name.vml` relative to the importing document. Missing files, mismatched
 component names and import cycles are diagnosed at the source location.
 
@@ -53,8 +55,9 @@ Inputs are typed and read-only. An input without a default is required. Private
 its type and is a pure lazy memo; it cannot assign state, emit an event or call
 an action. Both Counter instances have independent state and lifecycle.
 
-Members and local element ids use unprefixed names. `app` is reserved, and
-collisions between inputs, state, computed values, functions, refs, ids and
+Members and local element ids use unprefixed names. `app` and the token namespaces
+`color`, `spacing`, `radius` and `typography` are reserved, and
+collisions between inputs, state, computed values, named styles, functions, refs, ids and
 function parameters are errors. Output events validate their payload even
 without a listener. A listener must return void and accept either no arguments
 or exactly the declared payload types.
@@ -166,7 +169,8 @@ MenuBar {
 Pass the result to `ui2.set_menu_bar`. Nested items use typed `ui2.Menu` and
 `ui2.MenuItem` declarations and validate before installation. Named arguments
 are the only property syntax; ids and ordinary strings require quotes. VML enum
-arguments use bare names, for example `align: right`. Conditions require bool;
+arguments use bare names, for example `align_items: start` and `text_align(right)`.
+Conditions require bool;
 other than display text, properties have no implicit string/number conversion.
 
 Diagnostics report the originating VML file, line and column and retain the

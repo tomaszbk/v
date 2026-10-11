@@ -14,7 +14,7 @@ component CombinedCallbacks() {
                 TextInput(id: "input", bind.text: app.message, on_change: app.named)
                 Scroll(id: "scroll", on_click: app.click(app.count), on_scroll: app.record(offset + app.count))
                 Label() {
-                    Run(text: "Niñez", bold: false, weight: 0, letter_spacing: 0)
+                    Run(text: "Niñez", style: [weight(400), weight(0), letter_spacing(0)])
                 }
             }
             View(width: 170, height: 160) {

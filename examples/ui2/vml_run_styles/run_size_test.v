@@ -14,7 +14,7 @@ fn run_size_tree(mut app RunSizeApp) ui2.Element {
 	return $vml('runs.vml', ui2.rect(0, 0, 300, 120))
 }
 
-fn test_static_run_size_alias_overrides_inherited_font_size() ! {
+fn test_static_run_style_overrides_inherited_font_size() ! {
 	mut app := &RunSizeApp{}
 	initial := run_size_tree(mut app)
 	mut root := initial.compiled_node
@@ -25,7 +25,7 @@ fn test_static_run_size_alias_overrides_inherited_font_size() ! {
 	assert root.element().children[0].text_runs.map(it.style.size) == [f64(28), 18, 12]
 }
 
-fn test_dynamic_run_size_alias_overrides_inherited_font_size_without_recreating_nodes() ! {
+fn test_dynamic_run_style_overrides_inherited_font_size_without_recreating_nodes() ! {
 	mut app := &RunSizeApp{}
 	initial := run_size_tree(mut app)
 	mut root := initial.compiled_node

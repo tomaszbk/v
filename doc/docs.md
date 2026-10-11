@@ -8813,12 +8813,12 @@ fn view(mut app App) ui2.Element {
 `views/profile.vml`:
 
 ```vml
-Screen {
-    id: root
-    background: "#f8fafc"
+style surface = [background("#f8fafc"), padding(12)]
+
+View(id: "root", style: [surface]) {
     Column {
-        Label { text: "Hello ${app.name}" }
-        Button { text: "Save" on_click: app.save() }
+        Label(text: "Hello ${app.name}")
+        Button(text: "Save", on_click: app.save())
     }
 }
 ```
@@ -8834,7 +8834,8 @@ given. A relative path is searched for in this order:
 
 The compiled VML subset supports these UI2 elements:
 
-- `Screen`, `View`, `Rectangle`, `Column`, `Row`, and `Scroll` containers;
+- `View`, `Absolute`, `Flex`, `Column`, `Row`, `Grid`, `Stack`, `Scroll` and
+  `ScaledContent` containers;
 - `Label`, `Image`, `Button`, `Checkbox`, `Dropdown`, and `TextInput`;
 - `ProgressBar`, `Slider`, `Switch`, `Spinner`, and `MessageBox`;
 - `Repeater` delegates, `MenuItem` entries, and `Option` entries.
@@ -8842,6 +8843,9 @@ The compiled VML subset supports these UI2 elements:
 Properties can use literals, arithmetic and boolean expressions, conditional expressions,
 string interpolation, an enclosing `app` value, and geometry or custom properties exposed
 by an `id`. An ID on an earlier node is available to following nodes in the same component.
+Presentation uses a typed `style: [...]` list; named styles, conditional variants and
+`color`, `spacing`, `radius` and `typography` theme tokens compose through ui2's retained
+style API. Former direct appearance arguments and their aliases are rejected.
 Both quoted and unquoted `#RRGGBB` color values are accepted. A `Repeater` requires `model`
 and stable `key` properties and exposes `item` and `index` inside its delegate.
 
@@ -8858,9 +8862,11 @@ inactive branches and empty list schemas. Diagnostics retain the originating VML
 Files can import named VML modules relative to their own directory. Each invocation namespaces
 internal ids, and keyed repeaters preserve descendant identities across reorder. `Menu` and
 `MenuBar` roots return typed `[]ui2.Menu` declarations. Text editing uses `TextInput`, with
-`multiline: false` for a single-line field; retired widget names and `on_text` are errors.
+single-line content and `TextArea` for multiline editing; retired widget names and
+`on_text` are errors.
 See the [compiled VML structure guide](vml_structure.md) and `examples/vml_structure` for import,
-list, callback, assignment and menu fixtures compiled against the public ui2 API.
+list, callback, assignment and menu fixtures compiled against the public ui2 API, and the
+[visual guide](vml-visual.md) for styles and tokens.
 
 #### `$env`
 

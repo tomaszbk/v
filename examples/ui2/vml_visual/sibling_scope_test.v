@@ -149,17 +149,14 @@ fn main() {
 
 fn test_vertical_wrap_fractional_padding_and_distinct_gaps() {
 	run_bounded_layout_fixture('fractional_wrap', 'Absolute(width: 500, height: 200) {
-    Row(width: 400, height: 80, padding: 1.25, gap: 2.5, align_items: start) {
+    Row(width: 400, height: 80, gap: 2.5, align_items: start, style: [padding(1.25)]) {
         Column(
             height: 48,
             wrap: true,
             gap: 4.25,
             line_gap: 6.75,
             align_items: start,
-            padding_left: 2.5,
-            padding_right: 3.25,
-            padding_top: 1.5,
-            padding_bottom: 2.5,
+            style: [padding_left(2.5), padding_right(3.25), padding_top(1.5), padding_bottom(2.5)],
         ) {
             Label(width: 30.5, height: 21.25, text: "a")
             Label(width: 30.5, height: 21.25, text: "b")
@@ -303,10 +300,7 @@ fn test_shared_builders_keep_slider_and_interaction_enum_types() {
             width: 30,
             height: 20,
             text: "button",
-            hover_border_pattern: dashed,
-            focus_border_pattern: solid,
-            pressed_border_pattern: dashed,
-            disabled_border_pattern: solid,
+            style: [hover([border_pattern(dashed)]), focus([border_pattern(solid)]), pressed([border_pattern(dashed)]), disabled([border_pattern(solid)])],
         )
     }
     Grid(width: 150, height: 30, columns: 2, rows: 1) {
@@ -389,12 +383,12 @@ fn run_sibling_geometry(tag string, config string, expected string, inner_x int,
     computed half := unit / 2
     Absolute(width: 400, height: 400) {
         ${tag}(id: "layout", x: 10, y: 15, width: 200, height: 80, ${config}) {
-            Label(id: "first", width: unit, height: 20, text: caption, bold: strong, color: ink, on_click: app.accept(app.argument))
+            Label(id: "first", width: unit, height: 20, text: caption, on_click: app.accept(app.argument), style: [weight(strong ? 700 : 400), foreground(ink)])
             Absolute(id: "middle") {
                 Column(width: first.width, align_items: start) {
                     Absolute {
-                        Label(id: "inner", width: half, height: first.height, font_size: 18) {
-                            Run(text: caption, bold: strong, color: ink)
+                        Label(id: "inner", width: half, height: first.height, style: [font_size(18)]) {
+                            Run(text: caption, style: [weight(strong ? 700 : 400), foreground(ink)])
                         }
                     }
                 }
@@ -467,22 +461,22 @@ fn main() {
 }
 
 fn test_row_sibling_scopes_with_skipped_height_and_nested_computed_properties() {
-	run_sibling_geometry('Row', 'padding: 4, gap: 6, align_items: start',
+	run_sibling_geometry('Row', 'style: [padding(4)], gap: 6, align_items: start',
 		'[ui2.rect(4, 4, 40, 20), ui2.rect(50, 4, 40, 20), ui2.rect(96, 4, 20, 20)]', 0, 0)
 }
 
 fn test_column_sibling_scopes_with_typed_model_reference_and_bindings() {
-	run_sibling_geometry('Column', 'padding: 4, gap: 6, align_items: start',
+	run_sibling_geometry('Column', 'style: [padding(4)], gap: 6, align_items: start',
 		'[ui2.rect(4, 4, 40, 20), ui2.rect(4, 30, 40, 20), ui2.rect(4, 56, 20, 20)]', 0, 0)
 }
 
 fn test_flex_sibling_scopes_with_independent_offsets() {
-	run_sibling_geometry('Flex', 'orientation: horizontal, padding: 4, gap: 6, align_items: start',
+	run_sibling_geometry('Flex', 'orientation: horizontal, style: [padding(4)], gap: 6, align_items: start',
 		'[ui2.rect(4, 4, 40, 20), ui2.rect(50, 4, 40, 20), ui2.rect(96, 4, 20, 20)]', 0, 0)
 }
 
 fn test_grid_sibling_scopes_and_final_allocated_coordinates() {
-	run_sibling_geometry('Grid', 'columns: 2, rows: 2, padding: 4, spacing: 6',
+	run_sibling_geometry('Grid', 'columns: 2, rows: 2, style: [padding(4)], spacing: 6',
 		'[ui2.rect(4, 4, 93, 33), ui2.rect(103, 4, 93, 33), ui2.rect(4, 43, 93, 33)]', 0, 0)
 }
 
@@ -655,9 +649,9 @@ fn main() {
 
 fn test_width_pass_sibling_height_uses_wrapped_leaf_measurement() {
 	run_intrinsic_sibling_fixture('intrinsic_width_pass', 'Row(width: 80, height: 200, align_items: start) {
-    Label(id: "first", text: "WW WW WW WW", lines: 10, flex_basis: 40, flex_shrink: 0)
+    Label(id: "first", text: "WW WW WW WW", flex_basis: 40, flex_shrink: 0, style: [lines(10)])
     Absolute(flex_basis: 40, flex_shrink: 0) {
-        Label(id: "second", width: first.width, line_height: (first.height), text: "Copy")
+        Label(id: "second", width: first.width, text: "Copy", style: [line_height((first.height))])
     }
 }', 'import ui2
 fn main() {
@@ -767,7 +761,7 @@ fn test_nested_view_autoheight_keeps_offered_width_for_wrapping() {
 	run_intrinsic_sibling_fixture('descendant_fixed_width', 'Row(width: 300, height: 200, align_items: start) {
     View(width: 120) {
         View {
-            Label(id: "inner", text: "WW WW WW WW WW WW", lines: 10)
+            Label(id: "inner", text: "WW WW WW WW WW WW", style: [lines(10)])
         }
     }
     Absolute {
@@ -810,7 +804,7 @@ fn main() {
 fn test_view_measures_nested_layout_ids_with_inherited_width() {
 	run_intrinsic_sibling_fixture('descendant_layouts', 'Row(width: 300, height: 100, align_items: start) {
     View(width: 100) {
-        Row(id: "nested", padding: 5, gap: 7, align_items: start) {
+        Row(id: "nested", gap: 7, align_items: start, style: [padding(5)]) {
             Label(width: 20, height: 10, text: "A")
             Label(width: 30, height: 15, text: "B")
         }
@@ -1021,12 +1015,9 @@ fn test_selected_auto_grid_fractional_padding_spacing_and_column_cap() {
     Grid(
         auto_columns_min_width: app.minimum,
         max_columns: app.cap,
-        padding_left: 2.5,
-        padding_right: 3.25,
-        padding_top: 1.5,
-        padding_bottom: 2.5,
         spacing_x: 2.5,
         spacing_y: 1.25,
+        style: [padding_left(2.5), padding_right(3.25), padding_top(1.5), padding_bottom(2.5)],
     ) {
         Label(width: 20.5, height: 10.25)
         Label(width: 20.5, height: 10.25)
@@ -1126,12 +1117,12 @@ fn main() {
 
 fn test_selected_auto_grid_preserves_authored_inherited_and_allocated_zero_axes() {
 	run_bounded_layout_fixture('selected_auto_grid_axes', 'Absolute(width: 300, height: 300) {
-    Grid(width: 0, height: 0, auto_columns_min_width: 100, padding: 1.25) {
+    Grid(width: 0, height: 0, auto_columns_min_width: 100, style: [padding(1.25)]) {
         Label(width: 20, height: 20)
         Label(width: 20, height: 20)
     }
     Row(width: 0, height: 120, align_items: start) {
-        Grid(auto_columns_min_width: 100, padding: 1.25) {
+        Grid(auto_columns_min_width: 100, style: [padding(1.25)]) {
             Label(width: 20, height: 20)
             Label(width: 20, height: 20)
         }
@@ -1171,12 +1162,12 @@ fn main() {
 fn test_auto_grid_natural_padding_and_following_descendant_refs() {
 	run_bounded_layout_fixture('auto_grid_natural', 'Row(width: 300, height: 100, align_items: start) {
     View(id: "shell") {
-        Grid(id: "cells", columns: 2, padding: 10) {
+        Grid(id: "cells", columns: 2, style: [padding(10)]) {
             Label(id: "cell", width: 20, height: 20)
         }
     }
     Absolute {
-        Label(width: cells.width, height: shell.height, font_size: cell.width)
+        Label(width: cells.width, height: shell.height, style: [font_size(cell.width)])
     }
 }', 'import ui2
 fn main() {
@@ -1195,23 +1186,23 @@ fn main() {
 fn test_auto_grid_constraint_axes_fractional_tracks_and_width_remeasurement() {
 	run_bounded_layout_fixture('auto_grid_constraints', 'Absolute(width: 300, height: 300) {
     View(width: 100, height: 60) {
-        Grid(id: "inherited", columns: 2, padding: 1.25, spacing_x: 2.5) {
+        Grid(id: "inherited", columns: 2, spacing_x: 2.5, style: [padding(1.25)]) {
             Label(width: 20.5, height: 10)
         }
     }
     View() {
-        Grid(width: 80, height: 30, columns: 2, padding: 1.25, spacing_x: 2.5) {
+        Grid(width: 80, height: 30, columns: 2, spacing_x: 2.5, style: [padding(1.25)]) {
             Label(width: 20.5, height: 10)
         }
     }
     Row(width: 100, height: 60, align_items: start) {
-        Grid(columns: 2, padding: 1.25, spacing_x: 2.5, flex_grow: 1) {
+        Grid(columns: 2, spacing_x: 2.5, flex_grow: 1, style: [padding(1.25)]) {
             Label(width: 20.5, height: 10)
         }
     }
     Row(width: 100, height: 200, align_items: start) {
-        Grid(columns: 2, padding: 5, flex_grow: 1) {
-            Label(text: "WW WW WW WW WW WW", lines: 10)
+        Grid(columns: 2, flex_grow: 1, style: [padding(5)]) {
+            Label(text: "WW WW WW WW WW WW", style: [lines(10)])
         }
     }
     Label(x: inherited.width, width: inherited.height, height: 20)
@@ -1275,10 +1266,7 @@ fn test_auto_wrap_fractional_padding_gaps_and_explicit_constraints() {
             gap: 4.25,
             line_gap: 6.75,
             align_items: start,
-            padding_left: 2.5,
-            padding_right: 3.25,
-            padding_top: 1.5,
-            padding_bottom: 2.5,
+            style: [padding_left(2.5), padding_right(3.25), padding_top(1.5), padding_bottom(2.5)],
         ) {
             Label(width: 30.5, height: 21.25)
             Label(width: 30.5, height: 21.25)
@@ -1290,10 +1278,7 @@ fn test_auto_wrap_fractional_padding_gaps_and_explicit_constraints() {
             gap: 4.25,
             line_gap: 6.75,
             align_items: start,
-            padding_left: 2.5,
-            padding_right: 3.25,
-            padding_top: 1.5,
-            padding_bottom: 2.5,
+            style: [padding_left(2.5), padding_right(3.25), padding_top(1.5), padding_bottom(2.5)],
         ) {
             Label(width: 30.5, height: 21.25)
             Label(width: 30.5, height: 21.25)
@@ -1305,10 +1290,7 @@ fn test_auto_wrap_fractional_padding_gaps_and_explicit_constraints() {
             gap: 4.25,
             line_gap: 6.75,
             align_items: start,
-            padding_left: 2.5,
-            padding_right: 3.25,
-            padding_top: 1.5,
-            padding_bottom: 2.5,
+            style: [padding_left(2.5), padding_right(3.25), padding_top(1.5), padding_bottom(2.5)],
         ) {
             Label(width: 30.5, height: 21.25)
             Label(width: 30.5, height: 21.25)
@@ -1320,10 +1302,7 @@ fn test_auto_wrap_fractional_padding_gaps_and_explicit_constraints() {
             gap: 4.25,
             line_gap: 6.75,
             align_items: start,
-            padding_left: 2.5,
-            padding_right: 3.25,
-            padding_top: 1.5,
-            padding_bottom: 2.5,
+            style: [padding_left(2.5), padding_right(3.25), padding_top(1.5), padding_bottom(2.5)],
         ) {
             Label(width: 30.5, height: 21.25)
             Label(width: 30.5, height: 21.25)
@@ -1406,7 +1385,7 @@ fn main() {
 	}
 	os.write_file(os.join_path(root, 'view.vml'), 'Absolute() {
     View() {
-        Grid(width: 0, columns: 2, padding: 10) {
+        Grid(width: 0, columns: 2, style: [padding(10)]) {
             Label(width: 20, height: 20)
         }
     }

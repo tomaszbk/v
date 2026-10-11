@@ -327,6 +327,7 @@ mut:
 	mount          []&VmlExpr
 	unmount        []&VmlExpr
 	cleanup        []&VmlExpr
+	styles         []VmlStyle
 }
 
 struct VmlSourceParser {
@@ -387,7 +388,7 @@ fn (mut p VmlSourceParser) parse_node() !&VmlNode {
 	if p.at().kind == .lbrace {
 		p.pos++
 		for p.at().kind !in [.rbrace, .eof] {
-			if p.at().text in ['property', 'computed', 'state'] || (p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .colon) {
+			if p.at().text in ['property', 'computed', 'state', 'style'] || (p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .colon) {
 				return error('${p.file}:${p.at().line}:${p.at().column}: element arguments use `Name(name: value)`; state/computed belong to the component body')
 			}
 			node.children << p.parse_node()!
@@ -1042,8 +1043,9 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 		ids:     map[string]VmlNamedValue{}
 		special: map[string]string{}
 	}
-	c.writeln("\tmut vml_root_component := ui2.new_vml_document('root') or { panic(err) }")
+	c.writeln("\tmut vml_root_component := ui2.new_vml_document('root', ui2.VmlDocumentConfig{}) or { panic(err) }")
 	scope.component = 'vml_root_component'
+	if root.tag != '__Component' { c.prepare_style_tokens(root, scope.component) }
 	c.compile_node(root, '0', 'vml_input_0', scope, '', .normal)
 	if !c.explicit_frame {
 		bounds_root := if root.tag == '__Component' { root.children[0] } else { root }
@@ -1112,9 +1114,9 @@ fn vml_property_use(property VmlProperty) VmlExprUse {
 	if property.name in ['x', 'y', 'width', 'height', 'padding', 'spacing', 'corner_radius', 'radius',
 		'rotation', 'opacity', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x',
 		'origin_y', 'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor',
-		'lines', 'pad_left', 'dialog_width', 'dialog_height', 'border_width', 'border_left',
-		'border_top', 'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width',
-		'thumb_size', 'keyboard'] {
+		'lines', 'dialog_width', 'dialog_height', 'border_width', 'border_left', 'border_top',
+		'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width', 'thumb_size',
+		'keyboard'] {
 		return .number
 	}
 	if property.name in ['background', 'color', 'background_color', 'border_color', 'value_track_color',
@@ -1202,6 +1204,12 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 			}
 		}
 		.path {
+			for pair in [['color', 'color_token'], ['spacing', 'spacing_token'],
+				['radius', 'radius_token'], ['typography', 'font_size_token']] {
+				if expr.value.starts_with(pair[0] + '.') {
+					return '${scope.component}.${pair[1]}(' + vml_quote(expr.value.all_after(pair[0] + '.')) + ') or { panic(err) }'
+				}
+			}
 			resolved, _ := c.resolve_path(expr.value, scope)
 			if use == .color {
 				if expr.value.starts_with('#') && expr.value.len == 7 {
@@ -1532,7 +1540,11 @@ fn (c &VmlCompiler) text_style(properties map[string]string) string {
 			}}'
 		}
 	}
-	return 'ui2.TextStyle{${fields.join(', ')}}'
+	base := 'ui2.TextStyle{${fields.join(', ')}}'
+	if style := properties['style'] {
+		return 'ui2.apply_text_style(${base}, ${style}) or { panic(err) }'
+	}
+	return base
 }
 
 fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) string {
@@ -1740,17 +1752,12 @@ fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, propert
 	c.writeln('\t\taccessibility_value: ${vml_prop(properties, 'accessibility_value', value_default)}')
 	c.writeln('\t\tnative_style: ${vml_prop(properties, 'native', 'false')}')
 	c.writeln('\t\tautocorrect: ${vml_prop(properties, 'autocorrect', 'true')}')
-	padding_left := if node.tag in ['TextInput', 'TextArea'] {
-		vml_value(properties, 'padding_left', 'pad_left', 'f64(12)')
-	} else {
-		vml_prop(properties, 'pad_left', 'f64(12)')
-	}
-	c.writeln('\t\tpadding_left: ${padding_left}')
+	c.writeln('\t\tpadding_left: ${vml_prop(properties, '@padding_left', 'f64(12)')}')
 }
 
 fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	base := 'vml_progress_${suffix}'
-	c.writeln('\t${base} := ui2.progress_bar(')
+	c.writeln('\t${base}_config := ui2.ProgressBarConfig{')
 	c.writeln('\t\tid: ${c.control_id(node, suffix, scope)}')
 	c.writeln('\t\tframe: ${frame}')
 	c.writeln('\t\tvalue: ${vml_prop(properties, 'value', 'f64(0)')}')
@@ -1758,7 +1765,13 @@ fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame 
 	c.writeln('\t\tbackground: ${vml_prop(properties, 'background', 'u32(0xe2e8f0)')}')
 	c.writeln('\t\tcolor: ${vml_prop(properties, 'color', 'u32(0x3b82f6)')}')
 	c.writeln('\t\tradius: ${vml_value(properties, 'corner_radius', 'radius', 'f64(4)')}')
-	c.writeln('\t)')
+	c.writeln('\t}')
+	config := if style := properties['style'] {
+		'ui2.style_progress_bar(${base}_config, ${style}) or { panic(err) }'
+	} else {
+		'${base}_config'
+	}
+	c.writeln('\t${base} := ui2.progress_bar(${config})')
 	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
 	c.writeln('\t\t...${base}')
 	c.writeln('\t\ton_event: ${action}')
@@ -1789,7 +1802,7 @@ fn (mut c VmlCompiler) compile_slider(node &VmlNode, suffix string, frame string
 	c.writeln('\t\tvalue: ${vml_value(properties, 'value', 'bind.value', 'f64(0)')}')
 	c.writeln('\t\tstep: ${vml_prop(properties, 'step', 'f64(0)')}')
 	c.writeln('\t\torientation: ${orientation_value}')
-	c.writeln('\t\tpadding: ${vml_prop(properties, 'padding', 'f64(16)')}')
+	c.writeln('\t\tpadding: ${vml_prop(properties, 'track_inset', 'f64(16)')}')
 	c.writeln('\t\tvalue_track: ${vml_prop(properties, 'value_track', 'false')}')
 	c.writeln('\t\tstyle: ${style}')
 	c.writeln('\t)')
