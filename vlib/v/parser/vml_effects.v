@@ -126,11 +126,11 @@ fn vml_property_patch(node &VmlNode, name string, value string) ?string {
 		'persistent_scrollbars', 'hidden', 'enabled', 'tooltip', 'cursor', 'accessibility_role',
 		'accessibility_label', 'accessibility_value', 'secure', 'autocorrect', 'readonly',
 		'disable_scroll', 'placeholder', 'keyboard', 'padding_left', 'clickable', 'draggable',
-		'long_press', 'swipe_left', 'button_behavior', 'rotation', 'translate_x', 'translate_y',
-		'scale_x', 'scale_y', 'origin_x', 'origin_y', 'min_value', 'max_value', 'step', 'orientation',
-		'padding', 'value_track', 'value_track_color', 'thumb_color', 'track_width', 'thumb_size',
-		'inactive_color', 'active_color', 'disabled_track_color', 'disabled_thumb_color',
-		'text_autoupdate', 'group', 'allow_no_selection'] {
+		'long_press', 'swipe_left', 'button_behavior', 'rotation', 'opacity', 'motion', 'translate_x',
+		'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y', 'min_value', 'max_value',
+		'step', 'orientation', 'padding', 'value_track', 'value_track_color', 'thumb_color',
+		'track_width', 'thumb_size', 'inactive_color', 'active_color', 'disabled_track_color',
+		'disabled_thumb_color', 'text_autoupdate', 'group', 'allow_no_selection'] {
 		return '${field}: ${value}'
 	}
 	return none

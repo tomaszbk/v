@@ -153,6 +153,30 @@ The compiler calls ui2's layout functions and does not reproduce their algorithm
 Keyed Repeater groups flatten into the container alongside static siblings before
 allocation, with each child retaining its typed layout constraints.
 
+## Motion and presence
+
+Elements accept `opacity` from zero to one and a typed `ui2.MotionConfig` through `motion`.
+The configuration stays in ordinary V application logic and supplies enter/exit styles,
+transitions, reduced motion, and an optional injectable clock. VML only lowers these values to
+the retained ui2 element:
+
+```text
+View(
+    motion: app.panel_motion,
+    opacity: app.panel_opacity,
+    hidden: !app.panel_shown,
+    translate_x: app.panel_offset,
+) {
+    Label(text: "Panel")
+}
+```
+
+Changes to these arguments patch the same retained node. `hidden` requests enter or exit;
+the runtime retains an exiting element until its transition completes. Ordinary opacity and
+transform arguments are the present target. The runtime owns interpolation and scheduling,
+including immediate completion when reduced motion is enabled. Explicit opacity or motion
+requires the custom profile and produces a diagnostic in the native profile.
+
 ## Profiles and verification
 
 On macOS and Windows, compile visual presentation with `-d ui2_custom_rendering`.

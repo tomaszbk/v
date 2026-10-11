@@ -227,9 +227,9 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 	// Composite constructors derive common fields from their own config (for
 	// example, visibility of a closed ModalView). Only authored arguments replace
 	// those values; the defaults for directly declared elements are unchanged.
-	for name in ['button_behavior', 'secure', 'clickable', 'draggable', 'long_press',
-		'swipe_left', 'rotation', 'translate_x', 'translate_y', 'scale_x', 'scale_y',
-		'origin_x', 'origin_y', 'cursor', 'tooltip', 'hidden', 'enabled', 'autocorrect'] {
+	for name in ['button_behavior', 'secure', 'clickable', 'draggable', 'long_press', 'swipe_left',
+		'rotation', 'opacity', 'motion', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x',
+		'origin_y', 'cursor', 'tooltip', 'hidden', 'enabled', 'autocorrect'] {
 		if name !in common { common[name] = '${temporary}.${name}' }
 	}
 	if 'native' !in common { common['native'] = '${temporary}.native_style' }
