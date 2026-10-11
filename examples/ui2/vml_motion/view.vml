@@ -1,0 +1,18 @@
+component AnimatedPanel() {
+    state alpha := 1.0
+    state offset := 0.0
+    state closed := false
+    View(
+        id: "panel",
+        motion: app.motion,
+        opacity: alpha,
+        translate_x: offset,
+        hidden: closed,
+    ) {
+        Button(text: "Hide", on_click: {
+            alpha = 0.25
+            offset = 16.0
+            closed = true
+        })
+    }
+}

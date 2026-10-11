@@ -1110,11 +1110,11 @@ fn vml_property_use(property VmlProperty) VmlExprUse {
 	if use := vml_visual_property_use(property.name) { return use }
 	if use := vml_widget_property_use(property.name) { return use }
 	if property.name in ['x', 'y', 'width', 'height', 'padding', 'spacing', 'corner_radius', 'radius',
-		'rotation', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y',
-		'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor', 'lines',
-		'pad_left', 'dialog_width', 'dialog_height', 'border_width', 'border_left', 'border_top',
-		'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width', 'thumb_size',
-		'keyboard'] {
+		'rotation', 'opacity', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x',
+		'origin_y', 'font_size', 'size', 'head_indent', 'first_line_indent', 'hyphenation_factor',
+		'lines', 'pad_left', 'dialog_width', 'dialog_height', 'border_width', 'border_left',
+		'border_top', 'border_right', 'border_bottom', 'value', 'min', 'max', 'step', 'track_width',
+		'thumb_size', 'keyboard'] {
 		return .number
 	}
 	if property.name in ['background', 'color', 'background_color', 'border_color', 'value_track_color',
@@ -1131,7 +1131,7 @@ fn vml_property_use(property VmlProperty) VmlExprUse {
 	if property.name == 'bind.value' {
 		return .number
 	}
-	if property.name in ['model', 'key'] {
+	if property.name in ['model', 'key', 'motion'] {
 		return .raw
 	}
 	return .string_
@@ -1722,6 +1722,8 @@ fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, propert
 	c.writeln('\t\tlong_press: ${vml_prop(properties, 'long_press', 'false')}')
 	c.writeln('\t\tswipe_left: ${vml_prop(properties, 'swipe_left', 'false')}')
 	c.writeln('\t\trotation: ${vml_prop(properties, 'rotation', 'f64(0)')}')
+	c.writeln('\t\topacity: ${vml_prop(properties, 'opacity', 'f64(1)')}')
+	if value := properties['motion'] { c.writeln('\t\tmotion: ${value}') }
 	for field in ['translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y'] {
 		c.writeln('\t\t${field}: ${vml_prop(properties, field, if field.starts_with('scale') {
 			'f64(1)'

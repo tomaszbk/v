@@ -53,10 +53,10 @@ fn vml_visual_property_use(name string) ?VmlExprUse {
 	base := vml_visual_base_property(name)
 	if base in ['weight', 'letter_spacing', 'line_height', 'line_height_factor', 'baseline_offset',
 		'dash_length', 'dash_gap', 'outline_width', 'outline_offset', 'content_width', 'content_height',
-		'gap', 'line_gap', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y',
-		'padding_left', 'padding_top', 'padding_right', 'padding_bottom', 'flex_basis', 'flex_grow',
-		'flex_shrink', 'min_width', 'min_height', 'max_width', 'max_height', 'columns', 'cols',
-		'rows', 'max_columns', 'auto_columns_min_width', 'column_span', 'row_span', 'spacing_x',
+		'gap', 'line_gap', 'opacity', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x',
+		'origin_y', 'padding_left', 'padding_top', 'padding_right', 'padding_bottom', 'flex_basis',
+		'flex_grow', 'flex_shrink', 'min_width', 'min_height', 'max_width', 'max_height', 'columns',
+		'cols', 'rows', 'max_columns', 'auto_columns_min_width', 'column_span', 'row_span', 'spacing_x',
 		'spacing_y', 'col_default_width', 'row_default_height', 'border_width', 'border_left',
 		'border_top', 'border_right', 'border_bottom', 'radius', 'corner_radius'] {
 		return .number
@@ -109,6 +109,7 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 	// Struct fields give shorthand enum values their expected type without
 	// coercing an incorrectly typed dynamic value into an enum.
 	return match base {
+		'motion' { 'ui2.MotionConfig{...${value}}' }
 		'align', 'valign' { 'ui2.TextStyle{${base}: ${value}}.${base}' }
 		'align_items' { 'ui2.FlexConfig{align: ${value}}.align' }
 		'align_self' { 'ui2.FlexChild{align_self: ${value}}.align_self' }
@@ -191,9 +192,9 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 	if vml_widget_property_allowed(node, name, parent) { return true }
 	if vml_is_event(name) { return name != 'on_submit' || node.tag == 'TextInput' }
 	if name in ['id', 'ref', 'key', 'x', 'y', 'width', 'height', 'hidden', 'enabled', 'native',
-		'clickable', 'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation',
-		'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y', 'cursor', 'tooltip',
-		'secure', 'autocorrect', 'pad_left', 'accessibility_role', 'accessibility_label',
+		'clickable', 'draggable', 'long_press', 'swipe_left', 'button_behavior', 'rotation', 'opacity',
+		'motion', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x', 'origin_y', 'cursor',
+		'tooltip', 'secure', 'autocorrect', 'pad_left', 'accessibility_role', 'accessibility_label',
 		'accessibility_value', 'on_click', 'on_change', 'on_active', 'on_submit'] {
 		return true
 	}
@@ -288,6 +289,9 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 	if use == .number && check_bounds {
 		if value := vml_visual_number(expr) {
 			base := vml_visual_base_property(property.name)
+			if base == 'opacity' && (!math.is_finite(value) || value < 0 || value > 1) {
+				return vml_visual_error(property, 'opacity must be finite and between zero and one')
+			}
 			if base in ['scale_x', 'scale_y'] && (!math.is_finite(value) || value == 0) {
 				return vml_visual_error(property, '`${property.name}` must be finite and nonzero')
 			}
@@ -517,13 +521,13 @@ fn validate_vml_native_visual(node &VmlNode) ! {
 	}
 	for property in node.properties {
 		base := vml_visual_base_property(property.name)
-		if base != property.name || base in ['translate_x', 'translate_y', 'scale_x', 'scale_y',
-			'origin_x', 'origin_y', 'weight', 'letter_spacing', 'line_height', 'line_height_factor',
-			'baseline_offset', 'tabular_figures', 'font_family', 'background_color', 'strikethrough',
-			'shadow', 'outline', 'vertical_align', 'link', 'head_indent', 'first_line_indent',
-			'hyphenation_factor', 'border_left_color', 'border_top_color', 'border_right_color',
-			'border_bottom_color', 'border_pattern', 'dash_length', 'dash_gap', 'outline_color',
-			'outline_width', 'outline_offset'] {
+		if base != property.name || base in ['opacity', 'motion', 'translate_x', 'translate_y',
+			'scale_x', 'scale_y', 'origin_x', 'origin_y', 'weight', 'letter_spacing', 'line_height',
+			'line_height_factor', 'baseline_offset', 'tabular_figures', 'font_family',
+			'background_color', 'strikethrough', 'shadow', 'outline', 'vertical_align', 'link',
+			'head_indent', 'first_line_indent', 'hyphenation_factor', 'border_left_color',
+			'border_top_color', 'border_right_color', 'border_bottom_color', 'border_pattern',
+			'dash_length', 'dash_gap', 'outline_color', 'outline_width', 'outline_offset'] {
 			return vml_visual_error(property, '`${property.name}` requires the custom renderer')
 		}
 	}
