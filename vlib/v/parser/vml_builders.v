@@ -9,6 +9,11 @@ fn vml_builder_property_type(node &VmlNode, property VmlProperty) string {
 		.color { 'u32' }
 		.raw {
 			match vml_visual_base_property(property.name) {
+				'overlay' { 'ui2.OverlayConfig' }
+				'point' { '?ui2.OverlayPoint' }
+				'placement' { 'ui2.OverlayPlacement' }
+				'backdrop' { 'ui2.BoxStyle' }
+				'scroll_mode' { 'ui2.ScrollMode' }
 				'align' { 'ui2.Align' }
 				'valign' { 'ui2.VAlign' }
 				'align_items', 'align_self' { 'ui2.LayoutAlignment' }

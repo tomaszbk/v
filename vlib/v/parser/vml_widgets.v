@@ -4,8 +4,7 @@ module parser
 // records carry only the relevant typed config, never interpreter AST data.
 fn vml_widget_tag(tag string) bool {
 	return tag in ['Stack', 'Accordion', 'AccordionItem', 'Carousel', 'CarouselSlide', 'ScreenManager',
-		'ManagedScreen', 'ScreenView', 'Popup', 'ModalView', 'TreeView', 'TreeNode', 'TabbedPanel',
-		'Tab', 'ToggleButton']
+		'ManagedScreen', 'ScreenView', 'TreeView', 'TreeNode', 'TabbedPanel', 'Tab', 'ToggleButton']
 }
 
 fn vml_widget_property_allowed(node &VmlNode, name string, parent string) bool {
@@ -28,11 +27,6 @@ fn vml_widget_property_allowed(node &VmlNode, name string, parent string) bool {
 		}
 		'ScreenManager' { name == 'current' }
 		'Screen', 'ManagedScreen', 'ScreenView' { name == 'name' && parent == 'ScreenManager' }
-		'Popup', 'ModalView' {
-			name in ['open', 'auto_dismiss', 'on_dismiss', 'content_width', 'content_height',
-				'size_hint_x', 'size_hint_y', 'overlay_background', 'title', 'title_height',
-				'title_color', 'title_font_size', 'title_bold', 'separator_height', 'separator_color']
-		}
 		'TreeView' {
 			name in ['row_height', 'spacing', 'indent', 'disclosure_width', 'row_background',
 				'row_corner_radius', 'selected_background', 'disclosure_background', 'selected_color',
@@ -55,19 +49,18 @@ fn vml_widget_property_allowed(node &VmlNode, name string, parent string) bool {
 
 fn vml_widget_property_use(name string) ?VmlExprUse {
 	if name in ['title_background', 'active_title_background', 'title_color', 'active_title_color',
-		'overlay_background', 'separator_color', 'row_background', 'selected_background',
-		'disclosure_background', 'selected_color', 'disclosure_color', 'tab_background',
-		'active_tab_background', 'tab_color', 'active_tab_color', 'down_background', 'down_color'] {
+		'row_background', 'selected_background', 'disclosure_background', 'selected_color',
+		'disclosure_color', 'tab_background', 'active_tab_background', 'tab_color', 'active_tab_color',
+		'down_background', 'down_color'] {
 		return .color
 	}
-	if name in ['open', 'auto_dismiss', 'expanded', 'selected', 'pressed', 'bind.pressed', 'loop',
-		'ignore_perpendicular_swipes', 'title_bold', 'allow_no_selection'] {
+	if name in ['expanded', 'selected', 'pressed', 'bind.pressed', 'loop', 'ignore_perpendicular_swipes',
+		'allow_no_selection'] {
 		return .bool_
 	}
-	if name in ['min_space', 'title_font_size', 'title_corner_radius', 'min_move', 'size_hint_x',
-		'size_hint_y', 'title_height', 'separator_height', 'row_height', 'spacing', 'indent',
-		'disclosure_width', 'row_corner_radius', 'tab_height', 'tab_width', 'tab_font_size',
-		'tab_corner_radius', 'down_corner_radius'] {
+	if name in ['min_space', 'title_font_size', 'title_corner_radius', 'min_move', 'row_height',
+		'spacing', 'indent', 'disclosure_width', 'row_corner_radius', 'tab_height', 'tab_width',
+		'tab_font_size', 'tab_corner_radius', 'down_corner_radius'] {
 		return .number
 	}
 	if name in ['name', 'title', 'group'] { return .string_ }
@@ -196,18 +189,6 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 		'ScreenManager' {
 			constructor = 'ui2.screen_manager(ui2.ScreenManagerConfig{id: ${id}, frame: ${frame}, box: ${box}, current: ${vml_prop(properties, 'current', "''")}, screens: ${children}.map(ui2.ManagedScreen{...(it.compiled_metadata.screen or {panic("ScreenManager requires Screen children")}), content: it})}) or {panic(err)}'
 		}
-		'Popup', 'ModalView' {
-			popup := node.tag == 'Popup'
-			config := if popup { 'PopupConfig' } else { 'ModalViewConfig' }
-			method := if popup { 'popup' } else { 'modal_view' }
-			body := 'ui2.view((if ${id}.len > 0 { ${id} + "__body" } else { "" }), ui2.rect(0,0,${frame}.width,${frame}.height), ui2.BoxStyle{transparent:true}, ${children})'
-			more := if popup {
-				'surface_box: ${box}, title: ${vml_prop(properties, 'title', "''")}, title_height: ${vml_prop(properties, 'title_height', 'f64(48)')}, title_style: ui2.TextStyle{color:${vml_prop(properties, 'title_color', 'u32(0x0f172a)')},size:${vml_prop(properties, 'title_font_size', 'f64(18)')},bold:${vml_prop(properties, 'title_bold', 'true')},align:.center}, separator_height:${vml_prop(properties, 'separator_height', 'f64(1)')},separator_box:ui2.BoxStyle{bg:${vml_prop(properties, 'separator_color', 'u32(0xe2e8f0)')}},'
-			} else {
-				'content_box: ${box},'
-			}
-			constructor = 'ui2.${method}(ui2.${config}{id:${id},frame:${frame},open:${vml_prop(properties, 'open', 'false')},auto_dismiss:${vml_prop(properties, 'auto_dismiss', 'true')},on_dismiss:${c.event_callback(node, 'on_dismiss', scope)},content_width:${vml_prop(properties, 'content_width', 'f64(-1)')},content_height:${vml_prop(properties, 'content_height', 'f64(-1)')},size_hint_x:${vml_prop(properties, 'size_hint_x', 'f64(0.8)')},size_hint_y:${vml_prop(properties, 'size_hint_y', 'f64(0.8)')},overlay_box:ui2.BoxStyle{bg:${vml_prop(properties, 'overlay_background', 'u32(0x475569)')}},${more}content:${body}}) or {panic(err)}'
-		}
 		'TreeNode' {
 			constructor = 'ui2.view((if ${id}.len > 0 { ${id} + "__record" } else { "" }), ${frame}, ${box}, ${children})'
 			metadata = 'tree: ui2.TreeViewNode{id:${id},text:${vml_prop(properties, 'text', vml_prop(properties, 'title', "''"))},on_event:${c.event_callback(node, 'on_select', scope)},on_toggle:${c.event_callback(node, 'on_toggle', scope)},expanded:${vml_prop(properties, 'expanded', 'false')},selected:${vml_prop(properties, 'selected', 'false')},enabled:${vml_prop(properties, 'enabled', 'true')},children:${children}.map(it.compiled_metadata.tree or {panic("TreeNode requires TreeNode children")})}'
@@ -231,7 +212,7 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 	if metadata.len > 0 { c.writeln('\tcompiled_metadata: &ui2.CompiledVmlMetadata{${metadata}}') }
 	mut common := properties.clone()
 	// Composite constructors derive common fields from their own config (for
-	// example, visibility of a closed ModalView). Only authored arguments replace
+	// example, behavior of a ToggleButton). Only authored arguments replace
 	// those values; the defaults for directly declared elements are unchanged.
 	for name in ['button_behavior', 'secure', 'clickable', 'draggable', 'long_press', 'swipe_left',
 		'rotation', 'opacity', 'motion', 'translate_x', 'translate_y', 'scale_x', 'scale_y', 'origin_x',
@@ -255,17 +236,6 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 fn vml_widget_child_input(tag string, frame string, properties map[string]string, child_count int) ?string {
 	mut geometry := ''
 	match tag {
-		'Popup', 'ModalView' {
-			config := if tag == 'Popup' { 'PopupConfig' } else { 'ModalViewConfig' }
-			method := if tag == 'Popup' { 'popup_geometry' } else { 'modal_view_geometry' }
-			member := if tag == 'Popup' { 'body' } else { 'content' }
-			more := if tag == 'Popup' {
-				'title_height: ${vml_prop(properties, 'title_height', 'f64(48)')}, separator_height: ${vml_prop(properties, 'separator_height', 'f64(1)')},'
-			} else {
-				''
-			}
-			geometry = '(ui2.${method}(ui2.${config}{frame:${frame},content_width:${vml_prop(properties, 'content_width', 'f64(-1)')},content_height:${vml_prop(properties, 'content_height', 'f64(-1)')},size_hint_x:${vml_prop(properties, 'size_hint_x', 'f64(0.8)')},size_hint_y:${vml_prop(properties, 'size_hint_y', 'f64(0.8)')},${more}}) or {panic(err)}).${member}'
-		}
 		'TabbedPanel' {
 			geometry = '(ui2.tabbed_panel_geometry(ui2.TabbedPanelConfig{frame:${frame},tab_position:${vml_prop(properties, 'tab_pos', 'ui2.TabPosition.top_left')},tab_height:${vml_prop(properties, 'tab_height', 'f64(40)')},tab_width:${vml_prop(properties, 'tab_width', 'f64(100)')}}) or {panic(err)}).content'
 		}

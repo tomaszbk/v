@@ -83,6 +83,7 @@ fn vml_visual_integer_property(property VmlProperty) bool {
 
 fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) string {
 	base := vml_visual_base_property(property.name)
+	if typed := vml_overlay_typed_value(property.name, value) { return typed }
 	if typed := vml_widget_typed_value(node, property.name, value) { return typed }
 	if vml_visual_integer_property(property) {
 		return match base {
@@ -133,6 +134,19 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 // inactive arms too, while runtime evaluates only the selected arm.
 fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, expr &VmlExpr, scope VmlScope) string {
 	if property.name == 'style' { return c.style_expr(expr, node, scope) }
+	if vml_has_overlay(node) && vml_overlay_local_reference_expr(property.name, expr) {
+		id := expr.value
+		value := if named := scope.ids[id] {
+			if named.control_id.len > 0 {
+				named.control_id
+			} else {
+				'${scope.component}.control_id(' + vml_quote(id) + ')'
+			}
+		} else {
+			'${scope.component}.control_id(' + vml_quote(id) + ')'
+		}
+		return 'ui2.Element{text: ${value}}.text'
+	}
 	if property.name == 'key' {
 		return vml_stringify(c.expr(expr, scope, .raw))
 	}
@@ -158,6 +172,11 @@ fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, e
 
 fn vml_visual_enum_values(node &VmlNode, name string) []string {
 	return match vml_visual_base_property(name) {
+		'placement' {
+			['bottom_start', 'bottom', 'bottom_end', 'top_start', 'top', 'top_end', 'right_start',
+				'right', 'right_end', 'left_start', 'left', 'left_end']
+		}
+		'scroll_mode' { ['vertical_only', 'horizontal_only', 'both'] }
 		'align' { ['left', 'center', 'right'] }
 		'valign' { ['top', 'middle', 'bottom'] }
 		'align_items' { ['start', 'center', 'end', 'stretch'] }
@@ -189,6 +208,8 @@ fn vml_visual_enum_values(node &VmlNode, name string) []string {
 }
 
 fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
+	if name == 'overlay' { return node.tag == 'View' }
+	if vml_overlay_tag(node.tag) && name in vml_overlay_properties { return true }
 	if name == 'style' { return node.tag !in ['Repeater', 'Menu', 'MenuBar', 'MenuItem', 'Option'] }
 	if node.tag == 'Run' { return name == 'text' || name in vml_text_properties }
 	if vml_widget_property_allowed(node, name, parent) { return true }
@@ -241,7 +262,7 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 				'padding_left']
 		}
 		'Image' { name in ['source', 'path'] }
-		'Scroll' { name == 'persistent' }
+		'Scroll' { name in ['persistent', 'scroll_mode'] }
 		'Repeater' { name == 'model' }
 		'Dropdown' { name in ['text', 'bind.text'] }
 		'Spinner' { name in ['text', 'bind.text', 'text_autoupdate'] }
@@ -293,6 +314,12 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 			base := vml_visual_base_property(property.name)
 			if base == 'opacity' && (!math.is_finite(value) || value < 0 || value > 1) {
 				return vml_visual_error(property, 'opacity must be finite and between zero and one')
+			}
+			if base == 'backdrop_opacity' && (!math.is_finite(value) || value < 0 || value > 1) {
+				return vml_visual_error(property, 'overlay backdrop opacity must be finite and between zero and one')
+			}
+			if vml_overlay_tag(node.tag) && base in ['gap', 'margin', 'tooltip_delay'] && (!math.is_finite(value) || value < 0) {
+				return vml_visual_error(property, 'overlay `${property.name}` must be finite and nonnegative')
 			}
 			if base in ['scale_x', 'scale_y'] && (!math.is_finite(value) || value == 0) {
 				return vml_visual_error(property, '`${property.name}` must be finite and nonzero')
@@ -450,6 +477,9 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 
 fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater bool) ! {
 	if node.tag == 'Slot' { return }
+	if node.tag in ['Popup', 'ModalView'] {
+		return vml_visual_node_error(node, 'removed widget `${node.tag}`; use Dialog')
+	}
 	if node.tag == '__Component' {
 		for child in node.children {
 			validate_compiled_vml_visual_scope(child, parent, in_repeater)!
@@ -463,7 +493,7 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 	if node.tag !in ['Screen', 'View', 'Absolute', 'Flex', 'Row', 'Column', 'Grid', 'Scroll',
 		'ScaledContent', 'Label', 'Run', 'TextInput', 'TextArea', 'Image', 'Button', 'Checkbox',
 		'Dropdown', 'ProgressBar', 'Slider', 'Switch', 'Spinner', 'MessageBox', 'Repeater', 'MenuItem',
-		'Option'] && !vml_widget_tag(node.tag) {
+		'Option'] && !vml_widget_tag(node.tag) && !vml_overlay_tag(node.tag) {
 		return vml_visual_node_error(node, 'unsupported VML element `${node.tag}`')
 	}
 	if node.tag == 'Label' && node.children.any(it.tag !in ['Run', 'MenuItem']) {
@@ -531,7 +561,7 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 }
 
 fn validate_vml_native_visual(node &VmlNode) ! {
-	if node.tag in ['ScaledContent', 'Run'] {
+	if node.tag in ['ScaledContent', 'Run'] || vml_overlay_tag(node.tag) {
 		return vml_visual_node_error(node, '${node.tag} requires the custom renderer')
 	}
 	for property in node.properties {
@@ -558,13 +588,13 @@ fn validate_vml_native_property(property VmlProperty) ! {
 			}
 		}
 	}
-	if base != property.name || base in ['opacity', 'motion', 'translate_x', 'translate_y', 'scale_x',
-		'scale_y', 'origin_x', 'origin_y', 'letter_spacing', 'line_height', 'line_height_factor',
-		'baseline_offset', 'tabular_figures', 'font_family', 'background_color', 'strikethrough',
-		'shadow', 'outline', 'vertical_align', 'link', 'head_indent', 'first_line_indent',
-		'hyphenation_factor', 'border_left_color', 'border_top_color', 'border_right_color',
-		'border_bottom_color', 'border_pattern', 'dash_length', 'dash_gap', 'outline_color',
-		'outline_width', 'outline_offset'] {
+	if base != property.name || base in ['overlay', 'opacity', 'motion', 'translate_x', 'translate_y',
+		'scale_x', 'scale_y', 'origin_x', 'origin_y', 'letter_spacing', 'line_height',
+		'line_height_factor', 'baseline_offset', 'tabular_figures', 'font_family', 'background_color',
+		'strikethrough', 'shadow', 'outline', 'vertical_align', 'link', 'head_indent',
+		'first_line_indent', 'hyphenation_factor', 'border_left_color', 'border_top_color',
+		'border_right_color', 'border_bottom_color', 'border_pattern', 'dash_length', 'dash_gap',
+		'outline_color', 'outline_width', 'outline_offset'] {
 		return vml_visual_error(property, '`${property.name}` requires the custom renderer')
 	}
 }

@@ -465,14 +465,14 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		mut control := root
 		for control.tag == '__Component' { control = control.children[0] }
 		ref_type := incoming.special['__ref_' + reference.expr.value] or { '' }
-		if ref_type != control.tag {
+		if ref_type != vml_overlay_ref_tag(control.tag) {
 			c.writeln('$compile_error(' + vml_quote('ref `${reference.expr.value}` requires ${ref_type}; received ${control.tag}') + ')')
 		}
 		c.writeln(c.expr(reference.expr, incoming, .raw) + '.bind(vml_node_${suffix}) or { panic(err) }')
 	}
 	mut exported := vml_clone_scope(incoming)
 	if node.id.len > 0 {
-		exported.ids[node.id] = VmlNamedValue{ frame_node: 'vml_node_${suffix}' }
+		exported.ids[node.id] = VmlNamedValue{ frame_node: 'vml_node_${suffix}', control_id: 'vml_node_${suffix}.element().id' }
 	}
 	return exported
 }
@@ -538,14 +538,16 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 		c.writeln('${variable}.style(fn [${captures.join(', ')}] () !ui2.StylePatch { return ${value} }) or { panic(err) }')
 	}
 	c.compile_structural_effect(node, suffix, scope)
+	c.compile_overlay_effect(node, suffix, scope)
 	if reference := vml_find_property(node, 'ref') {
 		ref_type := scope.special['__ref_' + reference.expr.value] or { '' }
-		if ref_type != node.tag {
+		if ref_type != vml_overlay_ref_tag(node.tag) {
 			c.writeln('$compile_error(' + vml_quote('ref `${reference.expr.value}` requires ${ref_type}; received ${node.tag}') + ')')
 		}
 		c.writeln(c.expr(reference.expr, scope, .raw) + '.bind(${variable}) or { panic(err) }')
 	}
 	for property in node.properties {
+		if vml_overlay_effect_property(node, property.name) { continue }
 		if property.name in ['id', 'ref'] || vml_is_event(property.name) || property.expr.kind == .literal {
 			continue
 		}

@@ -398,9 +398,9 @@ fn (mut p VmlSourceParser) parse_node() !&VmlNode {
 	return node
 }
 
-const vml_event_names = ['on_click', 'on_change', 'on_active', 'on_submit', 'on_scroll', 'on_pointer_down',
-	'on_pointer_drag', 'on_pointer_up', 'on_long_press', 'on_swipe_left', 'on_link', 'on_select',
-	'on_toggle', 'on_dismiss']
+const vml_event_names = ['on_click', 'on_change', 'on_active', 'on_submit', 'on_scroll', 'on_open',
+	'on_pointer_down', 'on_pointer_drag', 'on_pointer_up', 'on_long_press', 'on_swipe_left', 'on_link',
+	'on_select', 'on_toggle', 'on_dismiss']
 
 fn vml_is_event(name string) bool {
 	return name in vml_event_names
@@ -987,6 +987,7 @@ struct VmlNamedValue {
 	frame        string
 	frame_signal string
 	frame_node   string
+	control_id   string
 	props        map[string]string
 	prop_types   map[string]string
 }
@@ -1109,6 +1110,7 @@ enum VmlExprUse {
 
 fn vml_property_use(property VmlProperty) VmlExprUse {
 	if property.name == 'text' { return .text }
+	if use := vml_overlay_property_use(property.name) { return use }
 	if use := vml_visual_property_use(property.name) { return use }
 	if use := vml_widget_property_use(property.name) { return use }
 	if property.name in ['x', 'y', 'width', 'height', 'padding', 'spacing', 'corner_radius', 'radius',
@@ -1372,8 +1374,9 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	}
 	mut named_props := map[string]string{}
 	mut named_types := map[string]string{}
+	control_id := '${scope.component}.control_id(' + c.control_id(node, suffix, scope) + ')'
 	if node.id.len > 0 {
-		scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
+		scope.ids[node.id] = VmlNamedValue{ frame: input, control_id: control_id, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	mut properties := map[string]string{}
 	for property in vml_order_properties_by_dependencies(node.properties.filter(vml_property_is_geometry(it)), node.id) {
@@ -1382,7 +1385,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 		named_props[property.name] = name
 		named_types[property.name] = vml_builder_property_type(node, property)
 		if node.id.len > 0 {
-			scope.ids[node.id] = VmlNamedValue{ frame: input, props: named_props.clone(), prop_types: named_types.clone() }
+			scope.ids[node.id] = VmlNamedValue{ frame: input, control_id: control_id, props: named_props.clone(), prop_types: named_types.clone() }
 		}
 	}
 	frame := 'vml_frame_${suffix}'
@@ -1404,13 +1407,13 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	}
 	c.writeln('\t_ = ${frame}')
 	if node.id.len > 0 {
-		scope.ids[node.id] = VmlNamedValue{ frame: frame, props: named_props.clone(), prop_types: named_types.clone() }
+		scope.ids[node.id] = VmlNamedValue{ frame: frame, control_id: control_id, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	if node.id.len > 0 {
 		geometry := 'vml_geometry_${suffix}'
 		c.writeln('\tmut ${geometry} := ${scope.component}.geometry(' + c.node_identity(node, suffix, scope) + ', ${frame}) or { panic(err) }')
 		c.writeln('_ = ${geometry}')
-		scope.ids[node.id] = VmlNamedValue{ frame: frame, frame_signal: geometry, props: named_props.clone(), prop_types: named_types.clone() }
+		scope.ids[node.id] = VmlNamedValue{ frame: frame, frame_signal: geometry, control_id: control_id, props: named_props.clone(), prop_types: named_types.clone() }
 	}
 	for property in node.properties.filter(!vml_property_is_geometry(it)) {
 		if property.name in ['id', 'ref'] || vml_is_event(property.name) { continue }
@@ -1436,7 +1439,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	}
 	cursor := ''
 	child_placement := if node.tag == 'Scroll' {
-		VmlPlacement.width_preferred
+		VmlPlacement.inherited_preferred
 	} else if node.tag in ['Absolute', 'Stack'] {
 		VmlPlacement.preferred
 	} else if measure_mode {
@@ -1484,7 +1487,7 @@ fn vml_node_output_scope(node &VmlNode, incoming VmlScope, scope VmlScope) VmlSc
 
 fn vml_child_input(tag string, frame string, properties map[string]string, cursor string) string {
 	_ = cursor
-	if tag == 'Scroll' { return 'ui2.rect(0, 0, ${frame}.width, 0)' }
+	if tag == 'Scroll' { return 'ui2.rect(0, 0, 0, 0)' }
 	if tag == 'ScaledContent' {
 		return 'ui2.rect(0, 0, ' + vml_prop(properties, 'content_width', 'f64(0)') + ', ' + vml_prop(properties, 'content_height', 'f64(0)') + ')'
 	}
@@ -1651,7 +1654,12 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 		'Scroll' { 'scroll' }
 		else { 'view' }
 	}
-	c.writeln('\tvml_declaration_${suffix} := ui2.Element{')
+	declaration := if vml_has_overlay(node) {
+		'vml_overlay_base_' + suffix
+	} else {
+		'vml_declaration_' + suffix
+	}
+	c.writeln('\t${declaration} := ui2.Element{')
 	c.writeln('\t\tkind: .${kind}')
 	c.writeln('\t\tid: ${id}')
 	c.writeln('\t\tframe: ${frame}')
@@ -1676,6 +1684,7 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 	} else if node.tag == 'Scroll' {
 		c.writeln('\t\tbox: ${c.box_style(properties)}')
 		c.writeln('\t\tpersistent_scrollbars: ${vml_prop(properties, 'persistent', 'false')}')
+		c.writeln('\t\tscroll_mode: ${vml_prop(properties, 'scroll_mode', 'ui2.ScrollMode.vertical_only')}')
 	} else if node.tag == 'Checkbox' {
 		c.writeln('\t\tbox: ui2.BoxStyle{transparent: true}')
 	} else if node.tag in ['View', 'ScaledContent', 'Button', 'Dropdown', 'Label'] || kind == 'view' {
@@ -1706,6 +1715,9 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 	}
 	c.write_common_fields(node, suffix, properties, scope, role_default, label_default, value_default)
 	c.writeln('\t}')
+	if vml_has_overlay(node) {
+		c.writeln('\tvml_declaration_${suffix} := ui2.with_overlay(${declaration}, ${c.overlay_config(node, suffix, properties)}) or { panic(err) }')
+	}
 }
 
 fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
