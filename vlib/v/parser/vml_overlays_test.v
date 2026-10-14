@@ -180,3 +180,63 @@ fn test_overlay_diagnostics_keep_the_vml_property_and_call_site() {
 	assert native.diagnostics[0].message.contains('requires the custom renderer')
 	assert native.diagnostics[0].pos.id in native.a.template_call_sites
 }
+
+fn test_overlay_component_aliases_require_declaration_before_literal_references() ! {
+	root := os.join_path(os.vtmp_dir(), 'vml_overlay_aliases_${os.getpid()}')
+	os.mkdir_all(root)!
+	defer { os.rmdir_all(root) or {} }
+	view := os.join_path(root, 'view.vml')
+	card := os.join_path(root, 'card.vml')
+	os.write_file(card, 'component Card() { View(id: "private") {} }')!
+	for property in ['anchor', 'owner', 'initial_focus'] {
+		for value in ['"card"', 'app.choose ? "button" : "card"'] {
+			arguments := if property == 'anchor' {
+				'anchor: ${value}'
+			} else {
+				'anchor: "button", ${property}: ${value}'
+			}
+			os.write_file(view, 'import Card\nView {\n    Popover(${arguments}) {}\n    Card(id: "card")\n    Button(id: "button")\n}')!
+			parse_compiled_vml_file(view, '', []) or {
+				assert err.msg().contains('component alias `card` before its declaration'), err.msg()
+				assert err.msg().contains('${view}:3:'), err.msg()
+				continue
+			}
+			assert false, 'forward ${property} component alias was accepted'
+		}
+	}
+	os.write_file(view, 'import Card\nView { Card(id: "card") Popover(anchor: "card") {} }')!
+	valid := parse_compiled_vml_file(view, '', [])!
+	mut compiler := VmlCompiler{}
+	generated := compiler.compile(valid)
+	assert generated.contains('ui2.Element{text: vml_node_0_0.element().id}.text'), generated
+	os.write_file(view, 'View { Popover(anchor: "button", initial_focus: "first") { Button(id: "first") } Button(id: "button") }')!
+	parse_compiled_vml_file(view, '', [])!
+	os.write_file(view, 'import Card\nView { Repeater(model: app.items, key: item.id) { Popover(anchor: "card") {} Card(id: "card") } }')!
+	parse_compiled_vml_file(view, '', []) or {
+		assert err.msg().contains('component alias `card` before its declaration'), err.msg()
+		return
+	}
+	assert false, 'forward component alias in a repeater was accepted'
+}
+
+fn test_forward_overlay_component_alias_diagnostic_points_to_vml_property() ! {
+	root := os.join_path(os.vtmp_dir(), 'vml_overlay_alias_diagnostic_${os.getpid()}')
+	os.mkdir_all(root)!
+	defer { os.rmdir_all(root) or {} }
+	view := os.join_path(root, 'view.vml')
+	source := os.join_path(root, 'main.v')
+	os.write_file(os.join_path(root, 'card.vml'), 'component Card() { View(id: "private") {} }')!
+	os.write_file(view, 'import Card\nView {\n    Popover(\n        anchor: "card",\n    ) {}\n    Card(id: "card")\n}')!
+	os.write_file(source, 'fn main() { _ = $vml("view.vml") }')!
+	mut prefs := pref.new_preferences()
+	prefs.user_defines << 'ui2_custom_rendering'
+	mut parser := Parser.new(prefs)
+	parser.parse_file(source)
+	assert parser.diagnostics.len == 1, parser.diagnostics.str()
+	diagnostic := parser.diagnostics[0]
+	assert os.real_path(diagnostic.file) == os.real_path(view)
+	assert diagnostic.line == 4
+	assert diagnostic.column == 9
+	assert diagnostic.message.contains('component alias `card` before its declaration')
+	assert diagnostic.pos.id in parser.a.template_call_sites
+}
