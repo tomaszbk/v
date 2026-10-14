@@ -45,15 +45,35 @@ fn (mut c VmlCompiler) write_property_initializer(node &VmlNode, property VmlPro
 		app_dependency := vml_expr_uses_path(property.expr, 'app')
 		dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
 		mut captures := vml_callback_captures(property.expr, scope)
+		if vml_has_overlay(node) {
+			captures << vml_overlay_reference_captures(property.name, property.expr, scope)
+		}
 		if app_dependency || vml_style_uses_theme(property.expr) {
 			captures << 'mut ' + scope.component
 		}
 		captures = vml_used_captures(dependency + value, captures)
-		value_type := if property.name == 'style' { 'ui2.StylePatch' } else { 'typeof(${value})' }
+		// V returns either an Option or a Result, so memoize optional point data
+		// inside its concrete config and project the field after the Result unwrap.
+		value_type := if property.name == 'style' {
+			'ui2.StylePatch'
+		} else if property.name == 'point' {
+			'ui2.OverlayConfig'
+		} else {
+			'typeof(${value})'
+		}
+		memo_value := if property.name == 'point' {
+			'ui2.OverlayConfig{point: ${value}}'
+		} else {
+			value
+		}
 		key := '@property:' + vml_builder_path(suffix) + ':' + property.name
-		c.writeln('mut ${memo} := ${scope.component}.computed[${value_type}](' + vml_quote(key) + ', fn [${captures.join(', ')}] () !${value_type} { ${dependency} return ${value} }) or { panic(err) }')
+		c.writeln('mut ${memo} := ${scope.component}.computed[${value_type}](' + vml_quote(key) + ', fn [${captures.join(', ')}] () !${value_type} { ${dependency} return ${memo_value} }) or { panic(err) }')
 		c.property_memos[name] = memo
-		value = '${memo}.get() or { panic(err) }'
+		value = '${memo}.get() or { panic(err) }' + if property.name == 'point' {
+			'.point'
+		} else {
+			''
+		}
 	}
 	c.writeln('${name} := ${value}')
 	c.writeln('_ = ${name}')
@@ -62,14 +82,24 @@ fn (mut c VmlCompiler) write_property_initializer(node &VmlNode, property VmlPro
 }
 
 fn (c &VmlCompiler) property_effect_value(node &VmlNode, property VmlProperty, suffix string, scope VmlScope) string {
-	if memo := c.property_memos[vml_property_name(suffix, property.name)] {
-		return '${memo}.get() or { panic(err) }'
+	name := vml_property_name(suffix, property.name)
+	if vml_overlay_local_reference(property) && name in c.property_positions { return name }
+	if memo := c.property_memos[name] {
+		return '${memo}.get() or { panic(err) }' + if property.name == 'point' {
+			'.point'
+		} else {
+			''
+		}
 	}
 	return c.visual_property_value(node, property, property.expr, scope)
 }
 
 fn (c &VmlCompiler) property_memo_capture(suffix string, property string) []string {
-	if memo := c.property_memos[vml_property_name(suffix, property)] { return ['mut ' + memo] }
+	name := vml_property_name(suffix, property)
+	if memo := c.property_memos[name] { return ['mut ' + memo] }
+	if position := c.property_positions[name] {
+		if vml_overlay_local_reference(position) { return [name] }
+	}
 	return []string{}
 }
 
