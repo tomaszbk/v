@@ -994,11 +994,12 @@ struct VmlNamedValue {
 
 struct VmlScope {
 mut:
-	ids              map[string]VmlNamedValue
-	special          map[string]string
-	writable         map[string]string
-	event_parameters map[string][]VmlParameter
-	component        string
+	ids               map[string]VmlNamedValue
+	special           map[string]string
+	writable          map[string]string
+	event_parameters  map[string][]VmlParameter
+	component_aliases []string
+	component         string
 }
 
 struct VmlGuard {
@@ -1072,11 +1073,12 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 
 fn vml_clone_scope(scope VmlScope) VmlScope {
 	return VmlScope{
-		ids:              scope.ids.clone()
-		special:          scope.special.clone()
-		writable:         scope.writable.clone()
-		event_parameters: scope.event_parameters.clone()
-		component:        scope.component
+		ids:               scope.ids.clone()
+		special:           scope.special.clone()
+		writable:          scope.writable.clone()
+		event_parameters:  scope.event_parameters.clone()
+		component_aliases: scope.component_aliases.clone()
+		component:         scope.component
 	}
 }
 

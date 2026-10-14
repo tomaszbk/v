@@ -392,7 +392,8 @@ const vml_unknown_component_parent = '__ComponentParent'
 
 fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
 	validate_compiled_vml_visual_scope(node, parent, false)!
-	validate_vml_geometry_scope(node, parent, VmlScope{}, VmlScope{})!
+	scope := VmlScope{ component_aliases: vml_overlay_component_aliases([node]) }
+	validate_vml_geometry_scope(node, parent, scope, scope)!
 }
 
 // Layout inputs cannot depend on allocated element geometry except in Absolute.
@@ -433,10 +434,16 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 		return incoming
 	}
 	mut scope := vml_clone_scope(incoming)
+	if node.tag == 'Repeater' {
+		scope.component_aliases << vml_overlay_component_aliases(node.children)
+	}
 	if node.tag != '__Component' && node.id.len > 0 {
 		scope.ids[node.id] = VmlNamedValue{}
 	}
 	for property in node.properties {
+		if vml_has_overlay(node) {
+			validate_vml_overlay_component_alias(property, property.expr, scope)!
+		}
 		// Component arguments are data; only their shared child-layout arguments
 		// participate in the surrounding container's layout.
 		if node.tag == '__Component' && property.name !in vml_flex_child_properties { continue }
@@ -449,7 +456,7 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 		}
 	}
 	if node.tag == '__Component' {
-		mut private := VmlScope{}
+		mut private := VmlScope{ component_aliases: vml_overlay_component_aliases(node.children) }
 		for child in node.children {
 			private = validate_vml_geometry_scope(child, parent, private, incoming)!
 		}
