@@ -103,7 +103,11 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 			continue
 		}
 		input := 'vml_input_' + child_suffix
-		c.writeln('${input} := ui2.rect(0, 0, ${geometry_parent}.frame()!.width, ${geometry_parent}.frame()!.height)')
+		c.writeln('${input} := ' + if parent_tag == 'Scroll' {
+			'ui2.rect(0, 0, 0, 0)'
+		} else {
+			'ui2.rect(0, 0, ${geometry_parent}.frame()!.width, ${geometry_parent}.frame()!.height)'
+		})
 		scope = c.compile_node(child, child_path, input, scope, '', if parent_tag in [
 			'Flex',
 			'Row',
@@ -113,6 +117,8 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 			'Absolute',
 		] {
 			.preferred
+		} else if parent_tag == 'Scroll' {
+			.inherited_preferred
 		} else {
 			.normal
 		})

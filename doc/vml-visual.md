@@ -63,6 +63,57 @@ ScaledContent(
 }
 ```
 
+## Overlay surfaces
+
+`Dialog`, `Popover`, `MenuOverlay`, `ContextMenu` and `Tooltip` retain their content
+and present it in ui2's window overlay layer. Their `width` and `height` describe
+the surface; ui2 resolves its global position, clipping, focus and dismissal.
+`MenuOverlay` is separate from the application's `Menu`/`MenuBar` declarations.
+These surfaces require the custom renderer. `Popup` and `ModalView` are removed.
+
+```vml
+Dialog(
+    id: "confirmation",
+    width: 320,
+    height: 180,
+    open: app.confirm_open,
+    on_dismiss: app.close_confirmation(),
+) {
+    Column {
+        Label(text: "Save the changes?")
+        Button(text: "Save", on_click: app.save())
+    }
+}
+```
+
+Anchored surfaces use `anchor: "control_id"` or `point: app.point` with a typed
+`ui2.OverlayPoint` in window logical coordinates. `placement` uses bare enum names
+such as `bottom_start`, `top_end` or `right`; `gap` and `margin` are nonnegative
+logical distances. `owner` identifies the declaration owner, and `initial_focus`
+selects a control inside a keyboard overlay. Dismissal requests call `on_dismiss`;
+the handler updates the controlled `open` source. `dismiss_on_escape` and
+`dismiss_on_outside` select which requests are enabled. `backdrop` accepts a typed
+`ui2.BoxStyle`, and `backdrop_opacity` is between zero and one.
+
+Quoted `anchor`, `owner` and `initial_focus` names resolve within the component's
+namespace, including keyed repeater instances. Values supplied by V expressions
+or an opaque `OverlayConfig` contain resolved control ids; V code can obtain one
+with `component.control_id("local_name")`.
+
+`ContextMenu` requests opening through `on_open` after a right click on its anchor;
+the event carries window logical `x`/`y` coordinates for the controlled `point`.
+`Tooltip` requests opening after anchored hover or focus and requests dismissal
+when that target is left. `tooltip_delay` is a nonnegative duration in seconds,
+defaulting to 0.5. These callbacks update the explicit `open` source.
+
+`View(overlay: app.config)` accepts a typed `ui2.OverlayConfig`. Overlay arguments
+and authored `hidden` update one retained surface; closing and reopening preserve
+its child identities. Overlay refs declare the `View` marker type.
+Native-profile compilation reports unsupported overlays.
+
+`Scroll(scroll_mode: horizontal_only)` and `Scroll(scroll_mode: both)` select scrolling
+axes through the typed `ui2.ScrollMode` enum; the default is `vertical_only`.
+
 ## Box and interaction styles
 
 Containers and controls accept box helpers through `style: [...]`.

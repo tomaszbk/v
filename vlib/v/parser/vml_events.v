@@ -1,7 +1,7 @@
 module parser
 
 fn (c &VmlCompiler) control_id(node &VmlNode, suffix string, scope VmlScope) string {
-	if node.id.len == 0 && (node.properties.any(it.name.starts_with('bind.')) || node.properties.any(it.name == 'ref')) {
+	if node.id.len == 0 && (vml_has_overlay(node) || node.properties.any(it.name.starts_with('bind.')) || node.properties.any(it.name == 'ref')) {
 		return c.node_identity(node, suffix, scope)
 	}
 	return vml_quote(node.id)
@@ -171,6 +171,8 @@ fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scop
 	if change.len > 0 { body += '.change { ${change} }\n' }
 	if callback := callbacks['on_submit'] { body += '.submit { ${callback}(event) }\n' }
 	if callback := callbacks['on_scroll'] { body += '.scroll { ${callback}(event) }\n' }
+	if callback := callbacks['on_open'] { body += '.open { ${callback}(event) }\n' }
+	if callback := callbacks['on_dismiss'] { body += '.dismiss { ${callback}(event) }\n' }
 	for kind in ['pointer_down', 'pointer_drag', 'pointer_up', 'long_press', 'swipe_left', 'link'] {
 		callback := callbacks['on_${kind}'] or { '' }
 		if callback.len > 0 { body += '.${kind} { ${callback}(event) }\n' }
