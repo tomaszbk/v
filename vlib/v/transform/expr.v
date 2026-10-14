@@ -1547,24 +1547,24 @@ fn (t &Transformer) operator_alias_type_for_operand(id flat.NodeId, op flat.Op) 
 	if node.kind == .index && node.children_count > 0 {
 		base_id := t.a.child(&node, 0)
 		if raw_base := t.raw_var_type_for_expr(base_id) {
-			mut elem := raw_base.trim_space()
+			mut elem := trimmed_transform_text(raw_base)
 			mut is_pointer_element := false
 			if elem.starts_with('mut ') {
-				elem = elem[4..].trim_space()
+				elem = trimmed_transform_text(elem[4..])
 			}
 			if elem.starts_with('&') {
-				elem = elem[1..].trim_space()
+				elem = trimmed_transform_text(elem[1..])
 				is_pointer_element = true
 			}
 			if elem.starts_with('[]') {
-				elem = elem[2..].trim_space()
+				elem = trimmed_transform_text(elem[2..])
 			} else if elem.starts_with('map[') {
 				if bracket_end := elem.index(']') {
-					elem = elem[bracket_end + 1..].trim_space()
+					elem = trimmed_transform_text(elem[bracket_end + 1..])
 				}
 			} else if elem.starts_with('[') {
 				if bracket_end := elem.index(']') {
-					elem = elem[bracket_end + 1..].trim_space()
+					elem = trimmed_transform_text(elem[bracket_end + 1..])
 				}
 			} else if !is_pointer_element {
 				return none
@@ -2407,10 +2407,12 @@ fn (mut t Transformer) transform_optional_wrapper_selector_expr(id flat.NodeId, 
 			}
 			remaining_smartcasts << smartcast
 		}
+		t.clear_node_type_memo()
 		t.smartcast_stack = remaining_smartcasts
 	}
 	// Lower promoted fields and their bases before marking the optional wrapper.
 	transformed := t.transform_expr(id)
+	t.clear_node_type_memo()
 	t.smartcast_stack = t.restore_smartcasts_since(saved_smartcast_event_id, saved_smartcasts)
 	return t.mark_optional_wrapper_expr(transformed, raw_type)
 }
@@ -2427,9 +2429,11 @@ fn (mut t Transformer) transform_optional_wrapper_index_expr(id flat.NodeId, nod
 			}
 			remaining_smartcasts << smartcast
 		}
+		t.clear_node_type_memo()
 		t.smartcast_stack = remaining_smartcasts
 	}
 	transformed := t.transform_index_expr(id, node)
+	t.clear_node_type_memo()
 	t.smartcast_stack = t.restore_smartcasts_since(saved_smartcast_event_id, saved_smartcasts)
 	return t.mark_optional_wrapper_expr(transformed, raw_type)
 }
@@ -3724,7 +3728,7 @@ fn (mut t Transformer) build_sum_eq_helper_fn(clean_sum string, helper string) {
 }
 
 fn (t &Transformer) sum_variant_is_direct_pointer(variant string) bool {
-	clean := t.normalize_type_alias(variant).trim_space()
+	clean := trimmed_transform_text(t.normalize_type_alias(variant))
 	return clean.starts_with('&') || clean in ['voidptr', 'byteptr', 'charptr']
 }
 
@@ -3998,13 +4002,21 @@ fn (mut t Transformer) make_map_elementwise_eq_call_with_seen(lhs flat.NodeId, r
 	for stmt in body {
 		t.a.children << stmt
 	}
+	mut flags := flat.node_flag_skip_ownership_drops
+	// Aggregate equality can call user operators that delete the current map key.
+	// Keep its owned copy across those callbacks and the final existence lookup.
+	clean_value_type := t.membership_container_type(value_type)
+	if (clean_value_type == 'string' || !t.type_needs_semantic_eq(value_type))
+		&& !(t.membership_type_is_pointer(value_type) && t.is_sum_type_name(clean_value_type)) {
+		flags |= flat.node_flag_borrowed_map_key
+	}
 	t.pending_stmts << t.a.add_node(flat.Node{
 		kind:           .for_in_stmt
 		children_start: start
 		children_count: flat.child_count(3 + body.len)
 		pos:            src.pos
 		value:          '3'
-		flags:          flat.node_flag_skip_ownership_drops | flat.node_flag_borrowed_map_key
+		flags:          flags
 	})
 	result := t.make_ident(result_name)
 	t.set_node_typ(int(result), 'bool')
@@ -4342,8 +4354,9 @@ fn (mut t Transformer) snapshot_expr_for_reuse(id flat.NodeId) flat.NodeId {
 	if t.is_ordering_snapshot_temp(id) {
 		return id
 	}
-	pointer_type := t.lvalue_type(id)
-	source := t.a.nodes[int(id)]
+	source_id := t.unwrap_parens(id)
+	pointer_type := t.lvalue_type(source_id)
+	source := t.a.nodes[int(source_id)]
 	borrowed_pointer_value := source.kind == .ident && t.pointer_value_rvalues[source.value]
 		&& !t.mut_param_values[source.value] && pointer_type.starts_with('&&')
 	preserve_pointer_value := pointer_type.starts_with('&')
@@ -4959,7 +4972,7 @@ fn (t &Transformer) is_postfix_fixed_array_type(s string) bool {
 }
 
 fn (t &Transformer) type_name_is_known_generic_app_base(base string) bool {
-	clean := base.trim_space()
+	clean := trimmed_transform_text(base)
 	if clean.len == 0 || isnil(t.tc) {
 		return false
 	}
@@ -5102,4 +5115,14 @@ fn (mut t Transformer) make_fixed_array_len_expr(s string) flat.NodeId {
 // c_name returns the C identifier used for a V symbol or type name.
 fn c_name(name string) string {
 	return naming.c_name(name)
+}
+
+// lookup_c_name is c_name for a spelling that is only compared or used as a
+// lookup key: the text may belong to the checker's memo of c_name.
+@[inline]
+fn (t &Transformer) lookup_c_name(name string) string {
+	if isnil(t.tc) {
+		return naming.c_name(name)
+	}
+	return t.tc.cached_c_name(name)
 }

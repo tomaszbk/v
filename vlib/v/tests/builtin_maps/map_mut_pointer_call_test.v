@@ -258,3 +258,107 @@ fn test_mut_array_pointer_argument_captures_pointee_before_entry_replacement() !
 	assert replacement.value == 99
 	assert items[0] == replacement
 }
+
+// vfmt off
+fn test_mut_map_pointer_argument_keeps_entry_slot_before_if_argument_in_parens() {
+	original := &MapMutPointerItem{ value: 3 }
+	replacement := &MapMutPointerItem{ value: 99 }
+	mut items := {
+		'one': original
+	}
+	for name, mut item in items {
+		rebind_map_pointer_item[&MapMutPointerItem](mut ((item)), replacement, if name == 'one' {
+			1
+		} else {
+			2
+		})
+	}
+	stored := items['one'] or { panic('missing item') }
+	assert stored == replacement
+	assert original.value == 3
+}
+
+fn test_mut_array_pointer_argument_keeps_entry_slot_before_match_argument_in_parens() {
+	original := &MapMutPointerItem{ value: 3 }
+	replacement := &MapMutPointerItem{ value: 99 }
+	mut items := [original]
+	for mut item in items {
+		rebind_map_pointer_item[&MapMutPointerItem](mut ((item)), replacement, match items.len {
+			1 { 1 }
+			else { 2 }
+		})
+	}
+	assert items[0] == replacement
+	assert original.value == 3
+}
+
+fn test_mut_map_pointer_argument_captures_pointee_before_entry_replacement_in_parens() ! {
+	original := &MapMutPointerValue[u32]{ value: 3 }
+	replacement := &MapMutPointerValue[u32]{ value: 99 }
+	mut items := {
+		'one': original
+	}
+	for name, mut item in items {
+		set_map_pointer_item(mut ((item)), if name == 'one' {
+			replace_map_pointer_value(mut items, name, replacement)!
+		} else {
+			u32(0)
+		})
+	}
+	assert original.value == 11
+	assert replacement.value == 99
+	stored := items['one'] or { panic('missing item') }
+	assert stored == replacement
+}
+
+fn test_mut_array_pointer_argument_captures_pointee_before_entry_replacement_in_parens() ! {
+	original := &MapMutPointerValue[u32]{ value: 3 }
+	replacement := &MapMutPointerValue[u32]{ value: 99 }
+	mut items := [original]
+	for mut item in items {
+		set_map_pointer_item(mut ((item)), if items.len == 1 {
+			replace_array_pointer_value(mut items, replacement)!
+		} else {
+			u32(0)
+		})
+	}
+	assert original.value == 11
+	assert replacement.value == 99
+	assert items[0] == replacement
+}
+// vfmt on
+
+fn rebind_map_pointer_callback(mut target &MapMutPointerItem, replacement &MapMutPointerItem, marker int) {
+	target = replacement
+	assert marker == 1
+}
+
+// vfmt off
+fn test_mut_array_pointer_callback_keeps_entry_slot_before_match_argument() {
+	original := &MapMutPointerItem{ value: 3 }
+	replacement := &MapMutPointerItem{ value: 99 }
+	mut items := [original]
+	callback := rebind_map_pointer_callback
+	for mut item in items {
+		callback(mut ((item)), replacement, match items.len {
+			1 { 1 }
+			else { 2 }
+		})
+	}
+	assert items[0] == replacement
+	assert original.value == 3
+}
+
+fn test_mut_map_pointer_callback_keeps_entry_slot_before_if_argument() {
+	original := &MapMutPointerItem{ value: 3 }
+	replacement := &MapMutPointerItem{ value: 99 }
+	mut items := { 'one': original }
+	callback := rebind_map_pointer_callback
+	for name, mut item in items {
+		callback(mut ((item)), replacement, if name == 'one' { 1 } else { 2 })
+	}
+	stored := items['one'] or { panic('missing item') }
+	assert stored == replacement
+	assert original.value == 3
+}
+// vfmt on
