@@ -70,6 +70,12 @@ fn validate_generic_vml_document(root &vml.Node, imported bool) ! {
 
 fn validate_generic_vml_node(node &vml.Node) ! {
 	for property in node.properties {
+		// Event payloads keep V's `.name`; property values are typed by their field.
+		if !property.name.starts_with('on_') {
+			if dotted := vml_dotted_enum(property.expr) {
+				return error('${property.expr.source}:${dotted.line}:${dotted.column}: VML enum values omit the dot: use `${dotted.value[1..]}`')
+			}
+		}
 		if property.name.starts_with('bind.') && property.expr.kind != .path {
 			return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: `${property.name}` must target a writable path')
 		}
@@ -90,6 +96,27 @@ fn validate_generic_vml_node(node &vml.Node) ! {
 	for child in node.children {
 		validate_generic_vml_node(child)!
 	}
+}
+
+// vml_dotted_enum returns the first `.name` value in `expr`: VML enum values are
+// bare names that their property types (`text_align(right)`).
+fn vml_dotted_enum(expr &vml.Expr) ?&vml.Expr {
+	if expr.kind == .path && expr.value.starts_with('.') {
+		return expr
+	}
+	for child in [expr.left, expr.right, expr.third] {
+		if !isnil(child) {
+			if found := vml_dotted_enum(child) {
+				return found
+			}
+		}
+	}
+	for arg in expr.args {
+		if found := vml_dotted_enum(arg) {
+			return found
+		}
+	}
+	return none
 }
 
 fn validate_compiled_vml_node(node &vml.Node) ! {

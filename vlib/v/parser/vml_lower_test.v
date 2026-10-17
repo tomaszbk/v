@@ -73,6 +73,7 @@ fn test_vml_lower_values_tokens_and_styles() {
 	assert generated.contains("vml_node_0_0.prop('style', fn [mut vml_root_component] (mut vml_p ui2.ViewProps) ! { vml_p.style = ui2.compose_styles([ui2.style_background(u32(0x112233)), ui2.style_radius(vml_root_component.radius_token('md') or { panic(err) }), ui2.style_border_color(u32(0xaabbcc))")
 	assert generated.contains("ui2.style_hover([ui2.style_background(vml_root_component.color_token('surface') or { panic(err) })]) or { panic(err) }")
 	assert generated.contains('if vml_check_lower_unreachable() { ui2.vml_guard_positioned[ui2.AbsoluteProps]() }')
+	assert !generated.contains('ui2.vml_guard_positioned[ui2.VmlDocument]')
 	// Element geometry is reactive: it reads the retained node.
 	assert generated.contains("vml_node_0_1.prop('x', fn [vml_node_0_0] (mut vml_p ui2.LabelProps) ! { vml_p.x = (vml_node_0_0.geometry() or { panic(err) }).width })")
 	assert generated.contains("\t\ttooltip: (if true { 'a' } else { 'b' })\n")
@@ -82,6 +83,34 @@ fn test_vml_lower_values_tokens_and_styles() {
 	// V does not check the elements of an array literal argument: a style value
 	// that is no helper call is cast, so a wrong type is reported at the entry.
 	assert generated.contains('vml_p.style = ui2.compose_styles([ui2.StylePatch(app.card), ui2.StylePatch(theme.accent())])')
+}
+
+// The document is the root's parent: authored x/y on the root are guarded
+// against it, so ui2 reports that they need an Absolute parent.
+fn test_vml_lower_guards_root_positions_against_the_document() {
+	dir := vml_lower_fixture('root_position', {
+		'main.vml': 'View(x: 4, width: 10)'
+	})
+	defer { os.rmdir_all(dir) or {} }
+	generated := vml_lower_document(dir, false)
+	assert generated.contains('if vml_check_lower_unreachable() { ui2.vml_guard_positioned[ui2.VmlDocument]() }'), generated
+	assert generated.contains('fn vml_check_lower_unreachable() bool { return false }'), generated
+}
+
+// Enum values are bare names typed by their property; `.right` is an error,
+// except in event payloads, which keep V's syntax.
+fn test_vml_lower_rejects_dotted_enum_values_in_properties() {
+	dir := vml_lower_fixture('dotted', {
+		'main.vml':  'Label(style: [text_align(.right)])'
+		'event.vml': 'Button(on_click: app.align(.right))'
+	})
+	defer { os.rmdir_all(dir) or {} }
+	if _ := parse_generic_vml_file(os.join_path(dir, 'main.vml')) {
+		assert false, 'a dotted enum value was accepted'
+	} else {
+		assert err.msg().ends_with('main.vml:1:26: VML enum values omit the dot: use `right`'), err.msg()
+	}
+	parse_generic_vml_file(os.join_path(dir, 'event.vml')) or { assert false, err.msg() }
 }
 
 // Repeaters lower to `ui2.vml_repeat` with typed model, key and item builder

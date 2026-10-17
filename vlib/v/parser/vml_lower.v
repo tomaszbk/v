@@ -149,12 +149,15 @@ fn (mut c VmlCompiler) lower_element(node &vml.Node, path string, parent VmlLowe
 		c.location = node_location
 		c.uses_unreachable = true
 		c.writeln('\tif ${c.guard_prefix}_unreachable() { ui2.vml_guard_child[${parent.props}, ${props}]() }')
-		for position in node.properties {
-			if position.name !in ['x', 'y'] { continue }
-			c.location = vml.Location{ path: position.expr.source, line: position.line, column: position.column }
-			c.writeln('\tif ${c.guard_prefix}_unreachable() { ui2.vml_guard_positioned[${parent.props}]() }')
-			break
-		}
+	}
+	// The document is the parent of the root: it positions no child.
+	positioner := if parent.handle.len > 0 { parent.props } else { 'ui2.VmlDocument' }
+	for position in node.properties {
+		if position.name !in ['x', 'y'] { continue }
+		c.location = vml.Location{ path: position.expr.source, line: position.line, column: position.column }
+		c.uses_unreachable = true
+		c.writeln('\tif ${c.guard_prefix}_unreachable() { ui2.vml_guard_positioned[${positioner}]() }')
+		break
 	}
 	c.location = node_location
 	declare := if parent.handle.len > 0 {
