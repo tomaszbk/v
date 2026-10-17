@@ -142,7 +142,15 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 	p.cur_fn = ''
 	saved_vml_types := p.inside_vml_types
 	p.inside_vml_types = true
+	// The guard declarations are parsed inside the caller's body, before the
+	// caller registers its own `@[export]` and `@[noreturn]` attributes.
+	saved_export := p.pending_export
+	saved_noreturn := p.pending_noreturn
+	p.pending_export = ''
+	p.pending_noreturn = false
 	stmts := p.parse_stmts_from_source('_ = ${generated}', path, template.pos, source_lines)
+	p.pending_export = saved_export
+	p.pending_noreturn = saved_noreturn
 	p.inside_vml_types = saved_vml_types
 	p.cur_fn = saved_fn
 	mut result := flat.empty_node

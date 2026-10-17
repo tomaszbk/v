@@ -120,6 +120,24 @@ fn test_vml_generated_item_paths_keep_import_source_location() {
 	assert item_bindings == 1
 }
 
+// The guard functions that follow the lowered expression are parsed inside the
+// calling function, which registers its attributes only after its body.
+fn test_vml_guards_leave_the_caller_its_export_attribute() {
+	dir := os.join_path(os.vtmp_dir(), 'vml_guard_export_${os.getpid()}')
+	os.mkdir_all(dir)!
+	defer { os.rmdir_all(dir) or {} }
+	os.write_file(os.join_path(dir, 'view.vml'), 'Column { Label(text: "export") }')!
+	path := os.join_path(dir, 'main.v')
+	os.write_file(path, "module main\nimport ui2\n@[export: 'view_build']\npub fn build() ui2.Element { return \$vml('view.vml') }\n")!
+	mut parser := Parser.new(pref.new_preferences())
+	ast := parser.parse_file(path)
+	assert parser.diagnostics.len == 0, parser.diagnostics.str()
+	assert ast.nodes.any(it.kind == .fn_decl && it.value.ends_with('_unreachable'))
+	assert ast.export_fn_names == {
+		'build': 'view_build'
+	}
+}
+
 fn test_vml_inferred_types_relocate_every_nested_expression_link() {
 	assert shift_vml_inferred_type('![]&ui2.Signal[typeof(__vml_expr_12)]', 100) == '![]&ui2.Signal[typeof(__vml_expr_112)]'
 	assert shift_vml_inferred_type('fn(typeof(__vml_expr_1)) typeof(__vml_expr_22)', 10) == 'fn(typeof(__vml_expr_11)) typeof(__vml_expr_32)'
