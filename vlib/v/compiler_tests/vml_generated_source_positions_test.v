@@ -36,7 +36,7 @@ pub fn bounds() Element {
 	assert result.exit_code != 0
 	assert result.output.contains('screen.vml:'), result.output
 	assert result.output.contains('called from'), result.output
-	assert result.output.contains('has no field named `width`'), result.output
+	assert result.output.contains('unknown function: ui2.vml_document'), result.output
 	// The mock ui2 lacks the retained runtime, so every generated statement is
 	// rejected. Each rejection must name the authored VML line, never main.v.
 	mut errors := 0

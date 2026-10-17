@@ -23,8 +23,8 @@ fn vml_lower_project(name string) string {
 }
 
 fn vml_lower_compile(root string, name string, mode []string) os.Result {
-	mut args := [vml_lower_vexe, '-d', 'vml_generic', '-gc', 'boehm', '-no-retry-compilation',
-		'-nocache', '-path', root + '|' + vml_lower_vlib_dir]
+	mut args := [vml_lower_vexe, '-gc', 'boehm', '-no-retry-compilation', '-nocache', '-path',
+		root + '|' + vml_lower_vlib_dir]
 	args << mode
 	args << os.join_path(root, name + '.v')
 	return os.exec(args)
@@ -163,7 +163,7 @@ fn test_vml_lower_reports_type_errors_at_vml_locations() {
 		'Slider(maxx: 10)':                                         ['main.vml:2:12:', 'maxx']
 		'Slider(max: "ten")':                                       ['main.vml:2:12:', 'max']
 		'Column(align_items: strech)':                              ['main.vml:2:12:', 'strech']
-		'Sldier(max: 1)':                                           ['main.vml:2:5:', 'SldierProps']
+		'Sldier(max: 1)':                                           ['main.vml:2:5:', 'Sldier`']
 		'Label(style: [font_sise(3)])':                             ['main.vml:2:11:', 'font_sise']
 		'Slider(bind.value: app.items)':                            ['main.vml:2:12:', '']
 		'Slider(bind.value: app.ready)':                            ['main.vml:2:12:', 'mutable']
@@ -181,6 +181,74 @@ fn test_vml_lower_reports_type_errors_at_vml_locations() {
 		assert result.output.contains(expected[1]), body + '\n' + result.output
 		assert !result.output.contains('<veb-template>'), body + '\n' + result.output
 	}
+}
+
+// Errors inside imported components point at the component's own file.
+fn test_vml_lower_reports_imported_component_errors_at_their_location() {
+	root := vml_lower_project('imports')
+	defer {
+		os.rmdir_all(root) or {}
+	}
+	os.write_file(os.join_path(root, 'main.v'), "module main
+import ui2
+struct Item {
+	secret string
+pub:
+	id   int
+	name string
+}
+struct App {
+	private_value int
+pub:
+	items    []Item
+	readonly int
+pub mut:
+	count int
+	text  string
+}
+pub fn (mut app App) unsupported(value bool) { _ = value }
+pub fn (mut app App) select(value int) { app.count = value }
+fn build(mut app App) ui2.Element { return \$vml('main.vml') }
+fn main() { mut app := App{items: [Item{id: 3}]}; _ = build(mut app) }
+")!
+	os.write_file(os.join_path(root, 'main.vml'), 'import Content\nColumn { Content {} }')!
+	import_path := os.join_path(root, 'content.vml')
+	// Each body sits on line 3 of the imported component.
+	for body in [
+		'Repeater(model: app.items, key: item.id) { Label(text: item.missing) }',
+		'Repeater(model: app.items, key: item.id) { Label(text: item.secret) }',
+		'Label(text: app.private_value)',
+		'Label(text: "\${app.private_value}")',
+		'Label(text: true ? "ok" : app.missing)',
+		'Label(text: app.items)',
+		'Repeater(model: app.count, key: item) { Label(text: "bad") }',
+		'Repeater(model: app.items, key: item.missing) { Label(text: "bad") }',
+		'Button(on_click: app.readonly = 1)',
+		'Button(on_click: app.count = "wrong")',
+		'Slider(bind.value: app.items)',
+		'Button(on_text: app.select(1))',
+		'TextField(text: "removed")',
+		'Button(on_click: app.unsupported(1))',
+		'Button(on_click: app.select("wrong"))',
+		'Button(on_click: app.select(app.count ? 1 : 2))',
+		'Button(on_click: app.select(app.count == "7" ? 1 : 2))',
+		'Button(on_click: app.select(false || app.count == "7" ? 1 : 2))',
+		'Button(on_click: app.select(app.text + "bad"))',
+		'Button { Label(text: "child") }',
+		'Repeater(model: app.items, key: item.id) { Button(on_click: app.select(item.missing)) }',
+	] {
+		os.write_file(import_path, 'component Content() {\n    Column {\n        ${body}\n    }\n}\n')!
+		result := vml_lower_compile(root, 'main', ['-check'])
+		assert result.exit_code != 0, body + '\n' + result.output
+		assert result.output.contains('content.vml:3:'), body + '\n' + result.output
+		assert !result.output.contains('<veb-template>:'), body + '\n' + result.output
+	}
+	os.write_file(import_path, 'component Content() {\n    Column {\n        Repeater(model: app.items, key: item.id) { Button(on_click: app.count = item.id) }\n    }\n}\n')!
+	bin := os.join_path(root, 'valid')
+	valid := vml_lower_compile(root, 'main', ['-o', bin])
+	assert valid.exit_code == 0, valid.output
+	run := os.exec([bin])
+	assert run.exit_code == 0, run.output
 }
 
 /* MOCK_UI2

@@ -24,12 +24,12 @@ Screen {
         }
     }
 }')!
-	root := parse_compiled_vml_file(document)!
+	root := parse_vml_file(document)!
 	mut compiler := VmlCompiler{
 		uses_app:     true
 		guard_prefix: 'vml_check_hygiene'
 	}
-	generated := compiler.compile(root)
+	generated := compiler.lower(root)
 	assert !generated.contains('if false'), generated
 	assert !generated.contains('if true'), generated
 	assert generated.contains('if vml_check_hygiene_unreachable() { vml_check_hygiene_')
@@ -37,12 +37,12 @@ Screen {
 	assert generated.contains('{\nvml_payload_0 := 1')
 	// The list-owned item signal is aliased mutably without a mutability notice.
 	assert generated.contains(':= unsafe { vml_item_signal_')
+	// Every declared node is used even when nothing reads it.
 	lines := generated.split_into_lines()
 	for i, line in lines {
 		trimmed := line.trim_space()
-		if trimmed.starts_with('vml_element_') && trimmed.contains(' := vml_element_')
-			&& trimmed.ends_with('_root') {
-			name := trimmed.all_before(' :=')
+		if trimmed.starts_with('mut vml_node_') && trimmed.ends_with(' or { panic(err) }') {
+			name := trimmed.all_after('mut ').all_before(' :=')
 			assert i + 1 < lines.len && lines[i + 1].trim_space() == '_ = ${name}', line
 		}
 	}

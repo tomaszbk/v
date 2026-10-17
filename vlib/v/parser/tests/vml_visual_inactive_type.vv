@@ -1,3 +1,0 @@
-fn main() {
-	_ = $vml('vml_visual/inactive_type.vml')
-}

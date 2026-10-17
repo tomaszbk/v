@@ -1,8 +1,12 @@
 # Compiled VML components and structure
 
 `$vml('screen.vml')` parses a document at compile time and lowers it to ui2's
-public V API. Visual documents return `ui2.Element`; standalone `Menu` or
-`MenuBar` documents return `[]ui2.Menu`. Import ui2 in the calling V file.
+generic node API. The compiler knows the VML language but no widget: a tag `X`
+names the props type `ui2.XProps` (a dotted tag `pkg.X` names `pkg.XProps` of a
+module the calling file imports), and its properties are fields of that type.
+V checks tags, property names and value types, and reports errors at the VML
+location. Every document returns `ui2.Element`; `ui2.menus(element)!` returns
+the menus of a `Menu` or `MenuBar` document. Import ui2 in the calling V file.
 `$vml('screen.vml', frame)` accepts an explicit `ui2.Rect`; the default follows
 the window's logical viewport.
 
@@ -90,10 +94,6 @@ argument count and types. The binding commits the event payload before an
 explicit action runs; actions batch signal writes. Event ids do not choose
 handlers, and unrelated event kinds do not invoke a binding.
 
-A `Switch` change invokes `on_active` first, then `on_change`, when both are
-provided. Each receives the original event once; `bind.active` writes the
-payload once before either handler runs.
-
 `mount { ... }`, `unmount { ... }` and `cleanup { ... }` register instance hooks.
 Mount runs once when attached; removal disposes owned effects and descendants.
 Unmount and cleanup can read the instance's existing state and memos. Callbacks
@@ -124,9 +124,9 @@ from binding and snapshot data. `TextInput` and `TextArea` are distinct types.
 
 An invocation such as `Card(id: "card", key: "item", ref: card_ref)` aliases the
 component's real root. `card.width` and the other geometry members read that
-root's reactive frame; geometry used as a layout input requires `Absolute`.
-The invocation key applies to the root, and a typed ref must match its control
-kind. The root keeps its private authored id and namespace; neither its other
+root's reactive frame. The invocation key applies to the root, and a typed
+ref must match its control kind. Properties an invocation does not declare as
+inputs configure the root. The root keeps its private authored id and namespace; neither its other
 ids nor its private members become visible to the caller. Anonymous roots keep
 an empty public id. A component whose root uses `x` or `y` requires an
 `Absolute` parent at its invocation; imported definitions retain this requirement.
@@ -166,16 +166,17 @@ MenuBar {
 }
 ```
 
-Pass the result to `ui2.set_menu_bar`. Nested items use typed `ui2.Menu` and
-`ui2.MenuItem` declarations and validate before installation. Named arguments
+Pass `ui2.menus($vml('menus.vml'))!` to `ui2.set_menu_bar`. The menus validate
+before installation. Named arguments
 are the only property syntax; ids and ordinary strings require quotes. VML enum
 arguments use bare names, for example `align_items: start` and `text_align(right)`.
 Conditions require bool;
 other than display text, properties have no implicit string/number conversion.
 
 Diagnostics report the originating VML file, line and column and retain the
-calling `$vml` location. Native profiles reject unsupported custom presentation
-properties instead of silently changing their meaning. Parser tests do not
-require an installed ui2 module; runtime acceptance uses a matching compiler
+calling `$vml` location. Rules of a widget that V cannot check, such as value
+ranges or presentation a native renderer lacks, are ui2's: its props types
+report them when the document is built. Parser tests do not require an
+installed ui2 module; runtime acceptance uses a matching compiler
 and ui2 revision, for example `-path '/path/to/modules|@vlib|@vmodules'` with
 `/path/to/modules/ui2` pointing to the checkout.

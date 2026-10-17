@@ -8974,13 +8974,13 @@ Bindings apply the event payload before the action runs. V checks paths and sign
 inactive branches and empty list schemas. Diagnostics retain the originating VML file and line.
 
 Files can import named VML modules relative to their own directory. Each invocation namespaces
-internal ids, and keyed repeaters preserve descendant identities across reorder. `Menu` and
-`MenuBar` roots return typed `[]ui2.Menu` declarations. Text editing uses `TextInput`, with
-single-line content and `TextArea` for multiline editing; retired widget names and
-`on_text` are errors.
+internal ids, and keyed repeaters preserve descendant identities across reorder. A tag `X`
+is the props type `ui2.XProps` and its properties are fields of it, so V checks widget names,
+properties and values. Every document returns `ui2.Element`; `ui2.menus(element)!` returns
+the menus of a `Menu` or `MenuBar` document.
 See the [compiled VML structure guide](vml_structure.md) and `examples/vml_structure` for import,
-list, callback, assignment and menu fixtures compiled against the public ui2 API, and the
-[visual guide](vml-visual.md) for styles and tokens.
+list, callback, assignment and menu fixtures compiled against the public ui2 API. ui2 documents
+its widgets, styles and tokens.
 
 #### `$env`
 

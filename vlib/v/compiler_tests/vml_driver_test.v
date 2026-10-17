@@ -1,7 +1,7 @@
 import os
 
-fn test_vml_visual_direct_driver_reports_inactive_and_native_declarations() {
-	root := os.join_path(os.vtmp_dir(), 'vml_visual_driver_${os.getpid()}')
+fn test_vml_direct_driver_reports_document_errors_at_their_location() {
+	root := os.join_path(os.vtmp_dir(), 'vml_driver_${os.getpid()}')
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }
 	v3_dir := os.dir(os.dir(@FILE))
@@ -17,12 +17,10 @@ fn test_vml_visual_direct_driver_reports_inactive_and_native_declarations() {
 	// Each entry is the view source, the extra driver flags, the authored
 	// view.vml location and the expected diagnostic.
 	for entry in [
-		['Label(\n    tracking: 2,\n)', '', '2:5', 'unsupported property `tracking`'],
-		['Label(\n    style: [weight(true ? 400 : "heavy")],\n)', '', '2:13',
-			'`weight` requires a number'],
-		// Linux selects the custom renderer, so pin a native desktop target.
-		['Label(\n    style: [weight(600)],\n)', '-os macos', '2:13',
-			'other weights require the custom renderer'],
+		['Column {\n    Repeater(model: app.rows) { Label() }\n}', '', '2:5',
+			'Repeater requires a stable `key`'],
+		['Label(\n    bind.text: "fixed",\n)', '', '2:16', '`bind.text` must target a writable path'],
+		['import Missing\nLabel()', '', '1:8', 'could not find VML import `Missing`'],
 	] {
 		os.write_file(view, entry[0])!
 		// This bypasses the launcher and exercises v.driver -> flat VML parsing directly.

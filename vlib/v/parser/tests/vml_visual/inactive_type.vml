@@ -1,1 +1,0 @@
-Label(style: [weight(true ? 400 : "heavy")])

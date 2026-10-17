@@ -1,3 +1,0 @@
-component AnonymousCard(width f64 = 100) {
-    View(width: width, height: width + 1)
-}

@@ -2,29 +2,10 @@ module parser
 
 import vml
 
-fn (c &VmlCompiler) control_id(node &vml.Node, suffix string, scope VmlScope) string {
-	if node.id.len == 0 && (vml_has_overlay(node) || node.properties.any(it.name.starts_with('bind.')) || node.properties.any(it.name == 'ref')) {
-		return c.node_identity(node, suffix, scope)
-	}
-	return vml_quote(node.id)
-}
-
-fn (c &VmlCompiler) node_identity(node &vml.Node, suffix string, scope VmlScope) string {
-	mut id := node.id
-	if id.len == 0 {
-		id = '__vml_control_${vml_builder_path(suffix).replace('_base', '')}'
-	}
-	namespace := scope.special[if node.import_id { '__import_parent' } else { '__import' }] or { '' }
-	if namespace.len > 0 {
-		id = '__vml_import_${namespace}_${id.bytes().hex()}'
-	}
-	if repeated := scope.special['__repeat_identity'] {
-		return vml_quote(id + '__vml_${suffix}_') + ' + ${repeated}'
-	}
-	return vml_quote(id)
-}
-
+// write_mutable_check rejects a write to an `app` field that is not public
+// and mutable.
 fn (mut c VmlCompiler) write_mutable_check(target string) {
+	if !c.once('mutable:' + target) { return }
 	field_name := target.all_after('app.')
 	c.writeln('\t$for field in app.fields {')
 	c.writeln('\t\t$if field.name == ' + vml_quote(field_name) + ' {')
@@ -33,32 +14,9 @@ fn (mut c VmlCompiler) write_mutable_check(target string) {
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) write_action_type_checks(node &vml.Node, suffix string, scope VmlScope) {
-	_ = suffix
-	for property in node.properties {
-		if property.name.starts_with('bind.') {
-			value := 'vml_binding_target_' + suffix + '_' + vml_var(property.name)
-			c.writeln('${value} := ' + c.expr(property.expr, scope, .raw))
-			c.writeln('_ = ${value}')
-			if property.name == 'bind.text' {
-				c.writeln("$if ${value} !is string { $compile_error('VML text binding must target a string') }")
-			} else if property.name in ['bind.checked', 'bind.active', 'bind.pressed'] {
-				c.writeln("$if ${value} !is bool { $compile_error('VML checked binding must target bool') }")
-			} else if property.name == 'bind.value' {
-				c.writeln("$if ${value} !is $int && ${value} !is $float { $compile_error('VML value binding must target a number') }")
-			}
-			if property.expr.value.starts_with('app.') {
-				c.write_mutable_check(property.expr.value)
-			} else if property.expr.value !in scope.writable {
-				c.writeln('$compile_error(' + vml_quote('binding source `${property.expr.value}` is read-only or unknown') + ')')
-			}
-		} else {
-			c.write_model_path_checks(property.expr, scope)
-		}
-		if vml_is_event(property.name) { c.write_app_action_checks(property.expr) }
-	}
-}
-
+// vml_callback_captures lists the closure captures an expression needs: the
+// app, the specials it reads (signals mutably, with their setters) and the
+// nodes whose geometry it reads.
 fn vml_callback_captures(expr &vml.Expr, scope VmlScope) []string {
 	mut captures := []string{}
 	if vml.expr_uses_path(expr, 'app') { captures << 'mut app' }
@@ -78,112 +36,18 @@ fn vml_callback_captures(expr &vml.Expr, scope VmlScope) []string {
 			if captured !in captures { captures << captured }
 		}
 	}
-	for id, named in scope.ids {
-		for field, variable in named.props {
-			if vml.expr_uses_path(expr, '${id}.${field}') && variable !in captures {
-				captures << variable
-			}
-		}
+	for id, node in scope.ids {
 		for field in ['x', 'y', 'width', 'height'] {
-			if vml.expr_uses_path(expr, '${id}.${field}') {
-				captured := if named.geometry.len > 0 {
-					named.geometry
-				} else if named.frame_node.len > 0 {
-					named.frame_node
-				} else if named.frame_signal.len > 0 {
-					'mut ' + named.frame_signal
-				} else {
-					named.frame
-				}
-				if captured !in captures { captures << captured }
+			if vml.expr_uses_path(expr, '${id}.${field}') && node !in captures {
+				captures << node
 			}
 		}
 	}
 	return captures
 }
 
-fn (c &VmlCompiler) event_callback(node &vml.Node, name string, scope VmlScope) string {
-	if c.effect_mode {
-		if value := c.event_references[(scope.special['__node_suffix'] or { '' }) + ':' + name] {
-			return value
-		}
-	}
-	action := vml.find_property(node, name)
-	binding := vml_binding_for_event(node, name)
-	if action == none && binding == none { return 'unsafe { nil }' }
-	mut body := '_ = event\n'
-	mut captures := []string{}
-	if property := binding {
-		captures << vml_callback_captures(property.expr, scope)
-		payload := match property.name {
-			'bind.text' { 'event.text' }
-			'bind.value' {
-				'ui2.vml_binding_number(' + c.expr(property.expr, scope, .raw) + ', event.value)'
-			}
-			else { 'event.checked' }
-		}
-		body += c.compile_write(property.expr.value, payload, scope) + '\n'
-	}
-	if property := action {
-		captures << vml_callback_captures(property.expr, scope).filter(it !in captures)
-		if property.expr.kind == .path {
-			callback := c.expr(property.expr, scope, .raw)
-			body += 'ui2.vml_callback(${callback}' + if scope.component.len > 0 {
-				', refresh: false'
-			} else {
-				''
-			} + ')(event)\n'
-			if !callback.contains('.') && callback !in captures && (callback in c.callback_captures || callback.starts_with('vml_')) {
-				captures << callback
-			}
-		} else {
-			body += c.compile_action(property.expr, scope) + '\n'
-		}
-	}
-	captures = vml_used_captures(body, captures)
-	if scope.component.len > 0 {
-		return '${scope.component}.callback(fn [${captures.join(', ')}] (event ui2.ElementEvent) ! { ${body} })'
-	}
-	body += 'ui2.request_refresh()'
-	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { ${body} }'
-}
-
-fn (mut c VmlCompiler) write_element_callback(node &vml.Node, suffix string, scope VmlScope) string {
-	mut callbacks := map[string]string{}
-	for name in vml_event_names {
-		if vml.find_property(node, name) == none && vml_binding_for_event(node, name) == none {
-			continue
-		}
-		if property := vml.find_property(node, name) {
-			c.location = vml.Location{ path: property.expr.source, line: property.expr.line, column: property.expr.column }
-		}
-		variable := 'vml_callback_${suffix}_${name}'
-		c.writeln('\t${variable} := ${c.event_callback(node, name, scope)}')
-		callbacks[name] = variable
-		c.event_references[suffix + ':' + name] = variable
-	}
-	if callbacks.len == 0 { return 'unsafe { nil }' }
-	mut captures := []string{}
-	for _, variable in callbacks { captures << variable }
-	mut body := ''
-	if callback := callbacks['on_click'] { body += '.click { ${callback}(event) }\n' }
-	mut change := ''
-	if node.tag == 'Switch' {
-		if callback := callbacks['on_active'] { change += '${callback}(event)\n' }
-	}
-	if callback := callbacks['on_change'] { change += '${callback}(event)\n' }
-	if change.len > 0 { body += '.change { ${change} }\n' }
-	if callback := callbacks['on_submit'] { body += '.submit { ${callback}(event) }\n' }
-	if callback := callbacks['on_scroll'] { body += '.scroll { ${callback}(event) }\n' }
-	if callback := callbacks['on_open'] { body += '.open { ${callback}(event) }\n' }
-	if callback := callbacks['on_dismiss'] { body += '.dismiss { ${callback}(event) }\n' }
-	for kind in ['pointer_down', 'pointer_drag', 'pointer_up', 'long_press', 'swipe_left', 'link'] {
-		callback := callbacks['on_${kind}'] or { '' }
-		if callback.len > 0 { body += '.${kind} { ${callback}(event) }\n' }
-	}
-	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { match event.kind { ${body} else {} } }'
-}
-
+// write_model_path_checks guards that `app.*` and `item.*` paths read public
+// fields. The guards never run; V checks them for the actual model types.
 fn (mut c VmlCompiler) write_model_path_checks(expr &vml.Expr, scope VmlScope) {
 	if expr.kind == .path {
 		parts := expr.value.split('.')
@@ -205,21 +69,76 @@ fn (mut c VmlCompiler) write_model_path_checks(expr &vml.Expr, scope VmlScope) {
 	}
 }
 
+// write_app_action_checks guards that actions write public mutable `app`
+// fields and call public `app` methods with their declared arity.
 fn (mut c VmlCompiler) write_app_action_checks(expr &vml.Expr) {
 	if expr.kind == .assignment && expr.left.value.starts_with('app.') {
 		c.write_mutable_check(expr.left.value)
 	}
 	if expr.kind in [.call, .path] && expr.value.starts_with('app.') && expr.value.count('.') == 1 {
 		method := expr.value.all_after('app.')
-		c.writeln('\t$for method in app.methods {')
-		c.writeln('\t$if method.name == ' + vml_quote(method) + ' {')
-		c.writeln('\t$if !method.is_pub { $compile_error(' + vml_quote('VML action method `${method}` must be public') + ') }')
-		if expr.kind == .call {
-			c.writeln('\t$if method.args.len != ${expr.args.len} { $compile_error(' + vml_quote('VML action `${method}` argument count does not match its declared signature') + ') }')
+		arity := if expr.kind == .call { expr.args.len.str() } else { '' }
+		if c.once('method:${method}:${arity}') {
+			c.writeln('\t$for method in app.methods {')
+			c.writeln('\t$if method.name == ' + vml_quote(method) + ' {')
+			c.writeln('\t$if !method.is_pub { $compile_error(' + vml_quote('VML action method `${method}` must be public') + ') }')
+			if expr.kind == .call {
+				c.writeln('\t$if method.args.len != ${expr.args.len} { $compile_error(' + vml_quote('VML action `${method}` argument count does not match its declared signature') + ') }')
+			}
+			c.writeln('\t}\n}')
 		}
-		c.writeln('\t}\n}')
 	}
 	if !isnil(expr.left) { c.write_app_action_checks(expr.left) }
 	if !isnil(expr.right) { c.write_app_action_checks(expr.right) }
 	for argument in expr.args { c.write_app_action_checks(argument) }
+}
+
+// compile_write assigns `value` to a writable target: a component state or
+// bindable input setter, or a top-level `app` field.
+fn (c &VmlCompiler) compile_write(target string, value string, scope VmlScope) string {
+	if setter := scope.writable[target] { return '${setter}(${value}) or { panic(err) }' }
+	if target.starts_with('app.') && target.count('.') == 1 { return '${target} = ${value}' }
+	return '$compile_error(' + vml_quote('VML target `${target}` is read-only or unknown; use state or an explicit bind connection') + ')'
+}
+
+// compile_action lowers an action: an assignment, a block, a call of a
+// component event (whose payload is checked against its declared types) or
+// any other expression.
+fn (c &VmlCompiler) compile_action(expr &vml.Expr, scope VmlScope) string {
+	if expr.kind == .block { return expr.args.map(c.compile_action(it, scope)).join('\n') }
+	if expr.kind == .assignment {
+		return c.compile_write(expr.left.value, c.lower_expr(expr.right, scope), scope)
+	}
+	if expr.kind == .call {
+		if parameters := scope.event_parameters[expr.value] {
+			mut statements := []string{}
+			mut payload_values := []string{}
+			for index, parameter in parameters {
+				if index >= expr.args.len { break }
+				argument := 'vml_payload_' + index.str()
+				statements << argument + ' := ' + c.event_payload_value(expr.args[index], parameter.typ, scope)
+				statements << '$if ' + argument + ' !is ' + parameter.typ + ' { $compile_error(' + vml_quote('event `' + expr.value + '` payload `' + parameter.name + '` requires exact type ' + parameter.typ) + ') }'
+				payload_values << argument
+			}
+			statements << (scope.special[expr.value] or { expr.value }) + '(' + payload_values.join(', ') + ')'
+			// A block scopes the payload temporaries without a constant condition.
+			return '{\n' + statements.join('\n') + '\n}'
+		}
+	}
+	return c.lower_expr(expr, scope)
+}
+
+// Payload temporaries validate exact types without losing V's contextual enum
+// literals or empty arrays. Expressions still execute once, inside the action.
+fn (c &VmlCompiler) event_payload_value(expr &vml.Expr, expected string, scope VmlScope) string {
+	if expr.kind == .path && expr.value.starts_with('.') { return expected + expr.value }
+	if expr.kind == .conditional {
+		return '(if ' + c.lower_expr(expr.left, scope) + ' { ' + c.event_payload_value(expr.right, expected, scope) + ' } else { ' + c.event_payload_value(expr.third, expected, scope) + ' })'
+	}
+	if expr.kind == .array && expected.starts_with('[]') {
+		return vml_array_literal(expected[2..], expr.args.map(c.event_payload_value(it, expected[2..], scope)))
+	}
+	value := c.lower_expr(expr, scope)
+	// A bare enum value takes the declared payload type.
+	return if value.starts_with('.') { expected + value } else { value }
 }

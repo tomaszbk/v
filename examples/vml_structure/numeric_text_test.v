@@ -88,11 +88,11 @@ fn main() {
 
 fn test_vml_menu_text_formats_numbers() {
 	mut app := NumericTextApp{}
-	menus := $vml('numeric_menus.vml')
+	menus := ui2.menus($vml('numeric_menus.vml')) or { panic(err) }
 	assert menus[0].title == '7'
 	assert menus[0].items[0].title == '12.5'
 	app.ready = false
-	updated := $vml('numeric_menus.vml')
+	updated := ui2.menus($vml('numeric_menus.vml')) or { panic(err) }
 	assert updated[0].title == 'waiting'
 }
 

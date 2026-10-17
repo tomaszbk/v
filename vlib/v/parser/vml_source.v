@@ -52,7 +52,16 @@ fn (mut c VmlCompiler) write_list_guard(value string, suffix string, array bool)
 	c.writeln('\tif ${c.guard_prefix}_unreachable() { ${name}(${value}) }')
 }
 
+// once reports whether the compile-time check `key` is new. The checks only
+// instantiate generic guards or comptime loops, so one per document suffices.
+fn (mut c VmlCompiler) once(key string) bool {
+	if key in c.emitted_checks { return false }
+	c.emitted_checks[key] = true
+	return true
+}
+
 fn (mut c VmlCompiler) write_field_guard(value string, field_name string, model_path string) {
+	if !c.once('field:${value}:${field_name}') { return }
 	name := '${c.guard_prefix}_field_${c.guards.len}'
 	c.guards << VmlGuard{ name: name, field_name: field_name, model_path: model_path, location: c.location }
 	c.writeln('\tif ${c.guard_prefix}_unreachable() { ${name}(${value}) }')
@@ -122,4 +131,21 @@ fn (mut p Parser) record_vml_diagnostic(path string, source string, message stri
 		column:  column
 		message: text
 	})
+}
+
+// Parser workers merge local ASTs with shifted node ids. Inferred closure
+// annotations hold expression links and relocate with the ordinary child links.
+fn shift_vml_inferred_type(typ string, shift int) string {
+	mut result := typ
+	mut offset := 0
+	marker := 'typeof(__vml_expr_'
+	for offset < result.len {
+		start := result[offset..].index(marker) or { break } + offset
+		end := result[start..].index(')') or { break } + start
+		value := result[start + marker.len..end].int()
+		replacement := marker + (value + shift).str() + ')'
+		result = result[..start] + replacement + result[end + 1..]
+		offset = start + replacement.len
+	}
+	return result
 }

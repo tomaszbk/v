@@ -3,7 +3,7 @@ module parser
 import strings
 import vml
 
-// Generic VML lowering (`-d vml_generic`). The compiler knows the VML language
+// VML lowering. The compiler knows the VML language
 // (elements, properties, components, repeaters, styles, tokens) but no widget:
 // tag `Slider` lowers to the props type `ui2.SliderProps`, every property to a
 // field of it, and ui2's generic node runtime (`vml_document`, `vml_root`,
@@ -51,7 +51,7 @@ fn (mut c VmlCompiler) lower(root &vml.Node) string {
 	c.writeln('\tmut vml_doc := ui2.vml_document(vml_template_frame, follow_viewport: ${!c.explicit_frame}) or { panic(err) }')
 	c.writeln('\tmut vml_root_component := vml_doc.owner')
 	mut scope := VmlScope{
-		ids:       map[string]VmlNamedValue{}
+		ids:       map[string]string{}
 		special:   map[string]string{}
 		component: 'vml_root_component'
 	}
@@ -100,7 +100,7 @@ fn (mut c VmlCompiler) lower_element(node &vml.Node, path string, parent VmlLowe
 	node_location := vml.Location{ path: node.source, line: node.line, column: node.column }
 	mut scope := vml_clone_scope(incoming)
 	if node.id.len > 0 {
-		scope.ids[node.id] = VmlNamedValue{ geometry: variable }
+		scope.ids[node.id] = variable
 	}
 	mut properties := []VmlForwarded{cap: node.properties.len + forwarded.len}
 	for property in node.properties {
@@ -197,7 +197,7 @@ fn (mut c VmlCompiler) lower_element(node &vml.Node, path string, parent VmlLowe
 	}
 	if reference := vml.find_property(node, 'ref') {
 		c.location = vml.Location{ path: reference.expr.source, line: reference.line, column: reference.column }
-		c.writeln(c.expr(reference.expr, scope, .raw) + '.bind_widget(mut ${variable}) or { panic(err) }')
+		c.writeln(c.lower_expr(reference.expr, scope) + '.bind_widget(mut ${variable}) or { panic(err) }')
 	}
 	child_parent := VmlLowerParent{
 		handle: variable
@@ -212,7 +212,6 @@ fn (mut c VmlCompiler) lower_element(node &vml.Node, path string, parent VmlLowe
 		for id, named in child_scope.ids { scope.ids[id] = named }
 	}
 	c.lowered_node = variable
-	c.lowered_props = props
 	return vml_node_output_scope(node, incoming, scope)
 }
 
@@ -255,7 +254,7 @@ fn (mut c VmlCompiler) lower_binding(variable string, props string, property vml
 	current := if signal := scope.special['__signal_' + target.value] {
 		'${signal}.peek() or { panic(err) }'
 	} else {
-		c.expr(target, scope, .raw)
+		c.lower_expr(target, scope)
 	}
 	write := c.compile_write(target.value, 'ui2.vml_assign(${current}, vml_p.${field})', scope)
 	mut captures := vml_callback_captures(target, scope)
@@ -269,7 +268,8 @@ fn (c &VmlCompiler) lower_event(property vml.Property, scope VmlScope) string {
 	mut captures := vml_callback_captures(property.expr, scope)
 	mut body := '_ = event\n'
 	if property.expr.kind == .path {
-		callback := c.expr(property.expr, scope, .raw)
+		// A callback reference names a function value, never an enum value.
+		callback, _ := c.resolve_path(property.expr.value, scope)
 		body += 'ui2.vml_callback(${callback}, refresh: false)(event)\n'
 		if !callback.contains('.') && callback !in captures
 			&& (callback in c.callback_captures || callback.starts_with('vml_')) {
@@ -428,9 +428,7 @@ fn (mut c VmlCompiler) lower_repeater(node &vml.Node, path string, parent VmlLow
 	model_body := '${dependency}return ${source}'
 	model_captures = vml_used_captures(model_body, model_captures)
 	mut build_captures := c.scope_captures(incoming)
-	build_captures << 'mut ' + parent.handle
 	build_captures << collection
-	build_captures = build_captures.filter(it.starts_with('mut ') || ('mut ' + it) !in build_captures)
 	c.location = vml.Location{ path: node.source, line: node.line, column: node.column }
 	prefix := '\tui2.vml_repeat(mut ${parent.handle}, ' + vml_quote(suffix) + ', fn [${model_captures.join(', ')}] () ![]${item_type} { ${model_body} }, fn [${key_captures.join(', ')}] (${item} ${item_type}) string { ${key_body} }, fn '
 	capture_start := c.out.len + prefix.len
@@ -491,13 +489,13 @@ fn (mut c VmlCompiler) lower_component(node &vml.Node, path string, parent VmlLo
 	owner := 'vml_component_${suffix}'
 	c.slot_scopes[owner] = incoming
 	c.location = vml.Location{ path: node.source, line: node.line, column: node.column }
-	c.writeln('\tmut ${owner} := ${incoming.component}.child(' + vml_quote(vml_builder_path(path)) + ') or { panic(err) }')
+	c.writeln('\tmut ${owner} := ${incoming.component}.child(' + vml_quote(path) + ') or { panic(err) }')
 	c.prepare_style_tokens(node, owner)
 	mut scope := VmlScope{
 		component: owner
 		special:   map[string]string{}
 		writable:  map[string]string{}
-		ids:       map[string]VmlNamedValue{}
+		ids:       map[string]string{}
 	}
 	c.write_component_inputs(node, suffix, owner, incoming, mut scope)
 	c.location = vml.Location{ path: node.source, line: node.line, column: node.column }
@@ -522,11 +520,11 @@ fn (mut c VmlCompiler) lower_component(node &vml.Node, path string, parent VmlLo
 	variable := c.lowered_node
 	if reference := vml.find_property(node, 'ref') {
 		c.location = vml.Location{ path: reference.expr.source, line: reference.line, column: reference.column }
-		c.writeln(c.expr(reference.expr, incoming, .raw) + '.bind_widget(mut ${variable}) or { panic(err) }')
+		c.writeln(c.lower_expr(reference.expr, incoming) + '.bind_widget(mut ${variable}) or { panic(err) }')
 	}
 	mut exported := vml_clone_scope(incoming)
 	if node.id.len > 0 {
-		exported.ids[node.id] = VmlNamedValue{ geometry: variable }
+		exported.ids[node.id] = variable
 	}
 	return exported
 }
@@ -543,7 +541,7 @@ fn (mut c VmlCompiler) write_component_inputs(node &vml.Node, suffix string, own
 			signature := parameter.parameters.map('${it.name} ${it.typ}').join(', ')
 			payload_args := parameter.parameters.map(it.name).join(', ')
 			if handler := vml.find_property(node, 'on_' + parameter.name) {
-				value := c.expr(handler.expr, incoming, .raw)
+				value, _ := c.resolve_path(handler.expr.value, incoming)
 				mut captures := vml_callback_captures(handler.expr, incoming)
 				listener := 'vml_listener_' + suffix + '_' + parameter.name
 				if handler.expr.kind == .path {
@@ -560,7 +558,12 @@ fn (mut c VmlCompiler) write_component_inputs(node &vml.Node, suffix string, own
 					c.writeln('\t$if ${listener} is fn () { ${listener}() } $else $if ${listener} is fn (${types}) { ${listener}(${payload_args}) } $else { $compile_error(' + vml_quote('event callback `${parameter.name}` requires fn() or the exact declared payload and a void return') + ') }')
 				} else {
 					c.write_app_action_checks(handler.expr)
-					c.writeln(c.compile_action(handler.expr, incoming))
+					// The handler reads the event payload by its declared names.
+					mut handler_scope := vml_clone_scope(incoming)
+					for payload in parameter.parameters {
+						handler_scope.special[payload.name] = payload.name
+					}
+					c.writeln(c.compile_action(handler.expr, handler_scope))
 				}
 				c.finish_scope_captures(capture_start, body_start, captures)
 				c.writeln('\t}')
@@ -596,7 +599,10 @@ fn (mut c VmlCompiler) write_component_inputs(node &vml.Node, suffix string, own
 		}
 		supplied := argument != none || binding != none
 		input_scope := if supplied { incoming } else { scope }
+		// The input's declarations keep its location; its checks point at paths.
+		input_location := c.location
 		c.write_model_path_checks(chosen, input_scope)
+		c.location = input_location
 		value := if parameter.typ == 'ui2.StylePatch' {
 			c.lower_style(chosen, input_scope)
 		} else {
@@ -649,6 +655,7 @@ fn (mut c VmlCompiler) write_component_members(node &vml.Node, suffix string, ow
 		c.location = vml.Location{ path: data.expr.source, line: data.expr.line, column: data.expr.column }
 		variable := 'vml_state_${suffix}_${data.name}'
 		c.write_model_path_checks(data.expr, scope)
+		c.location = vml.Location{ path: data.expr.source, line: data.expr.line, column: data.expr.column }
 		value := c.lower_expr(data.expr, scope)
 		if data.computed {
 			mut captures := vml_callback_captures(data.expr, scope)

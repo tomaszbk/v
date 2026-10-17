@@ -109,31 +109,17 @@ fn test_vml_component_rejects_impure_computed_and_invalid_slot_event_declaration
 	}
 }
 
-fn test_vml_bare_enum_arguments_and_separate_text_editors() {
+fn test_vml_bare_enum_arguments_are_typed_by_their_field() {
 	root := parse_vml_source('Column(align_items: start) { Label(text: "Count", style: [text_align(right)]) TextInput(password: true) TextArea(disable_scroll: true) { Run(text: "rich") } }')!
 	assert root.properties[0].expr.value == 'start'
 	assert root.children[2].tag == 'TextArea'
 	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
-	assert generated.contains('ui2.FlexConfig{align: .start}')
-	assert generated.contains('ui2.TextStyle{align: .right}')
-	assert generated.contains('ui2.text_input(ui2.TextInputConfig{')
-	assert generated.contains('ui2.text_area(ui2.TextAreaConfig{')
-	for entry in [
-		['Label(style: [text_align(.right)])', 'omit the dot'],
-		['TextInput(multiline: false)', 'unsupported property `multiline`'],
-		['TextInput(disable_scroll: true)', 'unsupported property `disable_scroll`'],
-		['TextInput { Run(text: "rich") }', 'single-line'],
-		['TextArea(multiline: true)', 'unsupported property `multiline`'],
-		['TextArea(password: true)', 'unsupported property `password`'],
-		['TextArea(on_submit: app.save)', 'unsupported property `on_submit`'],
-	] {
-		parse_vml_source(entry[0]) or {
-			assert err.msg().contains(entry[1]), err.msg()
-			continue
-		}
-		assert false, 'accepted replaced syntax: ${entry[0]}'
-	}
+	generated := compiler.lower(root)
+	assert generated.contains('ui2.ColumnProps{\n\t\talign_items: .start\n')
+	assert generated.contains('ui2.style_text_align(.right)')
+	assert generated.contains('ui2.TextInputProps{\n\t\tpassword: true\n')
+	assert generated.contains('ui2.TextAreaProps{\n\t\tdisable_scroll: true\n')
+	assert generated.contains('ui2.vml_child(mut vml_node_0_2, mut vml_root_component, ui2.RunProps{')
 }
 
 fn test_vml_local_actions_and_unhandled_events_validate_declared_arity() {
@@ -167,37 +153,27 @@ fn test_vml_callbacks_reject_literals_and_event_payloads_remain_typed_without_li
 	}
 	root := parse_vml_source('component Counter(changed event(value int)) { Button(on_click: changed(true)) }')!
 	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
+	generated := compiler.lower(root)
 	assert generated.contains('vml_payload_0 := true')
 	assert generated.contains('$if vml_payload_0 !is int')
 	assert generated.contains('vml_event_0_changed(vml_payload_0)')
 	enum_root := parse_vml_source('component Counter(changed event(value ui2.Align)) { Button(on_click: changed(.right)) }')!
-	enum_generated := compiler.compile(enum_root)
+	enum_generated := compiler.lower(enum_root)
 	assert enum_generated.contains('vml_payload_0 := ui2.Align.right')
 	assert enum_generated.contains('$if vml_payload_0 !is ui2.Align')
+	bare_root := parse_vml_source('component Counter(changed event(value ui2.Align)) { Button(on_click: changed(right)) }')!
+	assert compiler.lower(bare_root).contains('vml_payload_0 := ui2.Align.right')
 	conditional := parse_vml_source('Button(on_click: changed(true ? .right : .left))')!
 	assert compiler.event_payload_value(conditional.properties[0].expr.args[0], 'ui2.Align', VmlScope{}).contains('ui2.Align.left')
 }
 
-fn test_vml_direct_nested_repeaters_lower_to_nonvisual_keyed_fragments() {
+fn test_vml_direct_nested_repeaters_declare_their_items_in_segments() {
 	root := parse_vml_source('Column { Label(text: "start") Repeater(model: app.groups, key: item.id) { Label(text: item.name) Repeater(model: item.rows, key: item.id) { Button(text: item.name) } Label(text: "end group") } Label(text: "end") }')!
 	mut compiler := VmlCompiler{ uses_app: true }
-	generated := compiler.compile(root)
-	assert generated.contains('.fragment(')
-	assert generated.count('ui2.new_vml_keyed_list[') == 2
-	assert generated.contains('vml_fragment_0_1.set_segment(')
-	assert generated.contains('return [vml_fragment_0_1]')
-	assert !generated.contains('vml_fragment_0_1.frame()')
-}
-
-fn test_vml_screen_retains_the_frame_used_to_seed_named_geometry_before_children() {
-	root := parse_vml_source('Screen(id: "root") { Absolute { Label(text: "size", style: [font_size(root.height / 10)]) } }')!
-	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
-	assert generated.contains(".geometry('root', vml_frame_0)")
-	assert generated.contains("kind: .screen\n\t\tid: 'root'\n\t\tframe: vml_frame_0")
-	geometry := generated.index(".geometry('root', vml_frame_0)") or { -1 }
-	child_property := generated.index('vml_property_0_0_0_style') or { -1 }
-	assert child_property >= 0
-	assert geometry < child_property
+	generated := compiler.lower(root)
+	assert generated.count('ui2.vml_repeat(') == 2
+	assert generated.contains("ui2.vml_repeat(mut vml_node_0, '0_1',")
+	assert generated.contains("ui2.vml_repeat(mut vml_segment_0_1, '0_1_1',")
+	assert generated.contains('ui2.vml_child(mut vml_segment_0_1_1, mut vml_item_component_0_1_1, ui2.ButtonProps{}')
+	assert generated.contains("ui2.vml_child(mut vml_node_0, mut vml_root_component, ui2.LabelProps{\n\t\ttext: 'end'\n\t}, path: '0.2'")
 }

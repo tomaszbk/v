@@ -48,7 +48,9 @@ fn build(mut app App) ui2.Element { return $vml('structure.vml') }
 
 fn parity(mut app App) ui2.Element { return $vml('parity.vml') }
 
-fn menus(mut app App) []ui2.Menu { return $vml('menus.vml') }
+fn menus(mut app App) []ui2.Menu {
+	return ui2.menus($vml('menus.vml')) or { panic(err) }
+}
 
 fn nested(mut app App) ui2.Element { return $vml('nested.vml') }
 

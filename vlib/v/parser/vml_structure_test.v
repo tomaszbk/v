@@ -17,7 +17,7 @@ fn test_vml_interpolated_paths_keep_physical_string_locations() {
 fn test_vml_assignments_lower_only_writable_sources() {
 	root := parse_vml_source('View { Button(on_click: app.count++) }')!
 	assert root.children[0].properties[0].expr.kind == .assignment
-	for source in ['Label(text: app.count = 1)', 'TextInput(on_text: app.save())'] {
+	for source in ['Label(text: app.count = 1)'] {
 		if _ := parse_vml_source(source) {
 			assert false, source
 		}
@@ -39,7 +39,7 @@ fn test_vml_imports_expand_component_signatures_and_lexical_slots() {
 	os.write_file(os.join_path(dir, 'card.vml'), 'import Caption\ncomponent Card(content slot) { View { Caption(text: "nested") Slot {} } }')!
 	path := os.join_path(dir, 'main.vml')
 	os.write_file(path, 'import Card\nView { Card(id: "first") { Label(text: app.title) } Card(id: "second") }')!
-	root := parse_compiled_vml_file(path)!
+	root := parse_vml_file(path)!
 	assert root.children.len == 2
 	first := root.children[0]
 	assert first.tag == '__Component' && first.component_name == 'Card'
@@ -51,7 +51,7 @@ fn test_vml_imports_expand_component_signatures_and_lexical_slots() {
 	assert first.children[0].children[1].caller_content
 	assert root.children[1].children[0].children.len == 1
 	os.write_file(os.join_path(dir, 'caption.vml'), 'component Wrong() { Label }')!
-	parse_compiled_vml_file(path) or {
+	parse_vml_file(path) or {
 		assert err.msg().contains('component Caption')
 		return
 	}
@@ -64,7 +64,7 @@ fn test_vml_import_cycle_reports_chain() {
 	defer { os.rmdir_all(dir) or {} }
 	os.write_file(os.join_path(dir, 'first.vml'), 'import Second\ncomponent First() { View { Second } }')!
 	os.write_file(os.join_path(dir, 'second.vml'), 'import First\ncomponent Second() { View { First } }')!
-	parse_compiled_vml_file(os.join_path(dir, 'first.vml')) or {
+	parse_vml_file(os.join_path(dir, 'first.vml')) or {
 		assert err.msg().contains('cyclic VML import')
 		assert err.msg().contains('first.vml') && err.msg().contains('second.vml')
 		return
@@ -78,14 +78,14 @@ fn test_vml_component_reuse_keeps_private_ids_and_source_locations() {
 	defer { os.rmdir_all(dir) or {} }
 	os.write_file(os.join_path(dir, 'card.vml'), 'component Card(title string) {\n    View(id: "card") { Label(text: title) }\n}')!
 	os.write_file(os.join_path(dir, 'main.vml'), 'import Card\nView { Card(id: "first", title: "one") Card(id: "second", title: "two") }')!
-	root := parse_compiled_vml_file(os.join_path(dir, 'main.vml'))!
+	root := parse_vml_file(os.join_path(dir, 'main.vml'))!
 	for child in root.children {
 		assert child.children[0].id == 'card'
 		assert child.children[0].line == 2
 		assert child.inputs[0].name == 'title'
 	}
 	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
+	generated := compiler.lower(root)
 	assert generated.contains(".child('0.0')")
 	assert generated.contains(".child('0.1')")
 	assert compiler.locations.any(it.path.ends_with('card.vml') && it.line == 2)

@@ -23,15 +23,14 @@ Column { Card() }',
 	] {
 		root := parse_vml_source(source)!
 		mut compiler := VmlCompiler{}
-		generated := compiler.compile(root)
+		generated := compiler.lower(root)
 		assert generated.contains('ui2.compose_styles('), generated
-		assert generated.contains('.style(fn ['), generated
 		assert generated.contains('ui2.style_padding('), generated
 		assert !generated.contains('unknown component'), generated
 	}
 }
 
-fn test_vml_style_errors_are_precise_and_check_inactive_variants() {
+fn test_vml_style_errors_are_precise() {
 	for pair in [
 		['style card = [card]\nView(style: [card])', 'cyclic style'],
 		['style first = [second]\nstyle second = [first]\nView()', 'cyclic style'],
@@ -41,18 +40,6 @@ fn test_vml_style_errors_are_precise_and_check_inactive_variants() {
 		['component Bad(color string) { View() }', 'duplicate/reserved component member'],
 		['View(id: "radius")', 'collides with a component member or id'],
 		['style spacing = []\nView()', 'nonreserved local name'],
-		['View(background: "#000000")', 'presentation argument `background` was replaced'],
-		['TextInput(pad_left: 4)', 'presentation argument `pad_left` was replaced'],
-		['View(align: right)', 'presentation argument `align` was replaced'],
-		['View(style: [bg("#000000")])', 'unknown style helper `bg`'],
-		['View(style: [padding("12")])', '`padding` requires a number'],
-		['Label(style: [text_align("right")])', 'requires an enum value'],
-		['Label(style: [text_align(.right)])', 'VML enum values omit the dot'],
-		['View(style: true ? [radius(8)] : [radius(false)])', '`radius` requires a number'],
-		['View(style: [hover([padding(4)])])',
-			'interaction styles support box properties and foreground'],
-		['Label { Run(text: "text", style: [background("#000000")]) }',
-			'Run styles support text properties'],
 	] {
 		parse_vml_source(pair[0]) or {
 			assert err.msg().contains(pair[1]), err.msg()
@@ -71,14 +58,16 @@ fn test_vml_styles_lower_typed_helpers_tokens_and_reactive_variants() {
     }
 }')!
 	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
+	generated := compiler.lower(root)
 	assert generated.contains('.color_token('), generated
 	assert generated.contains('.spacing_token('), generated
 	assert generated.contains('.radius_token('), generated
 	assert generated.contains('.font_size_token('), generated
-	assert generated.contains('ui2.style_text_align(ui2.TextStyle{align: .right}.align)'), generated
+	assert generated.contains('ui2.style_text_align(.right)'), generated
 	assert generated.contains('ui2.style_hover('), generated
-	assert generated.contains('@property:'), generated
+	// Theme tokens and inputs are reactive: the style is a setter.
+	assert generated.contains(".prop('style', fn ["), generated
+	assert generated.contains('(if vml_input_0_primary.get() or { panic(err) } { ui2.compose_styles(['), generated
 }
 
 fn test_vml_style_lowering_has_valid_v_syntax_and_source_mapping() {
@@ -91,10 +80,12 @@ View(style: [card, background(color.accent), hover([foreground(color.accent)])])
 }')!
 	vml.set_source(mut root, 'styles.vml')
 	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
+	generated := compiler.lower(root)
 	path := os.join_path(os.vtmp_dir(), 'vml_style_syntax_${os.getpid()}.v')
 	defer { os.rm(path) or {} }
-	os.write_file(path, 'fn main() { _ = ${generated} }')!
+	// Guards are declarations after the builder expression.
+	builder := generated.all_before_last('})(ui2.vml_bounds())') + '})(ui2.vml_bounds())'
+	os.write_file(path, 'fn main() { _ = ${builder} }\n' + generated.all_after_last('})(ui2.vml_bounds())'))!
 	mut parser := Parser.new(pref.new_preferences())
 	parser.parse_file(path)
 	assert parser.diagnostics.len == 0, parser.diagnostics.str()
@@ -102,20 +93,6 @@ View(style: [card, background(color.accent), hover([foreground(color.accent)])])
 	for location in compiler.locations {
 		assert location.path == 'styles.vml'
 	}
-}
-
-fn test_vml_native_styles_validate_custom_helpers_even_in_inactive_arms() {
-	for source in ['View(style: [hover([background(color.accent)])])',
-		'Label(style: [weight(false ? 400 : 600)])', 'Label(style: false ? [] : [font_family("Inter")])'] {
-		root := parse_vml_source(source)!
-		validate_vml_native_visual(root) or {
-			assert err.msg().contains('custom renderer'), err.msg()
-			continue
-		}
-		assert false, source
-	}
-	root := parse_vml_source('View(style: [background(color.surface), padding(spacing.medium)])')!
-	validate_vml_native_visual(root)!
 }
 
 fn test_vml_typed_style_component_inputs_and_qualified_style_factories() {
@@ -126,25 +103,9 @@ component Card(appearance ui2.StylePatch = [fallback]) {
 }
 Column { Card(appearance: [surface]) Card() View(style: [app.card()]) }')!
 	mut compiler := VmlCompiler{ uses_app: true }
-	generated := compiler.compile(root)
+	generated := compiler.lower(root)
 	assert generated.contains("vml_root_component.prepare_theme_tokens(['color:surface'])"), generated
-	assert generated.contains("ui2.style_background(ui2.TextStyle{color: vml_root_component.color_token('surface')"), generated
-	assert generated.contains('ui2.compose_styles([app.card()])'), generated
+	assert generated.contains("ui2.style_background(vml_root_component.color_token('surface') or { panic(err) })"), generated
+	assert generated.contains('ui2.compose_styles([ui2.StylePatch(app.card())])'), generated
 	assert generated.contains('ui2.style_padding('), generated
-}
-
-fn test_vml_text_constructor_defaults_are_unstyled_but_runs_and_owned_parts_compose_styles() {
-	root := parse_vml_source('Column {
-    Label(style: app.active ? [font_size(30)] : []) { Run(text: "Inherited") }
-    TextInput(style: app.active ? [font_size(30)] : [])
-    Spinner(style: app.active ? [font_size(30)] : [])
-    ToggleButton(style: app.active ? [font_size(30)] : [])
-}')!
-	mut compiler := VmlCompiler{}
-	generated := compiler.compile(root)
-	assert generated.contains('text_style: ui2.TextStyle{}'), generated
-	assert generated.contains('vml_spinner_0_2_text_style := ui2.TextStyle{}'), generated
-	assert generated.contains('text_style:ui2.TextStyle{},down_text_style:ui2.TextStyle{...ui2.apply_text_style('), generated
-	assert generated.contains('ui2.TextRun{text:'), generated
-	assert generated.contains('style: ui2.apply_text_style(ui2.TextStyle{},'), generated
 }

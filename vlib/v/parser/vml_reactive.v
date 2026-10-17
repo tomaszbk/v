@@ -5,154 +5,24 @@ import v.scanner
 import v.token
 import vml
 
-// Structural declarations register ordered child groups after their parent is
-// retained. ui2 owns reconciliation and per-key component lifetimes.
-fn (mut c VmlCompiler) compile_child_segments(node &vml.Node, suffix string, scope VmlScope) {
-	canonical := suffix.trim_string_right('_base')
-	if !node.children.any(it.tag == 'Repeater') { return }
-	parent := 'vml_node_' + suffix
-	for index, child in node.children {
-		if child.tag in ['MenuItem', 'Option', 'Run'] { continue }
-		path := '${canonical}.${index}'
-		if child.tag == 'Repeater' {
-			c.compile_keyed_repeater(child, path, parent, parent, node.tag, scope)
-		} else {
-			variable := 'vml_node_' + vml_var(path)
-			c.write_child_layout(child, variable, vml_var(path), node.tag, scope)
-			c.writeln('${parent}.set_segment(' + vml_quote('static:' + index.str()) + ', [${variable}]) or { panic(err) }')
-		}
+// vml_property_is_reactive reports whether a property reads a source that can
+// change after the build: the app, theme tokens, scope specials or element
+// geometry. Other properties are static fields of the props literal.
+fn vml_property_is_reactive(property vml.Property, scope VmlScope) bool {
+	if property.expr.kind == .literal { return false }
+	if vml_style_uses_theme(property.expr) { return true }
+	if vml.expr_uses_path(property.expr, 'app') { return true }
+	for member, _ in scope.special {
+		if !member.starts_with('__') && vml.expr_uses_path(property.expr, member) { return true }
 	}
+	for id, _ in scope.ids {
+		if vml.expr_uses_path(property.expr, id) { return true }
+	}
+	return false
 }
 
-fn (mut c VmlCompiler) write_child_layout(node &vml.Node, variable string, suffix string, parent string, scope VmlScope) {
-	mut properties := map[string]string{}
-	for property in node.properties {
-		if property.name in vml_flex_child_properties || property.name in [
-			'column_span',
-			'row_span',
-			'align_self_x',
-			'align_self_y',
-		] {
-			properties[property.name] = c.property_effect_value(node, property, suffix, scope)
-		}
-	}
-	rule := if parent in ['Flex', 'Row', 'Column'] {
-		'ui2.VmlChildLayout{flex: ' + vml_flex_item('ui2.Element{}', properties) + '}'
-	} else if parent == 'Grid' {
-		'ui2.VmlChildLayout{grid: ui2.GridSpan{column_span: ${vml_prop(properties, 'column_span', '1')}, row_span: ${vml_prop(properties, 'row_span', '1')}}}'
-	} else if parent == 'Stack' {
-		'ui2.VmlChildLayout{stack: ui2.StackChild{align_x: ${vml_prop(properties, 'align_self_x', '.auto')}, align_y: ${vml_prop(properties, 'align_self_y', '.auto')}}}'
-	} else {
-		return
-	}
-	c.writeln('${variable}.set_child_layout(${rule}) or { panic(err) }')
-	c.write_child_layout_effects(node, variable, parent, scope)
-}
-
-fn (mut c VmlCompiler) compile_keyed_repeater(node &vml.Node, path string, parent string, geometry_parent string, parent_tag string, incoming VmlScope) {
-	model := vml.find_property(node, 'model') or { return }
-	key := vml.find_property(node, 'key') or { return }
-	suffix := vml_var(path)
-	collection := 'vml_collection_' + suffix
-	source := c.expr(model.expr, incoming, .raw)
-	c.write_model_path_checks(model.expr, incoming)
-	c.writeln('${collection} := ${source}')
-	c.write_list_guard(collection, suffix, true)
-	item_type := 'typeof(${collection}[0])'
-	item := 'vml_item_' + suffix
-	signal := 'vml_item_signal_' + suffix
-	owner := 'vml_item_component_' + suffix
-	index := 'vml_index_signal_' + suffix
-	// Key paths read item fields: they follow the same public-field rule.
-	mut check_scope := vml_clone_scope(incoming)
-	check_scope.special['item'] = '${collection}[0]'
-	c.write_model_path_checks(key.expr, check_scope)
-	mut key_scope := vml_clone_scope(incoming)
-	key_scope.special['item'] = item
-	mut key_captures := vml_callback_captures(key.expr, incoming)
-	key_captures << collection
-	key_value := c.expr(key.expr, key_scope, .raw)
-	key_body := '_ = ${collection}; return ${vml_stringify(key_value)}'
-	key_captures = vml_used_captures(key_body, key_captures)
-	mut build_captures := c.scope_captures(incoming)
-	build_captures << 'mut ' + parent
-	if geometry_parent != parent { build_captures << 'mut ' + geometry_parent }
-	build_captures << collection
-	prefix := 'mut vml_list_${suffix} := ui2.new_vml_keyed_list[${item_type}](mut ${parent}, ' + vml_quote(suffix) + ', fn [${key_captures.join(', ')}] (${item} ${item_type}) string { ${key_body} }, fn '
-	capture_start := c.out.len + prefix.len
-	c.writeln(prefix + '[] (mut ${owner} ui2.CompiledVmlComponent, ${signal}_input &ui2.Signal[${item_type}]) ![]&ui2.CompiledVmlNode {')
-	body_start := c.out.len
-	// Item closures read the list-owned signal through a mutable handle.
-	c.writeln('mut ${signal} := unsafe { ${signal}_input }')
-	c.writeln('_ = ${collection}')
-	c.writeln('mut ${index} := ${owner}.state(' + vml_quote('@index') + ', 0)!')
-	c.writeln('_ = ${index}')
-	mut scope := vml_clone_scope(incoming)
-	scope.component = owner
-	scope.special['item'] = '${signal}.get() or { panic(err) }'
-	scope.special['__signal_item'] = signal
-	scope.special['index'] = '${index}.get() or { panic(err) }'
-	scope.special['__signal_index'] = index
-	visible := node.children.filter(it.tag !in ['MenuItem', 'Option', 'Run'])
-	mut results := []string{}
-	nested := visible.any(it.tag == 'Repeater')
-	fragment := 'vml_fragment_' + suffix
-	if nested {
-		c.writeln('mut ${fragment} := ${owner}.fragment(' + vml_quote('body:' + suffix) + ')!')
-	}
-	for child_index, child in visible {
-		child_path := path + '.' + child_index.str()
-		child_suffix := vml_var(child_path)
-		if child.tag == 'Repeater' {
-			c.compile_keyed_repeater(child, child_path, fragment, geometry_parent, parent_tag, scope)
-			continue
-		}
-		input := 'vml_input_' + child_suffix
-		c.writeln('${input} := ' + if parent_tag == 'Scroll' {
-			'ui2.rect(0, 0, 0, 0)'
-		} else {
-			'ui2.rect(0, 0, ${geometry_parent}.frame()!.width, ${geometry_parent}.frame()!.height)'
-		})
-		scope = c.compile_node(child, child_path, input, scope, '', if parent_tag in [
-			'Flex',
-			'Row',
-			'Column',
-			'Grid',
-			'Stack',
-			'Absolute',
-		] {
-			.preferred
-		} else if parent_tag == 'Scroll' {
-			.inherited_preferred
-		} else {
-			.normal
-		})
-		c.write_child_layout(child, 'vml_node_' + child_suffix, child_suffix, parent_tag, scope)
-		if nested {
-			c.writeln('${fragment}.set_segment(' + vml_quote('static:' + child_index.str()) + ', [vml_node_${child_suffix}])!')
-		} else {
-			results << 'vml_node_' + child_suffix
-		}
-	}
-	c.writeln('return ' + if nested {
-		'[${fragment}]'
-	} else {
-		vml_array_literal('&ui2.CompiledVmlNode', results)
-	})
-	c.finish_scope_captures(capture_start, body_start, build_captures)
-	error_prefix := vml_quote('${node.source}:${node.line}:${node.column}: ')
-	c.writeln('}) or { panic(${error_prefix} + err.msg()) }')
-	mut captures := vml_callback_captures(model.expr, incoming)
-	dependency := if vml.expr_uses_path(model.expr, 'app') {
-		if ('mut ' + incoming.component) !in captures { captures << 'mut ' + incoming.component }
-		incoming.component + '.watch_app()!; '
-	} else {
-		''
-	}
-	captures = vml_used_captures(dependency + source, captures)
-	c.writeln('vml_list_${suffix}.bind(fn [${captures.join(', ')}] () ![]${item_type} { ${dependency} return ${source} }, source: ' + vml_quote(node.source) + ', line: ${node.line}, column: ${node.column}) or { panic(err) }')
-}
-
+// scope_captures lists every capture a closure over `scope` may need;
+// `finish_scope_captures` keeps the ones its body uses.
 fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {
 	mut captures := []string{}
 	if c.uses_app { captures << 'mut app' }
@@ -163,18 +33,8 @@ fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {
 			captures << value
 		}
 	}
-	for _, named in scope.ids {
-		for _, property in named.props { if property !in captures { captures << property } }
-		value := if named.geometry.len > 0 {
-			named.geometry
-		} else if named.frame_node.len > 0 {
-			named.frame_node
-		} else if named.frame_signal.len > 0 {
-			'mut ' + named.frame_signal
-		} else {
-			named.frame
-		}
-		if value !in captures { captures << value }
+	for _, node in scope.ids {
+		if node !in captures { captures << node }
 	}
 	captures << c.callback_captures.filter(it !in captures)
 	return captures
@@ -211,54 +71,4 @@ fn vml_used_captures(body string, candidates []string) []string {
 		if name in names && candidate !in captures { captures << candidate }
 	}
 	return captures
-}
-
-fn (mut c VmlCompiler) write_child_layout_effects(node &vml.Node, variable string, parent string, scope VmlScope) {
-	for property in node.properties {
-		name := property.name
-		if name !in vml_flex_child_properties && name !in ['column_span', 'row_span', 'align_self_x',
-			'align_self_y'] {
-			continue
-		}
-		if property.expr.kind == .literal { continue }
-		effect_key := variable + ':' + name
-		if effect_key in c.emitted_child_effects { continue }
-		c.emitted_child_effects[effect_key] = true
-		kind := if parent == 'Grid' {
-			'grid'
-		} else if parent == 'Stack' {
-			'stack'
-		} else {
-			'flex'
-		}
-		typ := if kind == 'grid' {
-			'GridSpan'
-		} else if kind == 'stack' {
-			'StackChild'
-		} else {
-			'FlexChild'
-		}
-		field := match name {
-			'flex_basis' { 'basis' }
-			'flex_grow' { 'grow' }
-			'flex_shrink' { 'shrink' }
-			'min_width' { 'minimum_width' }
-			'min_height' { 'minimum_height' }
-			'max_width' { 'maximum_width' }
-			'max_height' { 'maximum_height' }
-			'align_self_x' { 'align_x' }
-			'align_self_y' { 'align_y' }
-			else { name }
-		}
-		value := c.property_effect_value(node, property, variable.trim_string_left('vml_node_'), scope)
-		mut captures := vml_callback_captures(property.expr, scope)
-		captures << c.property_memo_capture(variable.trim_string_left('vml_node_'), property.name)
-		captures << 'mut ' + variable
-		app_dependency := vml.expr_uses_path(property.expr, 'app')
-		if app_dependency { captures << 'mut ' + scope.component }
-		dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
-		body := '${dependency} current := ${variable}.child_rule(); ${variable}.set_child_layout(ui2.VmlChildLayout{...current, ${kind}: ui2.${typ}{...current.${kind}, ${field}: ${value}}})!'
-		captures = vml_used_captures(body, captures)
-		c.writeln('${scope.component}.scope.effect(' + vml_quote('@child:' + variable + ':' + name) + ', fn [${captures.join(', ')}] () ! { ${body} }) or { panic(err) }')
-	}
 }

@@ -12,7 +12,7 @@ fn vml_lower_fixture(name string, files map[string]string) string {
 }
 
 fn vml_lower_document(dir string, uses_app bool) string {
-	root := parse_generic_vml_file(os.join_path(dir, 'main.vml')) or { panic(err) }
+	root := parse_vml_file(os.join_path(dir, 'main.vml')) or { panic(err) }
 	mut compiler := VmlCompiler{
 		uses_app:     uses_app
 		guard_prefix: 'vml_check_lower'
@@ -45,6 +45,9 @@ fn test_vml_lower_emits_props_nodes_setters_and_bindings() {
 	assert generated.contains("vml_node_0_1.prop('text', fn [mut app, mut vml_root_component] (mut vml_p ui2.LabelProps) ! { vml_root_component.watch_app()!; vml_p.text = 'Level \${app.level}' })")
 	assert generated.contains('return vml_doc.finish() or { panic(err) }\n})(ui2.vml_bounds())')
 	assert generated.contains('fn vml_check_lower_unreachable() bool { return false }')
+	// `app.level` is read twice and guarded once.
+	assert generated.count('fn vml_check_lower_field_') == 1, generated
+	assert generated.count('if vml_check_lower_unreachable() { vml_check_lower_field_') == 1, generated
 	// The compiler holds no widget table: no widget constructors or configs.
 	for widget in ['ui2.slider(', 'SliderStyle', 'ui2.Element{', 'LayoutSize', 'set_child_layout'] {
 		assert !generated.contains(widget), widget
@@ -105,12 +108,12 @@ fn test_vml_lower_rejects_dotted_enum_values_in_properties() {
 		'event.vml': 'Button(on_click: app.align(.right))'
 	})
 	defer { os.rmdir_all(dir) or {} }
-	if _ := parse_generic_vml_file(os.join_path(dir, 'main.vml')) {
+	if _ := parse_vml_file(os.join_path(dir, 'main.vml')) {
 		assert false, 'a dotted enum value was accepted'
 	} else {
 		assert err.msg().ends_with('main.vml:1:26: VML enum values omit the dot: use `right`'), err.msg()
 	}
-	parse_generic_vml_file(os.join_path(dir, 'event.vml')) or { assert false, err.msg() }
+	parse_vml_file(os.join_path(dir, 'event.vml')) or { assert false, err.msg() }
 }
 
 // Repeaters lower to `ui2.vml_repeat` with typed model, key and item builder

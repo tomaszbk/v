@@ -43,7 +43,9 @@ fn callback_tree(mut app CallbackModel) ui2.Element { return $vml('events.vml') 
 
 fn callback_rows(mut app CallbackModel) ui2.Element { return $vml('event_rows.vml') }
 
-fn empty_menus() []ui2.Menu { return $vml('empty_menus.vml') }
+fn empty_menus() []ui2.Menu {
+	return ui2.menus($vml('empty_menus.vml')) or { panic(err) }
+}
 
 fn test_compound_arguments_read_live_model_after_binding() {
 	mut app := CallbackModel{}
