@@ -138,11 +138,17 @@ fn (mut run DiagnosticRun) formatted_source_error(kind string, message string, f
 	// The span, relative to the start of its source line. The column is the same in the
 	// logical line.
 	line_start := pos.offset - position.column + 1
-	span_start := pos.offset - line_start
-	span_end := int_max(pos.offset + 1, pos.end) - line_start
+	mut span_start := pos.offset - line_start
+	mut span_end := int_max(pos.offset + 1, pos.end) - line_start
 	if file.has_line_directives() {
 		physical_line := file.find_line(pos.offset)
 		if position.filename != file.name || position.line != physical_line {
+			// Generated code mapped onto another line: its own columns say nothing
+			// about the logical line, so mark the reported column there.
+			if pos.reported_column() > 0 {
+				span_start = pos.reported_column() - 1
+				span_end = span_start + 1
+			}
 			if position.filename != file.name {
 				if source := run.read_source(position.filename) {
 					lines := run.source_lines_through(source, position.line - source_context_before,

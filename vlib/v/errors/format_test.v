@@ -2,6 +2,7 @@ module errors
 
 import encoding.utf8.east_asian
 import os
+import v.ansi
 import v.flat
 import v.token
 
@@ -176,4 +177,29 @@ fn test_diagnostic_run_formats_like_separate_diagnostics() {
 		assert output == formatted_error('error:', 'gone', a, flat.NodeId(-1), reports[2])
 		assert !output.contains(' | '), output
 	}
+}
+
+// Generated code mapped onto a template line by a `#line` directive marks the
+// column its position reports, not its own column in the generated line.
+fn test_line_directive_caret_follows_the_reported_column() {
+	root := os.join_path(os.temp_dir(), 'v3_reported_column_${os.getpid()}')
+	os.rmdir_all(root) or {}
+	os.mkdir_all(root) or { panic(err) }
+	defer {
+		os.rmdir_all(root) or {}
+		ansi.set_colors_enabled(true)
+	}
+	ansi.set_colors_enabled(false)
+	view_path := os.join_path(root, 'view.vml')
+	os.write_file(view_path, '<Column>\n  <Label text={missing} />\n</Column>\n') or { panic(err) }
+	source := 'fn main() {\n#line 2 "${view_path}"\n\tvml_node_0_0.prop(fn () { _ = missing })\n}\n'
+	mut file_set := token.FileSet.new()
+	mut file := file_set.add_file(os.join_path(root, 'main.v'), source.len)
+	file.index_lines(source)
+	file.add_line_directive(source.index('#line 2') or { panic('no #line 2') }, 2, view_path)
+	offset := source.index('missing') or { panic('no missing') }
+	pos := token.new_span(1, offset, offset + 'missing'.len).with_reported_column(15)
+	output := formatted_source_error('error:', 'undefined ident: `missing`', file, pos)
+	assert output.contains('view.vml:2:15: error: undefined ident: `missing`'), output
+	assert output.contains('    2 |   <Label text={missing} />\n      | ${' '.repeat(14)}^'), output
 }
