@@ -364,12 +364,21 @@ fn (c &VmlCompiler) lower_style(expr &vml.Expr, scope VmlScope) string {
 			if expr.args.len == 1 && expr.args[0].kind == .array {
 				return 'ui2.style_${expr.value}(' + vml_array_literal('ui2.StylePatch', expr.args[0].args.map(c.lower_style(it, scope))) + ') or { panic(err) }'
 			}
-			return 'ui2.style_${expr.value}(' + expr.args.map(c.lower_expr(it, scope)).join(', ') + ')'
+			return 'ui2.style_${expr.value}(' + expr.args.map(c.lower_style_argument(it, scope)).join(', ') + ')'
 		}
 		else {
 			return c.lower_expr(expr, scope)
 		}
 	}
+}
+
+// lower_style_argument lowers an argument of a style helper. A quoted
+// `"#RRGGBB"` is a color there too, as `#RRGGBB` is.
+fn (c &VmlCompiler) lower_style_argument(expr &vml.Expr, scope VmlScope) string {
+	if expr.kind == .literal && expr.quoted {
+		if color := vml_hex_color(expr.value) { return color }
+	}
+	return c.lower_expr(expr, scope)
 }
 
 // lower_repeater declares a keyed repeater among the children of `parent`.

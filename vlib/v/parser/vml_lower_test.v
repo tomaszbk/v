@@ -56,7 +56,7 @@ fn test_vml_lower_emits_props_nodes_setters_and_bindings() {
 fn test_vml_lower_values_tokens_and_styles() {
 	dir := vml_lower_fixture('values', {
 		'main.vml': 'Absolute(width: 300) {
-    View(id: "box", x: 4, align_items: stretch, style: [background(#112233), radius(radius.md), hover([background(color.surface)])])
+    View(id: "box", x: 4, align_items: stretch, style: [background(#112233), radius(radius.md), border_color("#aabbcc"), hover([background(color.surface)])])
     Label(x: box.width, text: "w", tooltip: true ? "a" : "b", style: app.ready ? [font_size(12)] : [font_size(14)])
     widgets.Gauge(value: 3)
 }'
@@ -69,7 +69,7 @@ fn test_vml_lower_values_tokens_and_styles() {
 	assert generated.contains("vml_root_component.prepare_theme_tokens(['radius:md', 'color:surface']) or { panic(err) }")
 	assert generated.contains('\t\talign_items: .stretch\n')
 	// Theme tokens are reactive: the theme can change after the build.
-	assert generated.contains("vml_node_0_0.prop('style', fn [mut vml_root_component] (mut vml_p ui2.ViewProps) ! { vml_p.style = ui2.compose_styles([ui2.style_background(u32(0x112233)), ui2.style_radius(vml_root_component.radius_token('md') or { panic(err) })")
+	assert generated.contains("vml_node_0_0.prop('style', fn [mut vml_root_component] (mut vml_p ui2.ViewProps) ! { vml_p.style = ui2.compose_styles([ui2.style_background(u32(0x112233)), ui2.style_radius(vml_root_component.radius_token('md') or { panic(err) }), ui2.style_border_color(u32(0xaabbcc))")
 	assert generated.contains("ui2.style_hover([ui2.style_background(vml_root_component.color_token('surface') or { panic(err) })]) or { panic(err) }")
 	assert generated.contains('if vml_check_lower_unreachable() { ui2.vml_guard_positioned[ui2.AbsoluteProps]() }')
 	// Element geometry is reactive: it reads the retained node.
