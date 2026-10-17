@@ -59,6 +59,7 @@ fn test_vml_lower_values_tokens_and_styles() {
     View(id: "box", x: 4, align_items: stretch, style: [background(#112233), radius(radius.md), border_color("#aabbcc"), hover([background(color.surface)])])
     Label(x: box.width, text: "w", tooltip: true ? "a" : "b", style: app.ready ? [font_size(12)] : [font_size(14)])
     widgets.Gauge(value: 3)
+    View(style: [app.card, theme.accent()])
 }'
 	})
 	defer { os.rmdir_all(dir) or {} }
@@ -78,6 +79,9 @@ fn test_vml_lower_values_tokens_and_styles() {
 	assert generated.contains('vml_p.style = (if app.ready { ui2.compose_styles([ui2.style_font_size(12)]) } else { ui2.compose_styles([ui2.style_font_size(14)]) })')
 	// Dotted tags name a props type of the caller's module imports.
 	assert generated.contains('widgets.GaugeProps{')
+	// V does not check the elements of an array literal argument: a style value
+	// that is no helper call is cast, so a wrong type is reported at the entry.
+	assert generated.contains('vml_p.style = ui2.compose_styles([ui2.StylePatch(app.card), ui2.StylePatch(theme.accent())])')
 }
 
 // Repeaters lower to `ui2.vml_repeat` with typed model, key and item builder

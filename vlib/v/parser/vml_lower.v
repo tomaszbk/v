@@ -350,7 +350,9 @@ fn vml_hex_color(value string) ?string {
 
 // lower_style lowers a style value: a list composes patches, a call
 // `f(a)` is the helper `ui2.style_f(a)`, and a call whose argument is a style
-// list (`hover([...])`) builds a fallible state patch.
+// list (`hover([...])`) builds a fallible state patch. Any other value is cast
+// to `ui2.StylePatch`, so V checks its type where it is written: V does not
+// check the elements of an array literal passed as an argument.
 fn (c &VmlCompiler) lower_style(expr &vml.Expr, scope VmlScope) string {
 	match expr.kind {
 		.array {
@@ -360,14 +362,16 @@ fn (c &VmlCompiler) lower_style(expr &vml.Expr, scope VmlScope) string {
 			return '(if ${c.lower_expr(expr.left, scope)} { ${c.lower_style(expr.right, scope)} } else { ${c.lower_style(expr.third, scope)} })'
 		}
 		.call {
-			if expr.value.contains('.') { return c.lower_expr(expr, scope) }
+			if expr.value.contains('.') {
+				return 'ui2.StylePatch(' + c.lower_expr(expr, scope) + ')'
+			}
 			if expr.args.len == 1 && expr.args[0].kind == .array {
 				return 'ui2.style_${expr.value}(' + vml_array_literal('ui2.StylePatch', expr.args[0].args.map(c.lower_style(it, scope))) + ') or { panic(err) }'
 			}
 			return 'ui2.style_${expr.value}(' + expr.args.map(c.lower_style_argument(it, scope)).join(', ') + ')'
 		}
 		else {
-			return c.lower_expr(expr, scope)
+			return 'ui2.StylePatch(' + c.lower_expr(expr, scope) + ')'
 		}
 	}
 }
