@@ -191,6 +191,10 @@ fn test_vml_lower_reports_type_errors_at_vml_locations() {
 		'Column(style: [radius(4), app.ready])':                    ['main.vml:2:12:', 'style_compose']
 		'Slider(bind.value: app.items)':                            ['main.vml:2:12:', '']
 		'Slider(bind.value: app.ready)':                            ['main.vml:2:12:', 'mutable']
+		'Slider(max: app.ready ? 1 : app.items)':                   [
+			'main.vml:2:12: error: mismatched types',
+			'mismatched types',
+		]
 		'Label(text: app.hidden)':                                  ['main.vml:2:17:', 'public']
 		'Label { Label(text: "x") }':                               ['main.vml:2:13:',
 			'Label has no children']

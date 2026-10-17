@@ -21599,7 +21599,7 @@ fn (mut tc TypeChecker) check_if_expr(id flat.NodeId, node flat.Node) {
 					for group in groups[1..] {
 						if !multi_return_wrapper_shapes_match(first, group) {
 							if tc.should_diagnose(id) {
-								pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2)
+								pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2).with_reported_column(node.pos.reported_column())
 								first_name := Type(MultiReturn{
 									types: first
 								}).name()
@@ -21674,7 +21674,7 @@ fn (mut tc TypeChecker) check_if_expr(id flat.NodeId, node flat.Node) {
 				}
 			}
 			if tc.should_diagnose(id) {
-				pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2)
+				pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2).with_reported_column(node.pos.reported_column())
 				if (then_type is OptionType) != (else_type is OptionType)
 					|| (then_type is ResultType) != (else_type is ResultType) {
 					mut then_name := then_type.name()
@@ -21895,7 +21895,7 @@ fn (mut tc TypeChecker) check_if_value_requirements(id flat.NodeId, node flat.No
 		tc.record_error_at(.if_branch_mismatch, '`if` expression requires an expression as the last statement of every branch', then_id, tc.if_branch_missing_value_pos(then_id))
 	}
 	if node.children_count <= 2 {
-		pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2)
+		pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2).with_reported_column(node.pos.reported_column())
 		tc.record_error_at(.if_branch_mismatch, '`if` expression needs `else` clause', id, pos)
 		return
 	}
@@ -21906,7 +21906,7 @@ fn (mut tc TypeChecker) check_if_value_requirements(id flat.NodeId, node flat.No
 		tc.record_error_at(.if_branch_mismatch, '`if` expression requires an expression as the last statement of every branch', else_id, tc.if_branch_missing_value_pos(else_id))
 	}
 	if tc.if_expr_all_tails_are_none(node) {
-		pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2)
+		pos := token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2).with_reported_column(node.pos.reported_column())
 		tc.record_error_at(.if_branch_mismatch, 'invalid if expression, must supply at least one value other than `none`', id, pos)
 	}
 }

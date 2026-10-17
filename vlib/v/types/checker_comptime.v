@@ -16478,7 +16478,7 @@ fn (mut tc TypeChecker) check_multi_value_list_decl_assign(id flat.NodeId, node 
 fn (tc &TypeChecker) multi_value_single_context_pos(id flat.NodeId) token.Pos {
 	node := tc.a.node(id)
 	if node.kind == .if_expr {
-		return token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2)
+		return token.new_span(node.pos.id, node.pos.offset, node.pos.offset + 2).with_reported_column(node.pos.reported_column())
 	}
 	if node.kind == .match_stmt {
 		file := tc.a.source_files[node.pos.id] or { return node.pos }
