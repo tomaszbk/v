@@ -71,10 +71,10 @@ fn main() {
     _ = \$vml("view.vml")
 }')!
 	for entry in [
-		['Label(text: app.ready)', 'VML text requires a string or number'],
-		['Label(text: app.values)', 'VML text requires a string or number'],
-		['Label(text: app.ready ? 1 : app.values)', 'VML text requires a string or number'],
-		['TextInput(bind.text: app.count)', 'string'],
+		['Label(text: app.ready)', 'expected `ui2.DisplayText`, not `bool`'],
+		['Label(text: app.values)', 'expected `ui2.DisplayText`, not `[]int`'],
+		['Label(text: app.ready ? 1 : app.values)', 'expected `ui2.DisplayText`, not `[]int`'],
+		['TextInput(bind.text: app.count)', 'VML text binding must target a string'],
 		['TextInput(placeholder: app.count)', 'string'],
 		['Label(text: "count: " + app.count)', 'cannot use `int`'],
 	] {
@@ -97,11 +97,9 @@ fn test_vml_menu_text_formats_numbers() {
 }
 
 fn test_vml_run_text_formats_numbers() {
-	$if ui2_custom_rendering ? {
-		mut app := NumericTextApp{}
-		label := $vml('numeric_runs.vml')
-		assert label.text == '7 / 12.5'
-		assert label.text_runs[0].text == '7'
-		assert label.text_runs[2].text == '12.5'
-	}
+	mut app := NumericTextApp{}
+	label := $vml('numeric_runs.vml')
+	assert label.text == '7 / 12.5'
+	assert label.text_runs[0].text == '7'
+	assert label.text_runs[2].text == '12.5'
 }
