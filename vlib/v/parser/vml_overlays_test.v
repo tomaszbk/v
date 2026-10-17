@@ -172,7 +172,11 @@ fn test_overlay_diagnostics_keep_the_vml_property_and_call_site() {
 	assert diagnostic.pos.id in parser.a.template_call_sites
 
 	os.write_file(view, 'View(\n    overlay: app.config,\n) {}')!
-	mut native := Parser.new(pref.new_preferences())
+	// Linux and Android always select the custom renderer, so pin a native
+	// desktop target to exercise the native-renderer overlay diagnostic.
+	mut native_prefs := pref.new_preferences()
+	native_prefs.target = pref.target_from('macos', 'arm64')!
+	mut native := Parser.new(native_prefs)
 	native.parse_file(source)
 	assert native.diagnostics.len == 1, native.diagnostics.str()
 	assert native.diagnostics[0].line == 2

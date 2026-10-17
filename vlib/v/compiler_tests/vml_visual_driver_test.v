@@ -14,18 +14,28 @@ fn test_vml_visual_direct_driver_reports_inactive_and_native_declarations() {
 	source := os.join_path(root, 'main.v')
 	view := os.join_path(root, 'view.vml')
 	os.write_file(source, 'fn main() { _ = $vml("view.vml") }')!
+	// Each entry is the view source, the extra driver flags, the authored
+	// view.vml location and the expected diagnostic.
 	for entry in [
-		['Label {\n    tracking: 2\n}', 'unsupported property `tracking`'],
-		['Label {\n    weight: true ? 400 : "heavy"\n}', '`weight` requires a number'],
-		['Label {\n    weight: 600\n}', 'requires the custom renderer'],
+		['Label(\n    tracking: 2,\n)', '', '2:5', 'unsupported property `tracking`'],
+		['Label(\n    style: [weight(true ? 400 : "heavy")],\n)', '', '2:13',
+			'`weight` requires a number'],
+		// Linux selects the custom renderer, so pin a native desktop target.
+		['Label(\n    style: [weight(600)],\n)', '-os macos', '2:13',
+			'other weights require the custom renderer'],
 	] {
 		os.write_file(view, entry[0])!
 		// This bypasses the launcher and exercises v.driver -> flat VML parsing directly.
-		result := os.exec([driver, '-gc', 'boehm', '-path', '${vlib_dir}:@vmodules', '-cc', 'clang',
-			'-no-retry-compilation', '-check', source])
+		mut args := [driver, '-gc', 'boehm', '-path', '${vlib_dir}:@vmodules', '-cc', 'clang',
+			'-no-retry-compilation']
+		if entry[1] != '' {
+			args << entry[1].split(' ')
+		}
+		args << ['-check', source]
+		result := os.exec(args)
 		assert result.exit_code != 0, result.output
-		assert result.output.contains('${view}:2:5:'), result.output
-		assert result.output.contains(entry[1]), result.output
+		assert result.output.contains('${view}:${entry[2]}:'), result.output
+		assert result.output.contains(entry[3]), result.output
 		assert result.output.contains('called from ${source}'), result.output
 	}
 }

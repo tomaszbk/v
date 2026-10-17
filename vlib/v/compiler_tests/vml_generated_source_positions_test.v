@@ -21,10 +21,10 @@ pub fn bounds() Element {
 	return Element{}
 }
 ') or { panic(err) }
-	os.write_file(os.join_path(root, 'screen.vml'), 'Screen {
-	id: root
-	background: #FFFFFF
-}
+	os.write_file(os.join_path(root, 'screen.vml'), 'Screen(
+    id: "root",
+    style: [background(#FFFFFF)],
+)
 ') or { panic(err) }
 	source := os.join_path(root, 'main.v')
 	os.write_file(source, "module main\n\nimport ui2\n\nfn make() ui2.Element {\n\treturn \$vml('screen.vml')\n}\n\nfn main() {\n\t_ = make()\n}\n") or {
@@ -37,4 +37,17 @@ pub fn bounds() Element {
 	assert result.output.contains('screen.vml:'), result.output
 	assert result.output.contains('called from'), result.output
 	assert result.output.contains('has no field named `width`'), result.output
+	// The mock ui2 lacks the retained runtime, so every generated statement is
+	// rejected. Each rejection must name the authored VML line, never main.v.
+	mut errors := 0
+	for line in result.output.split_into_lines() {
+		if line.contains(': error: ') {
+			errors++
+			assert line.starts_with(os.join_path(root, 'screen.vml') + ':'), result.output
+		}
+	}
+	assert errors > 0, result.output
+	// Root plumbing maps to the root tag, style lowering to the `style` property.
+	assert result.output.contains('screen.vml:1:1: error: '), result.output
+	assert result.output.contains('screen.vml:3:5: error: '), result.output
 }
