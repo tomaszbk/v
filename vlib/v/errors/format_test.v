@@ -203,3 +203,13 @@ fn test_line_directive_caret_follows_the_reported_column() {
 	assert output.contains('view.vml:2:15: error: undefined ident: `missing`'), output
 	assert output.contains('    2 |   <Label text={missing} />\n      | ${' '.repeat(14)}^'), output
 }
+
+fn test_vml_diagnostics_name_props_types_as_elements() {
+	assert vml_message('type `ui2.ButtonProps` has no field named `checked`.\n2 possibilities: `CommonProps`, `text`.') == 'element `Button` has no property named `checked`.\n2 possibilities: `CommonProps`, `text`.'
+	assert vml_message('unknown field `maxx` in struct literal of type `SliderProps`') == 'unknown property `maxx` of element `Slider`'
+	assert vml_message('unknown type `ui2.SldierProps`') == 'unknown element `Sldier`'
+	assert vml_message('unknown struct `widgets.GaugeProps`') == 'unknown element `widgets.Gauge`'
+	// Messages that name no props type are kept, fields included.
+	assert vml_message('cannot use `string` as `u32` in argument 1 to `ui2.style_border_color`') == 'cannot use `string` as `u32` in argument 1 to `ui2.style_border_color`'
+	assert vml_message('unknown field `x` in struct literal of type `Props`') == 'unknown field `x` in struct literal of type `Props`'
+}
