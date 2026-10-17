@@ -1,0 +1,21 @@
+MenuBar {
+    Menu(
+        title: "File",
+    ) {
+        MenuItem(id: "file_new", on_click: callback_file_new, text: "New", shortcut: "cmd+n")
+        MenuItem(id: "file_open", text: "Open", on_click: callback_file_open, shortcut: "cmd+o")
+        MenuSeparator()
+        MenuItem(id: "file_revert", on_click: callback_file_revert, text: "Revert", enabled: false)
+        Menu(
+            title: "Export",
+        ) {
+            MenuItem(id: "export_pdf", on_click: callback_export_pdf, text: "PDF")
+            MenuItem(id: "export_png", on_click: callback_export_png, text: "PNG")
+        }
+    }
+    Menu(
+        title: "View",
+    ) {
+        MenuItem(id: "word_wrap", on_click: callback_word_wrap, text: "Word Wrap", checked: true)
+    }
+}

@@ -1,0 +1,24 @@
+component Counter(title string = "Count", changed event(value int)) {
+    state count := 0
+    computed doubled := count * 2
+    style surface = [background(#FFFFFF), padding(12), radius(10)]
+
+    fn increment() {
+        count++
+        changed(count)
+    }
+
+    mount { app.counter_mounted() }
+    cleanup { app.counter_cleaned() }
+    unmount { app.counter_unmounted() }
+
+    Column(id: "panel", gap: 8, width: 248, height: 188, style: [surface]) {
+        Label(id: "heading", text: title, height: 24, style: [foreground(#111827), font_size(18), weight(700)])
+        Label(id: "value", text: count, height: 28, style: [foreground(#111827), font_size(22)])
+        Label(id: "double", text: doubled, height: 24, style: [foreground(#64748B), font_size(15)])
+        Row(gap: 8, height: 36) {
+            Button(id: "add", text: "Count", on_click: increment, native: true, flex_grow: 1)
+            Button(id: "reset", text: "Reset", on_click: { count = 0; changed(count) }, native: true, flex_grow: 1)
+        }
+    }
+}

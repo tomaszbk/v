@@ -1,0 +1,12 @@
+import Editor
+
+Screen(id: "root") {
+    Column {
+        Editor(id: "first", bind.name: app.name, on_changed: app.observe) {
+            Label(id: "slot", text: app.suffix)
+        }
+        Editor(id: "second", bind.name: app.other) {
+            Label(text: "Other")
+        }
+    }
+}

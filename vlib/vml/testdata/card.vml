@@ -1,0 +1,7 @@
+component Card(title string, header slot, body slot) {
+    Column {
+        Label(text: title)
+        Slot(name: "header")
+        Slot(name: "body")
+    }
+}

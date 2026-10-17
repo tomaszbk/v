@@ -1,0 +1,22 @@
+style card = [background(color.surface), padding(spacing.medium), radius(radius.medium)]
+style emphasized = [card, background(color.accent), radius(0)]
+
+Column(spacing: 8, width: 300, height: 240) {
+    View(id: "named", width: 160, height: 60, style: [card, background(color.accent)]) {
+        Label(text: "Contenido", width: 100, height: 20, style: [foreground(color.text), font_size(typography.body)])
+    }
+    View(id: "inline", width: 160, height: 60, style: [background(#112233), padding(12), radius(8)]) {
+        Label(text: "Inline", width: 100, height: 20)
+    }
+    View(id: "variant", width: 160, height: 60, style: [app.emphasized ? emphasized : card, app.patch]) {
+        Button(text: "Cambiar", width: 100, height: 30, style: [hover([background(color.accent), foreground(#000000)]), pressed([radius(0)])])
+    }
+    ProgressBar(id: "progress", width: 160, height: 20, value: app.progress, max: 1,
+        style: app.emphasized ? [background(#112233), foreground(#445566), radius(8)] : [])
+    Spinner(text: app.choice, width: 160, height: 30, style: [background(#112233), foreground(#ffffff), font_size(18), radius(0)]) {
+        Option(text: "One")
+        Option(text: "Two")
+    }
+    Label(text: "Removable typography", width: 160, height: 30,
+        style: app.emphasized ? [foreground(#ff0000), font_size(30), weight(700), italic(true)] : [])
+}

@@ -1,0 +1,12 @@
+component Editor(bind name string, changed event(value string), content slot) {
+    state edits := 0
+    computed doubled := edits * 2
+    ref field TextInput
+    mount { app.record_ref(field.is_available()) }
+    cleanup { app.record_cleanup(edits, doubled) }
+    Column {
+        TextInput(id: "input", ref: field, bind.text: name)
+        Button(id: "notify", text: edits, on_click: { edits++; changed(name) })
+        Slot(name: "content")
+    }
+}

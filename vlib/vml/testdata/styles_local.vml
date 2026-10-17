@@ -1,0 +1,16 @@
+component StyledCard(title string = "Contenido", emphasized bool = false) {
+    state count := 0
+    style surface = [background(color.surface), padding(spacing.medium), radius(radius.medium)]
+    style accent = [background(color.accent), radius(0)]
+    View(width: 160, height: 70, style: [surface, emphasized ? accent : []]) {
+        Column(spacing: 4, width: 130, height: 40) {
+            Label(text: title, width: 120, height: 20)
+            Button(text: count, on_click: count++, width: 120, height: 20)
+        }
+    }
+}
+
+Column(spacing: 8, width: 300, height: 200) {
+    StyledCard(title: "Jugadores", emphasized: app.emphasized)
+    StyledCard(title: "Partidas")
+}

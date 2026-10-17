@@ -1,0 +1,8 @@
+component RowItem(title string, content slot) {
+    state count := app.new_counter()
+    Column {
+        Button(id: "increment", text: title, on_click: count++)
+        Label(id: "count_label", text: count)
+        Slot(name: "content")
+    }
+}

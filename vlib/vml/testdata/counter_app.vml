@@ -1,0 +1,11 @@
+import Counter
+
+Screen(id: "root", style: [background(#F1F5F9)]) {
+    Column(gap: 12, style: [padding(16)]) {
+        Row(gap: 12, height: 188) {
+            Counter(id: "first", title: "First", on_changed: app.observe)
+            Counter(id: "second", title: "Second")
+        }
+        Label(text: "First counter emitted ${app.events} events; its latest value is ${app.last_value}.", height: 24, style: [foreground(#166534)])
+    }
+}

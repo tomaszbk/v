@@ -1,0 +1,9 @@
+import Card
+Card(title: "Receiver") {
+    Slot(name: "header") {
+        Label(text: app.name)
+    }
+    Slot(name: "body") {
+        Label(text: app.suffix)
+    }
+}
