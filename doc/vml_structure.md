@@ -173,10 +173,21 @@ arguments use bare names, for example `align_items: start` and `text_align(right
 Conditions require bool;
 other than display text, properties have no implicit string/number conversion.
 
+A list, a bare call or a conditional over them is a helper value, built by the
+helper namespace of its property: `style: [font_size(18), app.card]` is
+`ui2.style_compose(ui2.style_font_size(18), app.card)` and `motion: fade(0.2)` is
+`ui2.motion_compose(ui2.motion_fade(0.2))`. The module that declares a property's
+type declares its namespace as functions: helpers `<namespace>_<helper>` return
+entries and a variadic `<namespace>_compose` combines them in order into the
+property's type, so a new kind of value needs no compiler change. V checks every
+entry at the property. Named lists flatten into the list that uses them. A
+component input names the namespace of its declared type (`ui2.StylePatch` is
+`ui2.style`). Dotted calls are ordinary V calls; call V functions of the calling
+module through `app`.
+
 Diagnostics report the originating VML file, line and column and retain the
 calling `$vml` location. Rules of a widget that V cannot check, such as value
-ranges or presentation a native renderer lacks, are ui2's: its props types
-report them when the document is built. Parser tests do not require an
-installed ui2 module; runtime acceptance uses a matching compiler
-and ui2 revision, for example `-path '/path/to/modules|@vlib|@vmodules'` with
+ranges, are ui2's: its props types report them when the document is built.
+Parser tests do not require an installed ui2 module; runtime acceptance uses a
+matching compiler and ui2 revision, for example `-path '/path/to/modules|@vlib|@vmodules'` with
 `/path/to/modules/ui2` pointing to the checkout.

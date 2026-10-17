@@ -24,7 +24,7 @@ Column { Card() }',
 		root := parse_vml_source(source)!
 		mut compiler := VmlCompiler{}
 		generated := compiler.lower(root)
-		assert generated.contains('ui2.compose_styles('), generated
+		assert generated.contains('ui2.style_compose('), generated
 		assert generated.contains('ui2.style_padding('), generated
 		assert !generated.contains('unknown component'), generated
 	}
@@ -67,7 +67,7 @@ fn test_vml_styles_lower_typed_helpers_tokens_and_reactive_variants() {
 	assert generated.contains('ui2.style_hover('), generated
 	// Theme tokens and inputs are reactive: the style is a setter.
 	assert generated.contains(".prop('style', fn ["), generated
-	assert generated.contains('(if vml_input_0_primary.get() or { panic(err) } { ui2.compose_styles(['), generated
+	assert generated.contains('(if vml_input_0_primary.get() or { panic(err) } { ui2.style_compose('), generated
 }
 
 fn test_vml_style_lowering_has_valid_v_syntax_and_source_mapping() {
@@ -106,6 +106,6 @@ Column { Card(appearance: [surface]) Card() View(style: [app.card()]) }')!
 	generated := compiler.lower(root)
 	assert generated.contains("vml_root_component.prepare_theme_tokens(['color:surface'])"), generated
 	assert generated.contains("ui2.style_background(vml_root_component.color_token('surface') or { panic(err) })"), generated
-	assert generated.contains('ui2.compose_styles([ui2.StylePatch(app.card())])'), generated
+	assert generated.contains('ui2.style_compose(app.card())'), generated
 	assert generated.contains('ui2.style_padding('), generated
 }

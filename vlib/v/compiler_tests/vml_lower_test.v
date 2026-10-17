@@ -151,6 +151,27 @@ fn main() {
 	assert output == "column end n:0 3\n['pick:1', 'pick:2']", output
 }
 
+// Helper values need no compiler names: `motion` resolves to the mock's
+// `motion_*` namespace, whose entries compose into the option field's type, and
+// lists compose in order.
+fn test_vml_lower_builds_helper_values_of_any_namespace() {
+	root := vml_lower_project('helpers')
+	defer {
+		os.rmdir_all(root) or {}
+	}
+	output := vml_lower_run(root, 'main', 'Column(motion: [fade(0.25), delay(app.level)], style: [radius(4), app.ready ? [] : [radius(6)]]) {
+    Label(text: "x", style: font_size(12))
+}',
+		vml_lower_app + r"
+fn main() {
+	mut app := App{level: 0.5}
+	root := build(mut app)
+	println('${root.duration} ${root.delay} r${root.radius}')
+}
+")
+	assert output == '0.25 0.5 r6.0', output
+}
+
 // V checks tags, properties and values against the props types and reports
 // the errors at the VML location of the element or property.
 fn test_vml_lower_reports_type_errors_at_vml_locations() {
@@ -165,6 +186,9 @@ fn test_vml_lower_reports_type_errors_at_vml_locations() {
 		'Column(align_items: strech)':                              ['main.vml:2:12:', 'strech']
 		'Sldier(max: 1)':                                           ['main.vml:2:5:', 'Sldier`']
 		'Label(style: [font_sise(3)])':                             ['main.vml:2:11:', 'font_sise']
+		'Column(motion: [spin(1)])':                                ['main.vml:2:12:', 'motion_spin']
+		'Column(motion: [fade("slow")])':                           ['main.vml:2:12:', 'motion_fade']
+		'Column(style: [radius(4), app.ready])':                    ['main.vml:2:12:', 'style_compose']
 		'Slider(bind.value: app.items)':                            ['main.vml:2:12:', '']
 		'Slider(bind.value: app.ready)':                            ['main.vml:2:12:', 'mutable']
 		'Label(text: app.hidden)':                                  ['main.vml:2:17:', 'public']
@@ -284,13 +308,15 @@ pub:
 	align    Align
 	bg       u32
 	radius   f64
+	duration f64
+	delay    f64
 	frame    Rect
 	children []Element
 	on_event ElementCallback = unsafe { nil }
 }
 
 pub struct StylePatch { pub: bg ?u32 radius ?f64 size ?f64 }
-pub fn compose_styles(styles []StylePatch) StylePatch {
+pub fn style_compose(styles ...StylePatch) StylePatch {
 	mut result := StylePatch{}
 	for style in styles {
 		result = StylePatch{
@@ -304,12 +330,34 @@ pub fn compose_styles(styles []StylePatch) StylePatch {
 pub fn style_background(color u32) StylePatch { return StylePatch{bg: color} }
 pub fn style_radius(radius f64) StylePatch { return StylePatch{radius: radius} }
 pub fn style_font_size(size f64) StylePatch { return StylePatch{size: size} }
-pub fn style_hover(styles []StylePatch) !StylePatch { return compose_styles(styles) }
+pub fn style_hover(styles []StylePatch) !StylePatch { return style_compose(...styles) }
+
+// A helper namespace the lowering does not know, shaped like ui2's motion:
+// `motion_*` helpers return MotionPatch entries that compose into the field's
+// MotionConfig; `motion_compose` is the variadic entry point VML lowers to.
+pub struct MotionPatch { pub: duration ?f64 delay ?f64 }
+pub struct MotionConfig { pub: duration f64 delay f64 }
+pub fn compose_motion(patches []MotionPatch) MotionConfig {
+	mut result := MotionConfig{}
+	for patch in patches {
+		result = MotionConfig{
+			duration: patch.duration or { result.duration }
+			delay:    patch.delay or { result.delay }
+		}
+	}
+	return result
+}
+pub fn motion_compose(patches ...MotionPatch) MotionConfig { return compose_motion(patches) }
+pub fn motion_fade(duration f64) MotionPatch { return MotionPatch{duration: duration} }
+pub fn motion_delay(delay f64) MotionPatch { return MotionPatch{delay: delay} }
 
 // Props types. `build` makes the element; `event` applies an event to the
 // props and returns the handler to run after the bindings.
-pub struct ColumnProps { pub mut: align_items Align style StylePatch }
-pub fn (p ColumnProps) build(children []Element) Element { return Element{kind: 'column', align: p.align_items, bg: p.style.bg or { 0 }, radius: p.style.radius or { 0 }, children: children} }
+pub struct ColumnProps { pub mut: align_items Align style StylePatch motion ?MotionConfig }
+pub fn (p ColumnProps) build(children []Element) Element {
+	motion := p.motion or { MotionConfig{} }
+	return Element{kind: 'column', align: p.align_items, bg: p.style.bg or { 0 }, radius: p.style.radius or { 0 }, duration: motion.duration, delay: motion.delay, children: children}
+}
 pub fn (mut p ColumnProps) event(e ElementEvent) ElementCallback { return unsafe { nil } }
 pub fn (p ColumnProps) frame() Rect { return Rect{width: 800} }
 

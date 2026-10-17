@@ -4,11 +4,36 @@ import strings
 import vml
 
 // VML lowering. The compiler knows the VML language
-// (elements, properties, components, repeaters, styles, tokens) but no widget:
-// tag `Slider` lowers to the props type `ui2.SliderProps`, every property to a
-// field of it, and ui2's generic node runtime (`vml_document`, `vml_root`,
-// `vml_child`, `prop`, `bind`, `vml_repeat`) builds, retains and updates the
-// tree. V type-checks tags, property names and values against the props types.
+// (elements, properties, components, repeaters, helper values, tokens) but no
+// widget: tag `Slider` lowers to the props type `ui2.SliderProps`, every
+// property to a field of it, and ui2's generic node runtime (`vml_document`,
+// `vml_root`, `vml_child`, `prop`, `bind`, `vml_repeat`) builds, retains and
+// updates the tree. V type-checks tags, property names and values against the
+// props types.
+//
+// Helper values. A property value that is a list, a bare call `f(a)` naming
+// nothing in scope, or a conditional with such an arm is a helper value. It is
+// built by the helper namespace of its field's type, which the module of that
+// type declares as functions: a helper `<namespace>_<f>` returns an entry and a
+// variadic `<namespace>_compose(entries ...E) T` combines entries in order into
+// the field's type `T` (`StylePatch` entries into a `StylePatch`, `MotionPatch`
+// entries into a `MotionConfig`). The lowering runs before V knows the props
+// types, so for a props field the field name is the namespace, in the runtime
+// module: ui2 names a field that holds a helper type after the type's
+// namespace (`style StylePatch`, `motion ?MotionConfig`). So
+// `style: [font_size(18), app.card]` lowers to
+// `ui2.style_compose(ui2.style_font_size(18), app.card)` and `motion: fade(0.2)`
+// to `ui2.motion_compose(ui2.motion_fade(0.2))`, and a new namespace needs no
+// compiler change. Composition is variadic because V checks each argument
+// against the entry type, at the property, which it does not do for the
+// elements of an array literal argument. Nested lists (named lists) flatten in
+// order; a conditional entry over lists composes in place, which needs a
+// namespace whose compose returns its entry type, as style's does. A component
+// input declares its type: `M.StylePatch` names the namespace `M.style`, the
+// type name without its last word in snake case. A helper's list argument
+// (`hover([...])`) is an array of entries of the same namespace and makes the
+// helper fallible; quoted `"#RRGGBB"` helper arguments are colors. Unknown
+// helpers and wrong value types are V errors at the property.
 
 const vml_runtime_module = 'ui2'
 
@@ -223,19 +248,23 @@ fn (c &VmlCompiler) lower_key(expr &vml.Expr, scope VmlScope) string {
 
 // lower_value is a property value in the typed context of its props field.
 fn (c &VmlCompiler) lower_value(property vml.Property, scope VmlScope) string {
-	if property.name == 'style' { return c.lower_style(property.expr, scope) }
-	return c.lower_expr(property.expr, scope)
+	return c.lower_field_value(property.name, property.expr, scope)
+}
+
+// lower_field_value lowers the value of props field `field`: a helper value
+// in the field's namespace, anything else as a V expression.
+fn (c &VmlCompiler) lower_field_value(field string, expr &vml.Expr, scope VmlScope) string {
+	if c.is_helper_value(expr, scope) {
+		return c.lower_helper(expr, '${vml_runtime_module}.${field}', scope)
+	}
+	return c.lower_expr(expr, scope)
 }
 
 // lower_prop registers a reactive property: the setter reads its tracked
 // sources and assigns the field.
 fn (mut c VmlCompiler) lower_prop(variable string, props string, field string, property vml.Property, expr &vml.Expr, scope VmlScope) {
 	c.location = vml.Location{ path: expr.source, line: property.line, column: property.column }
-	value := if property.name == 'style' {
-		c.lower_style(expr, scope)
-	} else {
-		c.lower_expr(expr, scope)
-	}
+	value := c.lower_field_value(field, expr, scope)
 	app_dependency := vml.expr_uses_path(expr, 'app')
 	dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
 	mut captures := vml_callback_captures(expr, scope)
@@ -351,41 +380,108 @@ fn vml_hex_color(value string) ?string {
 	return 'u32(0x${value[1..]})'
 }
 
-// lower_style lowers a style value: a list composes patches, a call
-// `f(a)` is the helper `ui2.style_f(a)`, and a call whose argument is a style
-// list (`hover([...])`) builds a fallible state patch. Any other value is cast
-// to `ui2.StylePatch`, so V checks its type where it is written: V does not
-// check the elements of an array literal passed as an argument.
-fn (c &VmlCompiler) lower_style(expr &vml.Expr, scope VmlScope) string {
+// is_helper_value reports whether a value is built by a helper namespace: a
+// list, a bare call that names nothing in scope, or a conditional with such
+// an arm. Dotted calls and calls of local functions are V calls.
+fn (c &VmlCompiler) is_helper_value(expr &vml.Expr, scope VmlScope) bool {
 	match expr.kind {
 		.array {
-			return 'ui2.compose_styles(' + vml_array_literal('ui2.StylePatch', expr.args.map(c.lower_style(it, scope))) + ')'
-		}
-		.conditional {
-			return '(if ${c.lower_expr(expr.left, scope)} { ${c.lower_style(expr.right, scope)} } else { ${c.lower_style(expr.third, scope)} })'
+			return true
 		}
 		.call {
-			if expr.value.contains('.') {
-				return 'ui2.StylePatch(' + c.lower_expr(expr, scope) + ')'
-			}
-			if expr.args.len == 1 && expr.args[0].kind == .array {
-				return 'ui2.style_${expr.value}(' + vml_array_literal('ui2.StylePatch', expr.args[0].args.map(c.lower_style(it, scope))) + ') or { panic(err) }'
-			}
-			return 'ui2.style_${expr.value}(' + expr.args.map(c.lower_style_argument(it, scope)).join(', ') + ')'
+			_, bound := c.resolve_path(expr.value, scope)
+			return !bound && expr.value !in c.callback_captures
+		}
+		.conditional {
+			return c.is_helper_value(expr.right, scope) || c.is_helper_value(expr.third, scope)
 		}
 		else {
-			return 'ui2.StylePatch(' + c.lower_expr(expr, scope) + ')'
+			return false
 		}
 	}
 }
 
-// lower_style_argument lowers an argument of a style helper. A quoted
-// `"#RRGGBB"` is a color there too, as `#RRGGBB` is.
-fn (c &VmlCompiler) lower_style_argument(expr &vml.Expr, scope VmlScope) string {
+// lower_helper lowers a value of helper namespace `namespace` (`ui2.style`):
+// a list or a helper call is composed, a conditional chooses between values.
+fn (c &VmlCompiler) lower_helper(expr &vml.Expr, namespace string, scope VmlScope) string {
+	if expr.kind == .conditional {
+		return '(if ${c.lower_expr(expr.left, scope)} { ${c.lower_helper(expr.right, namespace, scope)} } else { ${c.lower_helper(expr.third, namespace, scope)} })'
+	}
+	if c.is_helper_value(expr, scope) {
+		return '${namespace}_compose(' + c.helper_entries(expr, namespace, scope).join(', ') + ')'
+	}
+	return c.lower_expr(expr, scope)
+}
+
+// helper_entries lowers the entries of a helper value, flattening nested lists.
+fn (c &VmlCompiler) helper_entries(expr &vml.Expr, namespace string, scope VmlScope) []string {
+	if expr.kind == .array {
+		mut entries := []string{}
+		for item in expr.args {
+			entries << c.helper_entries(item, namespace, scope)
+		}
+		return entries
+	}
+	return [c.helper_entry(expr, namespace, scope)]
+}
+
+// helper_entry lowers one entry: a helper call, a conditional entry, or a V
+// value of the entry type.
+fn (c &VmlCompiler) helper_entry(expr &vml.Expr, namespace string, scope VmlScope) string {
+	if expr.kind == .array {
+		return '${namespace}_compose(' + c.helper_entries(expr, namespace, scope).join(', ') + ')'
+	}
+	if expr.kind == .conditional {
+		return '(if ${c.lower_expr(expr.left, scope)} { ${c.helper_entry(expr.right, namespace, scope)} } else { ${c.helper_entry(expr.third, namespace, scope)} })'
+	}
+	if expr.kind != .call || !c.is_helper_value(expr, scope) {
+		return c.lower_expr(expr, scope)
+	}
+	mut fallible := expr.fallible
+	mut args := []string{cap: expr.args.len}
+	for arg in expr.args {
+		if arg.kind == .array {
+			fallible = true
+			args << '[' + c.helper_entries(arg, namespace, scope).join(', ') + ']'
+		} else {
+			args << c.lower_helper_argument(arg, scope)
+		}
+	}
+	return '${namespace}_${expr.value}(${args.join(', ')})' + if fallible {
+		' or { panic(err) }'
+	} else {
+		''
+	}
+}
+
+// lower_helper_argument lowers a helper argument. A quoted `"#RRGGBB"` is a
+// color there too, as `#RRGGBB` is.
+fn (c &VmlCompiler) lower_helper_argument(expr &vml.Expr, scope VmlScope) string {
 	if expr.kind == .literal && expr.quoted {
 		if color := vml_hex_color(expr.value) { return color }
 	}
 	return c.lower_expr(expr, scope)
+}
+
+// vml_type_namespace is the helper namespace a declared type names:
+// `ui2.StylePatch` is `ui2.style`, the type name without its last word in
+// snake case. Types of one word, and composite types, have none.
+fn vml_type_namespace(typ string) ?string {
+	name := typ.trim_left('?&')
+	if name.contains('[') || name.contains(' ') { return none }
+	prefix := if name.contains('.') { name.all_before_last('.') + '.' } else { '' }
+	base := name.all_after_last('.')
+	if base.len == 0 || !base[0].is_capital() { return none }
+	mut words := []string{}
+	mut start := 0
+	for index in 1 .. base.len {
+		if base[index].is_capital() {
+			words << base[start..index].to_lower()
+			start = index
+		}
+	}
+	if words.len == 0 { return none }
+	return prefix + words.join('_')
 }
 
 // lower_repeater declares a keyed repeater among the children of `parent`.
@@ -603,8 +699,9 @@ fn (mut c VmlCompiler) write_component_inputs(node &vml.Node, suffix string, own
 		input_location := c.location
 		c.write_model_path_checks(chosen, input_scope)
 		c.location = input_location
-		value := if parameter.typ == 'ui2.StylePatch' {
-			c.lower_style(chosen, input_scope)
+		namespace := vml_type_namespace(parameter.typ) or { '' }
+		value := if namespace.len > 0 && c.is_helper_value(chosen, input_scope) {
+			c.lower_helper(chosen, namespace, input_scope)
 		} else {
 			c.lower_expr(chosen, input_scope)
 		}

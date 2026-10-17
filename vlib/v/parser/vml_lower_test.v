@@ -41,7 +41,7 @@ fn test_vml_lower_emits_props_nodes_setters_and_bindings() {
 	assert generated.contains("}, id: 'vol', path: '0.0', src: ")
 	assert generated.contains("vml_node_0_0.prop('value', fn [mut app, mut vml_root_component] (mut vml_p ui2.SliderProps) ! { vml_root_component.watch_app()!; vml_p.value = app.level }) or { panic(err) }")
 	assert generated.contains("vml_node_0_0.bind('value', fn [mut app] (vml_p ui2.SliderProps) ! { app.level = ui2.vml_assign(app.level, vml_p.value) }) or { panic(err) }")
-	assert generated.contains('\t\tstyle: ui2.compose_styles([ui2.style_font_size(18)])\n')
+	assert generated.contains('\t\tstyle: ui2.style_compose(ui2.style_font_size(18))\n')
 	assert generated.contains("vml_node_0_1.prop('text', fn [mut app, mut vml_root_component] (mut vml_p ui2.LabelProps) ! { vml_root_component.watch_app()!; vml_p.text = 'Level \${app.level}' })")
 	assert generated.contains('return vml_doc.finish() or { panic(err) }\n})(ui2.vml_bounds())')
 	assert generated.contains('fn vml_check_lower_unreachable() bool { return false }')
@@ -55,7 +55,7 @@ fn test_vml_lower_emits_props_nodes_setters_and_bindings() {
 }
 
 // Values are typed by their props field: bare names are enum values, `#hex` a
-// color, theme roots tokens and style calls `ui2.style_*` helpers.
+// color, theme roots tokens and calls in `style` the `ui2.style_*` helpers.
 fn test_vml_lower_values_tokens_and_styles() {
 	dir := vml_lower_fixture('values', {
 		'main.vml': 'Absolute(width: 300) {
@@ -73,19 +73,56 @@ fn test_vml_lower_values_tokens_and_styles() {
 	assert generated.contains("vml_root_component.prepare_theme_tokens(['radius:md', 'color:surface']) or { panic(err) }")
 	assert generated.contains('\t\talign_items: .stretch\n')
 	// Theme tokens are reactive: the theme can change after the build.
-	assert generated.contains("vml_node_0_0.prop('style', fn [mut vml_root_component] (mut vml_p ui2.ViewProps) ! { vml_p.style = ui2.compose_styles([ui2.style_background(u32(0x112233)), ui2.style_radius(vml_root_component.radius_token('md') or { panic(err) }), ui2.style_border_color(u32(0xaabbcc))")
+	assert generated.contains("vml_node_0_0.prop('style', fn [mut vml_root_component] (mut vml_p ui2.ViewProps) ! { vml_p.style = ui2.style_compose(ui2.style_background(u32(0x112233)), ui2.style_radius(vml_root_component.radius_token('md') or { panic(err) }), ui2.style_border_color(u32(0xaabbcc))")
 	assert generated.contains("ui2.style_hover([ui2.style_background(vml_root_component.color_token('surface') or { panic(err) })]) or { panic(err) }")
 	assert generated.contains('if vml_check_lower_unreachable() { ui2.vml_guard_positioned[ui2.AbsoluteProps]() }')
 	assert !generated.contains('ui2.vml_guard_positioned[ui2.VmlDocument]')
 	// Element geometry is reactive: it reads the retained node.
 	assert generated.contains("vml_node_0_1.prop('x', fn [vml_node_0_0] (mut vml_p ui2.LabelProps) ! { vml_p.x = (vml_node_0_0.geometry() or { panic(err) }).width })")
 	assert generated.contains("\t\ttooltip: (if true { 'a' } else { 'b' })\n")
-	assert generated.contains('vml_p.style = (if app.ready { ui2.compose_styles([ui2.style_font_size(12)]) } else { ui2.compose_styles([ui2.style_font_size(14)]) })')
+	assert generated.contains('vml_p.style = (if app.ready { ui2.style_compose(ui2.style_font_size(12)) } else { ui2.style_compose(ui2.style_font_size(14)) })')
 	// Dotted tags name a props type of the caller's module imports.
 	assert generated.contains('widgets.GaugeProps{')
-	// V does not check the elements of an array literal argument: a style value
-	// that is no helper call is cast, so a wrong type is reported at the entry.
-	assert generated.contains('vml_p.style = ui2.compose_styles([ui2.StylePatch(app.card), ui2.StylePatch(theme.accent())])')
+	// List entries are arguments of the variadic `_compose`, so V checks each
+	// entry against the namespace's type; dotted calls are V calls.
+	assert generated.contains('vml_p.style = ui2.style_compose(app.card, theme.accent())')
+}
+
+// Helper values carry no compiler names: a list, a bare call or a conditional
+// over them takes the namespace of its props field (`motion` is `ui2.motion_*`),
+// and a component input the namespace its declared type names. Entries are
+// arguments of the variadic `_compose`; a list argument stays an array.
+fn test_vml_lower_helper_values_take_their_field_namespace() {
+	dir := vml_lower_fixture('helpers', {
+		'chart.vml': 'component Chart(series charts.SeriesSpec = [line(1)], title string = "t") {
+    Label(text: title)
+}'
+		'main.vml':  'import Chart
+Column {
+    View(motion: [fade(0.2), enter([slide(8), app.entry]), exit([])], style: [], tooltip: summary(app.count))
+    Chart(series: [area(app.values), line(2)])
+    Chart()
+    Label(text: app.title(), style: font_size(12))
+}'
+	})
+	defer { os.rmdir_all(dir) or {} }
+	generated := vml_lower_document(dir, true)
+	assert generated.contains('vml_p.motion = ui2.motion_compose(ui2.motion_fade(0.2), ui2.motion_enter([ui2.motion_slide(8), app.entry]) or { panic(err) }, ui2.motion_exit([]) or { panic(err) })'), generated
+	assert generated.contains('\t\tstyle: ui2.style_compose()\n'), generated
+	assert generated.contains('vml_p.tooltip = ui2.tooltip_compose(ui2.tooltip_summary(app.count))'), generated
+	assert generated.contains('charts.series_compose(charts.series_area(app.values), charts.series_line(2))'), generated
+	assert generated.contains('charts.series_compose(charts.series_line(1))'), generated
+	// Dotted calls are V calls.
+	assert generated.contains('vml_p.text = app.title()'), generated
+	assert generated.contains('\t\tstyle: ui2.style_compose(ui2.style_font_size(12))\n'), generated
+	assert (vml_type_namespace('ui2.StylePatch') or { '' }) == 'ui2.style'
+	assert (vml_type_namespace('?ui2.MotionConfig') or { '' }) == 'ui2.motion'
+	assert (vml_type_namespace('TextStylePatch') or { '' }) == 'text_style'
+	for typ in ['string', 'ui2.Color', '[]ui2.StylePatch', 'map[string]int'] {
+		if namespace := vml_type_namespace(typ) {
+			assert false, '${typ}: ${namespace}'
+		}
+	}
 }
 
 // The document is the root's parent: authored x/y on the root are guarded

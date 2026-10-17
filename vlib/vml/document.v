@@ -104,7 +104,7 @@ fn resolve_node_styles(mut node Node, styles map[string]Style) ! {
 		node.properties[index] = Property{ ...property, expr: resolve_style_expr(property.expr, styles, [])! }
 	}
 	for index, input in node.inputs {
-		if input.typ == 'ui2.StylePatch' && !isnil(input.default_value) {
+		if !isnil(input.default_value) {
 			node.inputs[index] = Input{ ...input, default_value: resolve_style_expr(input.default_value, styles, [])! }
 		}
 	}
@@ -125,10 +125,17 @@ fn resolve_style_expr(expr &Expr, styles map[string]Style, stack []string) !&Exp
 		}
 		return expr
 	}
-	if expr.kind == .array || (expr.kind == .call && expr.value in ['hover', 'focus', 'pressed',
-		'disabled']) {
+	if expr.kind == .array {
 		mut args := []&Expr{}
 		for arg in expr.args { args << resolve_style_expr(arg, styles, stack)! }
+		return &Expr{ ...expr, args: args }
+	}
+	// A helper's list argument (`hover([card])`) holds values of its namespace.
+	if expr.kind == .call && !expr.value.contains('.') {
+		mut args := []&Expr{}
+		for arg in expr.args {
+			args << if arg.kind == .array { resolve_style_expr(arg, styles, stack)! } else { arg }
+		}
 		return &Expr{ ...expr, args: args }
 	}
 	if expr.kind == .conditional {
