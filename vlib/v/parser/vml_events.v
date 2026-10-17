@@ -86,7 +86,9 @@ fn vml_callback_captures(expr &vml.Expr, scope VmlScope) []string {
 		}
 		for field in ['x', 'y', 'width', 'height'] {
 			if vml.expr_uses_path(expr, '${id}.${field}') {
-				captured := if named.frame_node.len > 0 {
+				captured := if named.geometry.len > 0 {
+					named.geometry
+				} else if named.frame_node.len > 0 {
 					named.frame_node
 				} else if named.frame_signal.len > 0 {
 					'mut ' + named.frame_signal

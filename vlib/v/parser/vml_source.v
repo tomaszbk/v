@@ -59,7 +59,7 @@ fn (mut c VmlCompiler) write_field_guard(value string, field_name string, model_
 }
 
 fn (mut c VmlCompiler) write_list_guards() {
-	if c.guards.len > 0 {
+	if c.guards.len > 0 || c.uses_unreachable {
 		c.writeln('fn ${c.guard_prefix}_unreachable() bool { return false }')
 	}
 	for guard in c.guards {

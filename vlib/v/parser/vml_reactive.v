@@ -63,6 +63,10 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &vml.Node, path string, paren
 	signal := 'vml_item_signal_' + suffix
 	owner := 'vml_item_component_' + suffix
 	index := 'vml_index_signal_' + suffix
+	// Key paths read item fields: they follow the same public-field rule.
+	mut check_scope := vml_clone_scope(incoming)
+	check_scope.special['item'] = '${collection}[0]'
+	c.write_model_path_checks(key.expr, check_scope)
 	mut key_scope := vml_clone_scope(incoming)
 	key_scope.special['item'] = item
 	mut key_captures := vml_callback_captures(key.expr, incoming)
@@ -161,7 +165,9 @@ fn (c &VmlCompiler) scope_captures(scope VmlScope) []string {
 	}
 	for _, named in scope.ids {
 		for _, property in named.props { if property !in captures { captures << property } }
-		value := if named.frame_node.len > 0 {
+		value := if named.geometry.len > 0 {
+			named.geometry
+		} else if named.frame_node.len > 0 {
 			named.frame_node
 		} else if named.frame_signal.len > 0 {
 			'mut ' + named.frame_signal

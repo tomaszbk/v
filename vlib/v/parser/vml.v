@@ -53,6 +53,45 @@ fn parse_compiled_vml_file(path string) !&vml.Node {
 	return vml.parse_file(path, vml_parse_config())
 }
 
+// parse_generic_vml_file parses a document for the generic lowering: only the
+// language is validated here, widgets are checked by V against their props.
+fn parse_generic_vml_file(path string) !&vml.Node {
+	return vml.parse_file(path, validate_document: validate_generic_vml_document)
+}
+
+fn parse_vml_file_for(path string, generic bool) !&vml.Node {
+	return if generic { parse_generic_vml_file(path)! } else { parse_compiled_vml_file(path)! }
+}
+
+fn validate_generic_vml_document(root &vml.Node, imported bool) ! {
+	_ = imported
+	validate_generic_vml_node(root)!
+}
+
+fn validate_generic_vml_node(node &vml.Node) ! {
+	for property in node.properties {
+		if property.name.starts_with('bind.') && property.expr.kind != .path {
+			return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: `${property.name}` must target a writable path')
+		}
+	}
+	if node.tag == 'Repeater' {
+		for property in node.properties {
+			if property.name !in ['model', 'key'] {
+				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: unsupported `${property.name}` on Repeater')
+			}
+		}
+		if vml.find_property(node, 'model') == none {
+			return error('${node.source}:${node.line}:${node.column}: Repeater requires `model`')
+		}
+		if vml.find_property(node, 'key') == none {
+			return error('${node.source}:${node.line}:${node.column}: Repeater requires a stable `key`')
+		}
+	}
+	for child in node.children {
+		validate_generic_vml_node(child)!
+	}
+}
+
 fn validate_compiled_vml_node(node &vml.Node) ! {
 	if node.tag == '__Component' {
 		for child in node.children { validate_compiled_vml_node(child)! }
@@ -131,7 +170,8 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		p.record_diagnostic('VML file `${path}` does not exist', call_start)
 		return p.add_val_id(5, '')
 	}
-	root := parse_compiled_vml_file(path) or {
+	generic := 'vml_generic' in p.prefs.user_defines
+	root := parse_vml_file_for(path, generic) or {
 		p.record_vml_diagnostic(path, os.read_file(path) or { '' }, err.msg(), call_start)
 		return p.add_val_id(5, '')
 	}
@@ -141,7 +181,7 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 	custom := target_os in ['linux', 'android']
 		|| (target_os in ['macos', 'windows'] && 'ui2_custom_rendering' in p.prefs.user_defines)
 		|| 'ui2_headless' in p.prefs.user_defines
-	if !custom {
+	if !generic && !custom {
 		validate_vml_native_visual(root) or {
 			p.record_vml_diagnostic(path, source, err.msg(), call_start)
 			return p.add_val_id(5, '')
@@ -157,7 +197,7 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		uses_app:          vml.node_uses_path(root, 'app')
 		guard_prefix:      'vml_check_${source_file.name.hash()}_${call_start}'
 	}
-	generated := compiler.compile(root)
+	generated := if generic { compiler.lower(root) } else { compiler.compile(root) }
 	first_node := p.a.nodes.len
 	first_diagnostic := p.diagnostics.len
 	template := flat.Node{
@@ -223,6 +263,8 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 }
 
 struct VmlNamedValue {
+	// geometry is the generic node whose reactive frame `id.x/y/width/height` reads.
+	geometry     string
 	frame        string
 	frame_signal string
 	frame_node   string
@@ -256,6 +298,9 @@ struct VmlCompiler {
 	explicit_frame    bool
 mut:
 	effect_mode           bool
+	uses_unreachable      bool
+	lowered_node          string
+	lowered_props         string
 	event_references      map[string]string
 	emitted_child_effects map[string]bool
 	slot_scopes           map[string]VmlScope
@@ -401,6 +446,9 @@ fn (c &VmlCompiler) resolve_path(path string, scope VmlScope) (string, bool) {
 		return replacement + if parts.len > 1 { '.' + parts[1..].join('.') } else { '' }, true
 	}
 	if named := scope.ids[parts[0]] {
+		if parts.len == 2 && parts[1] in ['x', 'y', 'width', 'height'] && named.geometry.len > 0 {
+			return '(' + named.geometry + '.geometry() or { panic(err) }).' + parts[1], true
+		}
 		if parts.len == 2 && parts[1] in ['x', 'y', 'width', 'height'] && named.frame_node.len > 0 {
 			return '(' + named.frame_node + '.frame() or { panic(err) }).' + parts[1], true
 		}
