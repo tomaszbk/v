@@ -1,6 +1,7 @@
 module parser
 
 import math
+import vml
 
 // These names describe the existing ui2 API, not a second style/layout engine.
 const vml_text_properties = ['color', 'background_color', 'font_size', 'size', 'font_family', 'weight',
@@ -76,12 +77,12 @@ fn vml_visual_property_use(name string) ?VmlExprUse {
 	return none
 }
 
-fn vml_visual_integer_property(property VmlProperty) bool {
+fn vml_visual_integer_property(property vml.Property) bool {
 	return vml_visual_base_property(property.name) in ['weight', 'lines', 'columns', 'cols', 'rows',
 		'max_columns', 'column_span', 'row_span', 'keyboard']
 }
 
-fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) string {
+fn vml_typed_visual_value(node &vml.Node, property vml.Property, value string) string {
 	base := vml_visual_base_property(property.name)
 	if typed := vml_overlay_typed_value(property.name, value) { return typed }
 	if typed := vml_widget_typed_value(node, property.name, value) { return typed }
@@ -132,7 +133,7 @@ fn vml_typed_visual_value(node &VmlNode, property VmlProperty, value string) str
 
 // Each conditional arm has its own expected type. The checker must validate
 // inactive arms too, while runtime evaluates only the selected arm.
-fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, expr &VmlExpr, scope VmlScope) string {
+fn (c &VmlCompiler) visual_property_value(node &vml.Node, property vml.Property, expr &vml.Expr, scope VmlScope) string {
 	if property.name == 'style' { return c.style_expr(expr, node, scope) }
 	if vml_has_overlay(node) && vml_overlay_local_reference_expr(property.name, expr) {
 		id := expr.value
@@ -170,7 +171,7 @@ fn (c &VmlCompiler) visual_property_value(node &VmlNode, property VmlProperty, e
 	return vml_typed_visual_value(node, property, value)
 }
 
-fn vml_visual_enum_values(node &VmlNode, name string) []string {
+fn vml_visual_enum_values(node &vml.Node, name string) []string {
 	return match vml_visual_base_property(name) {
 		'placement' {
 			['bottom_start', 'bottom', 'bottom_end', 'top_start', 'top', 'top_end', 'right_start',
@@ -207,7 +208,7 @@ fn vml_visual_enum_values(node &VmlNode, name string) []string {
 	}
 }
 
-fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
+fn vml_visual_property_allowed(node &vml.Node, name string, parent string) bool {
 	if name == 'overlay' { return node.tag == 'View' }
 	if vml_overlay_tag(node.tag) && name in vml_overlay_properties { return true }
 	if name == 'style' { return node.tag !in ['Repeater', 'Menu', 'MenuBar', 'MenuItem', 'Option'] }
@@ -280,7 +281,7 @@ fn vml_visual_property_allowed(node &VmlNode, name string, parent string) bool {
 	}
 }
 
-fn vml_visual_error(property VmlProperty, message string) IError {
+fn vml_visual_error(property vml.Property, message string) IError {
 	return if property.expr.source.len > 0 {
 		error('${property.expr.source}:${property.line}:${property.column}: ${message}')
 	} else {
@@ -288,7 +289,7 @@ fn vml_visual_error(property VmlProperty, message string) IError {
 	}
 }
 
-fn vml_visual_number(expr &VmlExpr) ?f64 {
+fn vml_visual_number(expr &vml.Expr) ?f64 {
 	if expr.kind == .literal && !expr.quoted && expr.value !in ['true', 'false'] {
 		return expr.value.f64()
 	}
@@ -301,7 +302,7 @@ fn vml_visual_number(expr &VmlExpr) ?f64 {
 
 // Literal checks recurse through both conditional arms, even when the condition
 // is false. Dynamic values are checked by V in the generated typed assignment.
-fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr, check_bounds bool, in_repeater bool) ! {
+fn validate_vml_visual_value(node &vml.Node, property vml.Property, expr &vml.Expr, check_bounds bool, in_repeater bool) ! {
 	if expr.kind == .conditional {
 		validate_vml_visual_bool(property, expr.left)!
 		validate_vml_visual_value(node, property, expr.right, check_bounds, in_repeater)!
@@ -380,7 +381,7 @@ fn validate_vml_visual_value(node &VmlNode, property VmlProperty, expr &VmlExpr,
 	}
 }
 
-fn validate_vml_visual_bool(property VmlProperty, expr &VmlExpr) ! {
+fn validate_vml_visual_bool(property vml.Property, expr &vml.Expr) ! {
 	if expr.kind == .literal && (expr.quoted || expr.value !in ['true', 'false']) {
 		return vml_visual_error(property, '`${property.name}` requires bool conditions/values')
 	}
@@ -390,7 +391,7 @@ fn validate_vml_visual_bool(property VmlProperty, expr &VmlExpr) ! {
 // the actual parent when the component is expanded at its invocation.
 const vml_unknown_component_parent = '__ComponentParent'
 
-fn validate_compiled_vml_visual(node &VmlNode, parent string) ! {
+fn validate_compiled_vml_visual(node &vml.Node, parent string) ! {
 	validate_compiled_vml_visual_scope(node, parent, false)!
 	scope := VmlScope{ component_aliases: vml_overlay_component_aliases([node]) }
 	validate_vml_geometry_scope(node, parent, scope, scope)!
@@ -407,7 +408,7 @@ fn vml_layout_dimension_property(name string) bool {
 		'dialog_height']
 }
 
-fn vml_expr_uses_element_geometry(expr &VmlExpr, scope VmlScope) bool {
+fn vml_expr_uses_element_geometry(expr &vml.Expr, scope VmlScope) bool {
 	if expr.kind == .path {
 		parts := expr.value.split('.')
 		if parts.len >= 2 && parts[0] in scope.ids
@@ -427,9 +428,9 @@ fn vml_expr_uses_element_geometry(expr &VmlExpr, scope VmlScope) bool {
 	return false
 }
 
-fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, author VmlScope) !VmlScope {
+fn validate_vml_geometry_scope(node &vml.Node, parent string, incoming VmlScope, author VmlScope) !VmlScope {
 	if node.caller_content {
-		value := &VmlNode{ ...node, caller_content: false }
+		value := &vml.Node{ ...node, caller_content: false }
 		validate_vml_geometry_scope(value, parent, author, author)!
 		return incoming
 	}
@@ -482,10 +483,10 @@ fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, 
 	return vml_node_output_scope(node, incoming, scope)
 }
 
-fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater bool) ! {
+fn validate_compiled_vml_visual_scope(node &vml.Node, parent string, in_repeater bool) ! {
 	if node.tag == 'Slot' { return }
 	if node.tag in ['Popup', 'ModalView'] {
-		return vml_visual_node_error(node, 'removed widget `${node.tag}`; use Dialog')
+		return vml.node_error(node, 'removed widget `${node.tag}`; use Dialog')
 	}
 	if node.tag == '__Component' {
 		for child in node.children {
@@ -501,19 +502,19 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 		'ScaledContent', 'Label', 'Run', 'TextInput', 'TextArea', 'Image', 'Button', 'Checkbox',
 		'Dropdown', 'ProgressBar', 'Slider', 'Switch', 'Spinner', 'MessageBox', 'Repeater', 'MenuItem',
 		'Option'] && !vml_widget_tag(node.tag) && !vml_overlay_tag(node.tag) {
-		return vml_visual_node_error(node, 'unsupported VML element `${node.tag}`')
+		return vml.node_error(node, 'unsupported VML element `${node.tag}`')
 	}
 	if node.tag == 'Label' && node.children.any(it.tag !in ['Run', 'MenuItem']) {
-		return vml_visual_node_error(node, 'Label children must be Run nodes')
+		return vml.node_error(node, 'Label children must be Run nodes')
 	}
 	if node.tag == 'TextInput' && node.children.any(it.tag == 'Run') {
-		return vml_visual_node_error(node, 'TextInput is single-line; use TextArea for Run content')
+		return vml.node_error(node, 'TextInput is single-line; use TextArea for Run content')
 	}
 	if node.tag == 'Run' && parent !in ['Label', 'TextArea'] {
-		return vml_visual_node_error(node, 'Run must be a child of Label or TextArea')
+		return vml.node_error(node, 'Run must be a child of Label or TextArea')
 	}
 	if node.tag == 'Run' && node.children.len > 0 {
-		return vml_visual_node_error(node, 'Run cannot contain children')
+		return vml.node_error(node, 'Run cannot contain children')
 	}
 
 	mut seen := map[string]bool{}
@@ -547,16 +548,16 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 	}
 	if node.tag == 'Label' && node.children.any(it.tag == 'Run') {
 		if 'text' in seen || 'bind.text' in seen {
-			return vml_visual_node_error(node, 'Label uses either text or Run children')
+			return vml.node_error(node, 'Label uses either text or Run children')
 		}
 		if node.children.any(it.tag !in ['Run', 'MenuItem']) {
-			return vml_visual_node_error(node, 'Label children must be Run nodes')
+			return vml.node_error(node, 'Label children must be Run nodes')
 		}
 	}
 	if node.tag == 'ScaledContent' {
 		for name in ['content_width', 'content_height'] {
 			if name !in seen {
-				return vml_visual_node_error(node, 'ScaledContent requires `${name}`')
+				return vml.node_error(node, 'ScaledContent requires `${name}`')
 			}
 		}
 	}
@@ -567,9 +568,9 @@ fn validate_compiled_vml_visual_scope(node &VmlNode, parent string, in_repeater 
 	}
 }
 
-fn validate_vml_native_visual(node &VmlNode) ! {
+fn validate_vml_native_visual(node &vml.Node) ! {
 	if node.tag in ['ScaledContent', 'Run'] || vml_overlay_tag(node.tag) {
-		return vml_visual_node_error(node, '${node.tag} requires the custom renderer')
+		return vml.node_error(node, '${node.tag} requires the custom renderer')
 	}
 	for property in node.properties {
 		if property.name == 'style' {
@@ -581,10 +582,10 @@ fn validate_vml_native_visual(node &VmlNode) ! {
 	for child in node.children { validate_vml_native_visual(child)! }
 }
 
-fn validate_vml_native_property(property VmlProperty) ! {
+fn validate_vml_native_property(property vml.Property) ! {
 	if property.expr.kind == .conditional {
-		validate_vml_native_property(VmlProperty{ ...property, expr: property.expr.right })!
-		validate_vml_native_property(VmlProperty{ ...property, expr: property.expr.third })!
+		validate_vml_native_property(vml.Property{ ...property, expr: property.expr.right })!
+		validate_vml_native_property(vml.Property{ ...property, expr: property.expr.third })!
 		return
 	}
 	base := vml_visual_base_property(property.name)
@@ -635,7 +636,7 @@ fn (c &VmlCompiler) interaction_style(properties map[string]string) string {
 	return 'ui2.InteractionStyle{${fields.join(', ')}}'
 }
 
-fn (mut c VmlCompiler) prepare_visual_runs(node &VmlNode, suffix string, mut inherited map[string]string, scope VmlScope) {
+fn (mut c VmlCompiler) prepare_visual_runs(node &vml.Node, suffix string, mut inherited map[string]string, scope VmlScope) {
 	mut runs := []string{}
 	for index, child in node.children {
 		if child.tag != 'Run' { continue }
@@ -670,7 +671,7 @@ fn vml_layout_padding(properties map[string]string, typ string) string {
 	return 'ui2.${typ}{${fields.join(', ')}}'
 }
 
-fn (c &VmlCompiler) visual_child_properties(node &VmlNode, path string) map[string]string {
+fn (c &VmlCompiler) visual_child_properties(node &vml.Node, path string) map[string]string {
 	mut properties := map[string]string{}
 	for property in node.properties {
 		properties[property.name] = 'vml_property_${vml_var(path)}_${vml_var(property.name)}'
@@ -688,7 +689,7 @@ fn vml_flex_item(element string, properties map[string]string) string {
 	return 'ui2.FlexChild{${fields.join(', ')}}'
 }
 
-fn (c &VmlCompiler) visual_layout_config(node &VmlNode, frame string, properties map[string]string, children string, spans string) string {
+fn (c &VmlCompiler) visual_layout_config(node &vml.Node, frame string, properties map[string]string, children string, spans string) string {
 	mut fields := ['id: ${vml_quote(node.id)}', 'frame: ${frame}', 'box: ${c.box_style(properties)}',
 		'children: ${children}']
 	if node.tag == 'Grid' {
@@ -729,7 +730,7 @@ fn (c &VmlCompiler) visual_layout_config(node &VmlNode, frame string, properties
 
 // Retain authored children and their typed layout rules once. ui2's LayoutTree
 // measures and allocates this tree, including wrapping at the allocated width.
-fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input string, frame string, properties map[string]string, incoming VmlScope, placement VmlPlacement, default_key string) VmlScope {
+fn (mut c VmlCompiler) compile_visual_layout(node &vml.Node, path string, input string, frame string, properties map[string]string, incoming VmlScope, placement VmlPlacement, default_key string) VmlScope {
 	_ = input
 	_ = placement
 	suffix := vml_var(path)
@@ -773,12 +774,4 @@ fn (mut c VmlCompiler) compile_visual_layout(node &VmlNode, path string, input s
 	plain := 'vml_declaration_${suffix}_plain'
 	c.writeln('\tvml_declaration_${suffix} := ui2.Element{...${plain}, frame: ${base}.frame, children: ${children}, layout: ${base}.layout, layout_input: ${base}.layout_input}')
 	return scope
-}
-
-fn vml_visual_node_error(node &VmlNode, message string) IError {
-	return if node.source.len > 0 {
-		error('${node.source}:${node.line}:${node.column}: ${message}')
-	} else {
-		error('${message} at line ${node.line}, column ${node.column}')
-	}
 }

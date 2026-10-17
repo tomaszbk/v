@@ -1,6 +1,8 @@
 module parser
 
-fn validate_compiled_vml_menu(node &VmlNode) ! {
+import vml
+
+fn validate_compiled_vml_menu(node &vml.Node) ! {
 	allowed := match node.tag {
 		'MenuBar', 'MenuSeparator' { []string{} }
 		'Menu' { ['title', 'text'] }
@@ -27,8 +29,8 @@ fn validate_compiled_vml_menu(node &VmlNode) ! {
 	}
 }
 
-fn (mut c VmlCompiler) compile_menus(root &VmlNode) string {
-	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
+fn (mut c VmlCompiler) compile_menus(root &vml.Node) string {
+	c.location = vml.Location{ path: root.source, line: root.line, column: root.column }
 	mut captures := c.callback_captures.clone()
 	if c.uses_app { captures.insert(0, 'mut app') }
 	capture := if captures.len > 0 {
@@ -51,12 +53,12 @@ fn (mut c VmlCompiler) compile_menus(root &VmlNode) string {
 	return c.out.str()
 }
 
-fn (c &VmlCompiler) menu_property(node &VmlNode, name string, fallback string, use VmlExprUse) string {
-	if property := vml_find_property(node, name) { return c.expr(property.expr, VmlScope{}, use) }
+fn (c &VmlCompiler) menu_property(node &vml.Node, name string, fallback string, use VmlExprUse) string {
+	if property := vml.find_property(node, name) { return c.expr(property.expr, VmlScope{}, use) }
 	return fallback
 }
 
-fn (mut c VmlCompiler) application_menu(node &VmlNode, path string, scope VmlScope) string {
+fn (mut c VmlCompiler) application_menu(node &vml.Node, path string, scope VmlScope) string {
 	mut local := vml_clone_scope(scope)
 	if node.imported {
 		local.special['__import_parent'] = local.special['__import'] or { '' }
@@ -65,17 +67,17 @@ fn (mut c VmlCompiler) application_menu(node &VmlNode, path string, scope VmlSco
 	c.write_action_type_checks(node, 'menu_${path}', local)
 	items := c.application_menu_items(node, path, local)
 	title := c.menu_property(node, 'title', c.menu_property(node, 'text', "''", .text), .raw)
-	c.location = VmlLocation{ path: node.source, line: node.line, column: node.column }
+	c.location = vml.Location{ path: node.source, line: node.line, column: node.column }
 	name := 'vml_menu_${path}'
 	c.writeln('\t${name} := ui2.Menu{title: ${title}, items: ${items}}')
 	return name
 }
 
-fn (mut c VmlCompiler) application_menu_items(node &VmlNode, path string, scope VmlScope) string {
+fn (mut c VmlCompiler) application_menu_items(node &vml.Node, path string, scope VmlScope) string {
 	mut items := []string{}
 	for index, child in node.children {
 		child_path := '${path}_${index}'
-		c.location = VmlLocation{ path: child.source, line: child.line, column: child.column }
+		c.location = vml.Location{ path: child.source, line: child.line, column: child.column }
 		c.write_action_type_checks(child, 'menu_${child_path}', scope)
 		if child.tag == 'MenuSeparator' {
 			items << 'ui2.menu_separator()'
@@ -87,7 +89,7 @@ fn (mut c VmlCompiler) application_menu_items(node &VmlNode, path string, scope 
 			local.special['__import'] = 'menu_${child_path}'
 		}
 		nested := c.application_menu_items(child, child_path, local)
-		c.location = VmlLocation{ path: child.source, line: child.line, column: child.column }
+		c.location = vml.Location{ path: child.source, line: child.line, column: child.column }
 		title := c.menu_property(child, 'title', c.menu_property(child, 'text', "''", .text), .raw)
 		fields := if child.tag == 'Menu' {
 			''

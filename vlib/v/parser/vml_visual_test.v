@@ -2,6 +2,7 @@ module parser
 
 import os
 import v.pref
+import vml
 
 fn test_run_style_overrides_inherited_font_size_in_the_retained_effect() {
 	root := parse_vml_source('Label(style: [font_size(28)]) {
@@ -31,7 +32,7 @@ fn test_shared_visual_builders_keep_every_generated_source_line() {
         Run(text: "mapped")
     }
 }')!
-	vml_set_source(mut root, 'combined.vml')
+	vml.set_source(mut root, 'combined.vml')
 	mut compiler := VmlCompiler{ uses_app: true }
 	generated := compiler.compile(root)
 	assert generated.contains('.callback(fn [')

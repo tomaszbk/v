@@ -1,13 +1,15 @@
 module parser
 
-fn (c &VmlCompiler) control_id(node &VmlNode, suffix string, scope VmlScope) string {
+import vml
+
+fn (c &VmlCompiler) control_id(node &vml.Node, suffix string, scope VmlScope) string {
 	if node.id.len == 0 && (vml_has_overlay(node) || node.properties.any(it.name.starts_with('bind.')) || node.properties.any(it.name == 'ref')) {
 		return c.node_identity(node, suffix, scope)
 	}
 	return vml_quote(node.id)
 }
 
-fn (c &VmlCompiler) node_identity(node &VmlNode, suffix string, scope VmlScope) string {
+fn (c &VmlCompiler) node_identity(node &vml.Node, suffix string, scope VmlScope) string {
 	mut id := node.id
 	if id.len == 0 {
 		id = '__vml_control_${vml_builder_path(suffix).replace('_base', '')}'
@@ -31,7 +33,7 @@ fn (mut c VmlCompiler) write_mutable_check(target string) {
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) write_action_type_checks(node &VmlNode, suffix string, scope VmlScope) {
+fn (mut c VmlCompiler) write_action_type_checks(node &vml.Node, suffix string, scope VmlScope) {
 	_ = suffix
 	for property in node.properties {
 		if property.name.starts_with('bind.') {
@@ -57,11 +59,11 @@ fn (mut c VmlCompiler) write_action_type_checks(node &VmlNode, suffix string, sc
 	}
 }
 
-fn vml_callback_captures(expr &VmlExpr, scope VmlScope) []string {
+fn vml_callback_captures(expr &vml.Expr, scope VmlScope) []string {
 	mut captures := []string{}
-	if vml_expr_uses_path(expr, 'app') { captures << 'mut app' }
+	if vml.expr_uses_path(expr, 'app') { captures << 'mut app' }
 	for base, variable in scope.special {
-		if base.starts_with('__') || !vml_expr_uses_path(expr, base) { continue }
+		if base.starts_with('__') || !vml.expr_uses_path(expr, base) { continue }
 		captured := if signal := scope.special['__signal_' + base] {
 			'mut ' + signal
 		} else {
@@ -78,12 +80,12 @@ fn vml_callback_captures(expr &VmlExpr, scope VmlScope) []string {
 	}
 	for id, named in scope.ids {
 		for field, variable in named.props {
-			if vml_expr_uses_path(expr, '${id}.${field}') && variable !in captures {
+			if vml.expr_uses_path(expr, '${id}.${field}') && variable !in captures {
 				captures << variable
 			}
 		}
 		for field in ['x', 'y', 'width', 'height'] {
-			if vml_expr_uses_path(expr, '${id}.${field}') {
+			if vml.expr_uses_path(expr, '${id}.${field}') {
 				captured := if named.frame_node.len > 0 {
 					named.frame_node
 				} else if named.frame_signal.len > 0 {
@@ -98,13 +100,13 @@ fn vml_callback_captures(expr &VmlExpr, scope VmlScope) []string {
 	return captures
 }
 
-fn (c &VmlCompiler) event_callback(node &VmlNode, name string, scope VmlScope) string {
+fn (c &VmlCompiler) event_callback(node &vml.Node, name string, scope VmlScope) string {
 	if c.effect_mode {
 		if value := c.event_references[(scope.special['__node_suffix'] or { '' }) + ':' + name] {
 			return value
 		}
 	}
-	action := vml_find_property(node, name)
+	action := vml.find_property(node, name)
 	binding := vml_binding_for_event(node, name)
 	if action == none && binding == none { return 'unsafe { nil }' }
 	mut body := '_ = event\n'
@@ -144,14 +146,14 @@ fn (c &VmlCompiler) event_callback(node &VmlNode, name string, scope VmlScope) s
 	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { ${body} }'
 }
 
-fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scope VmlScope) string {
+fn (mut c VmlCompiler) write_element_callback(node &vml.Node, suffix string, scope VmlScope) string {
 	mut callbacks := map[string]string{}
 	for name in vml_event_names {
-		if vml_find_property(node, name) == none && vml_binding_for_event(node, name) == none {
+		if vml.find_property(node, name) == none && vml_binding_for_event(node, name) == none {
 			continue
 		}
-		if property := vml_find_property(node, name) {
-			c.location = VmlLocation{ path: property.expr.source, line: property.expr.line, column: property.expr.column }
+		if property := vml.find_property(node, name) {
+			c.location = vml.Location{ path: property.expr.source, line: property.expr.line, column: property.expr.column }
 		}
 		variable := 'vml_callback_${suffix}_${name}'
 		c.writeln('\t${variable} := ${c.event_callback(node, name, scope)}')
@@ -180,12 +182,12 @@ fn (mut c VmlCompiler) write_element_callback(node &VmlNode, suffix string, scop
 	return 'fn [${captures.join(', ')}] (event ui2.ElementEvent) { match event.kind { ${body} else {} } }'
 }
 
-fn (mut c VmlCompiler) write_model_path_checks(expr &VmlExpr, scope VmlScope) {
+fn (mut c VmlCompiler) write_model_path_checks(expr &vml.Expr, scope VmlScope) {
 	if expr.kind == .path {
 		parts := expr.value.split('.')
 		if parts.len < 2 || parts[0] !in ['app', 'item'] { return }
 		mut base := if parts[0] == 'app' { 'app' } else { scope.special['item'] or { return } }
-		c.location = VmlLocation{ path: expr.source, line: expr.line, column: expr.column }
+		c.location = vml.Location{ path: expr.source, line: expr.line, column: expr.column }
 		for field_name in parts[1..] {
 			if field_name == 'len' { break }
 			c.write_field_guard(base, field_name, expr.value)
@@ -201,7 +203,7 @@ fn (mut c VmlCompiler) write_model_path_checks(expr &VmlExpr, scope VmlScope) {
 	}
 }
 
-fn (mut c VmlCompiler) write_app_action_checks(expr &VmlExpr) {
+fn (mut c VmlCompiler) write_app_action_checks(expr &vml.Expr) {
 	if expr.kind == .assignment && expr.left.value.starts_with('app.') {
 		c.write_mutable_check(expr.left.value)
 	}

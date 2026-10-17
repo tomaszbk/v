@@ -1,5 +1,7 @@
 module parser
 
+import vml
+
 // Typed composite declarations lower to the existing ui2 control APIs. Child
 // records carry only the relevant typed config, never interpreter AST data.
 fn vml_widget_tag(tag string) bool {
@@ -7,7 +9,7 @@ fn vml_widget_tag(tag string) bool {
 		'ManagedScreen', 'ScreenView', 'TreeView', 'TreeNode', 'TabbedPanel', 'Tab', 'ToggleButton']
 }
 
-fn vml_widget_property_allowed(node &VmlNode, name string, parent string) bool {
+fn vml_widget_property_allowed(node &vml.Node, name string, parent string) bool {
 	if name in vml_box_properties && vml_widget_tag(node.tag) { return true }
 	if name in vml_text_properties && node.tag in ['ToggleButton', 'TreeView'] { return true }
 	if name in ['align_self_x', 'align_self_y'] { return parent == 'Stack' }
@@ -67,7 +69,7 @@ fn vml_widget_property_use(name string) ?VmlExprUse {
 	return none
 }
 
-fn vml_widget_typed_value(node &VmlNode, name string, value string) ?string {
+fn vml_widget_typed_value(node &vml.Node, name string, value string) ?string {
 	return match name {
 		'current' {
 			if node.tag == 'ScreenManager' {
@@ -109,8 +111,8 @@ fn vml_widget_text(properties map[string]string, color string, fallback string, 
 	return 'ui2.TextStyle{color: ${vml_prop(properties, color, fallback)}, size: ${vml_prop(properties, size, size_default)}, bold: ${bold}, align: .center}'
 }
 
-fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string, children string, properties map[string]string, scope VmlScope, key string, action string) bool {
-	if !vml_widget_tag(node.tag) && !(node.tag == 'Screen' && vml_find_property(node, 'name') != none) {
+fn (mut c VmlCompiler) compile_widget(node &vml.Node, suffix string, frame string, children string, properties map[string]string, scope VmlScope, key string, action string) bool {
+	if !vml_widget_tag(node.tag) && !(node.tag == 'Screen' && vml.find_property(node, 'name') != none) {
 		return false
 	}
 	id := c.control_id(node, suffix, scope)
@@ -125,12 +127,12 @@ fn (mut c VmlCompiler) compile_widget(node &VmlNode, suffix string, frame string
 			mut rules := []string{}
 			for index, child in node.children {
 				if child.tag == 'Repeater' { continue }
-				align_x := if prop := vml_find_property(child, 'align_self_x') {
+				align_x := if prop := vml.find_property(child, 'align_self_x') {
 					c.visual_property_value(child, prop, prop.expr, scope)
 				} else {
 					'.auto'
 				}
-				align_y := if prop := vml_find_property(child, 'align_self_y') {
+				align_y := if prop := vml.find_property(child, 'align_self_y') {
 					c.visual_property_value(child, prop, prop.expr, scope)
 				} else {
 					'.auto'

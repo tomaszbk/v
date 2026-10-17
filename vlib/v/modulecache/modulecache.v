@@ -4,12 +4,12 @@ import os
 import crypto.sha256
 import strings
 import v.flat
-import v.parser
 import v.pref
 import v.tempname
 import v.types
 import v.util
 import v.util.cache_refresh
+import vml
 
 pub const builtin_bundle_imports = ['strconv', 'strings', 'hash', 'math.bits']
 pub const builtin_bundle_modules = ['builtin', 'strconv', 'strings', 'hash', 'bits', 'math.bits']
@@ -1375,7 +1375,7 @@ fn compile_time_vml_paths(source string, source_file string) ([]string, []string
 		visited[file] = true
 		// Missing literal roots already fail the signature's content read below.
 		vml_source := os.read_file(file) or { continue }
-		imports := parser.compiled_vml_import_candidates(vml_source, os.dir(file)) or {
+		imports := vml.import_candidates(vml_source, os.dir(file)) or {
 			has_unresolved_path = true
 			continue
 		}

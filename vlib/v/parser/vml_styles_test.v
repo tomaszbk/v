@@ -2,6 +2,7 @@ module parser
 
 import os
 import v.pref
+import vml
 
 fn test_vml_named_styles_inline_styles_and_component_local_styles() {
 	for source in [
@@ -88,7 +89,7 @@ View(style: [card, background(color.accent), hover([foreground(color.accent)])])
         Run(text: "Local", style: [font_size(20)])
     }
 }')!
-	vml_set_source(mut root, 'styles.vml')
+	vml.set_source(mut root, 'styles.vml')
 	mut compiler := VmlCompiler{}
 	generated := compiler.compile(root)
 	path := os.join_path(os.vtmp_dir(), 'vml_style_syntax_${os.getpid()}.v')

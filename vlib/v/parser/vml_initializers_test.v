@@ -1,5 +1,7 @@
 module parser
 
+import vml
+
 fn test_reactive_property_constructor_and_effect_read_the_same_memo() {
 	root := parse_vml_source('Label(text: app.next_count())')!
 	mut compiler := VmlCompiler{ uses_app: true }
@@ -12,7 +14,7 @@ fn test_reactive_property_constructor_and_effect_read_the_same_memo() {
 
 fn test_input_default_factory_keeps_the_declared_input_position() {
 	mut root := parse_vml_source('component Typed(valid bool = app.count) { Label(text: "value") }')!
-	vml_set_source(mut root, 'defaults.vml')
+	vml.set_source(mut root, 'defaults.vml')
 	mut compiler := VmlCompiler{ uses_app: true }
 	generated := compiler.compile(root)
 	lines := generated.split_into_lines()

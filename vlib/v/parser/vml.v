@@ -3,400 +3,7 @@ module parser
 import os
 import strings
 import v.flat
-
-enum VmlTokenKind {
-	name
-	string_
-	number
-	lbrace
-	rbrace
-	colon
-	lpar
-	rpar
-	comma
-	question
-	plus
-	minus
-	mul
-	div
-	mod
-	not
-	eq
-	assign
-	declare
-	increment
-	decrement
-	semicolon
-	lsbr
-	rsbr
-	ne
-	lt
-	le
-	gt
-	ge
-	and
-	or
-	eof
-}
-
-struct VmlToken {
-	kind             VmlTokenKind
-	text             string
-	line             int
-	column           int = 1
-	string_locations []VmlLocation
-}
-
-struct VmlLexer {
-	source string
-mut:
-	pos        int
-	line       int = 1
-	line_start int
-}
-
-fn (mut l VmlLexer) advance() u8 {
-	c := l.source[l.pos]
-	l.pos++
-	if c == `\n` {
-		l.line++
-		l.line_start = l.pos
-	}
-	return c
-}
-
-fn (mut l VmlLexer) skip_space() {
-	for l.pos < l.source.len {
-		c := l.source[l.pos]
-		if c in [` `, `\t`, `\r`, `\n`] {
-			l.advance()
-		} else if c == `/` && l.pos + 1 < l.source.len && l.source[l.pos + 1] == `/` {
-			for l.pos < l.source.len && l.source[l.pos] != `\n` {
-				l.pos++
-			}
-		} else {
-			break
-		}
-	}
-}
-
-fn vml_is_name_char(c u8) bool {
-	return c.is_alnum() || c in [`_`, `.`, `#`]
-}
-
-fn (mut l VmlLexer) read_name() VmlToken {
-	start := l.pos
-	line := l.line
-	column := l.pos - l.line_start + 1
-	for l.pos < l.source.len && vml_is_name_char(l.source[l.pos]) {
-		l.pos++
-	}
-	return VmlToken{ kind: .name, text: l.source[start..l.pos], line: line, column: column }
-}
-
-fn (mut l VmlLexer) read_number() VmlToken {
-	start := l.pos
-	line := l.line
-	column := l.pos - l.line_start + 1
-	mut dot := false
-	for l.pos < l.source.len {
-		c := l.source[l.pos]
-		if c.is_digit() {
-			l.pos++
-		} else if c == `.` && !dot {
-			dot = true
-			l.pos++
-		} else {
-			break
-		}
-	}
-	return VmlToken{ kind: .number, text: l.source[start..l.pos], line: line, column: column }
-}
-
-fn (mut l VmlLexer) read_string() !VmlToken {
-	line := l.line
-	column := l.pos - l.line_start + 1
-	quote := l.advance()
-	mut value := []u8{}
-	mut locations := []VmlLocation{}
-	for l.pos < l.source.len {
-		location := VmlLocation{ line: l.line, column: l.pos - l.line_start + 1 }
-		c := l.advance()
-		if c == `\\` && l.pos < l.source.len {
-			next := l.advance()
-			match next {
-				`n` { value << `\n` }
-				`t` { value << `\t` }
-				`\\` { value << `\\` }
-				`"` { value << `"` }
-				`'` { value << `'` }
-				else { value << next }
-			}
-		} else if c == quote {
-			locations << location
-			return VmlToken{ kind: .string_, text: value.bytestr(), line: line, column: column, string_locations: locations }
-		} else {
-			value << c
-		}
-		locations << location
-	}
-	return error('unterminated string at line ${line}')
-}
-
-fn tokenize_vml(source string) ![]VmlToken {
-	mut lexer := VmlLexer{ source: source }
-	mut tokens := []VmlToken{}
-	for {
-		lexer.skip_space()
-		if lexer.pos >= source.len {
-			tokens << VmlToken{ kind: .eof, text: '', line: lexer.line, column: lexer.pos - lexer.line_start + 1 }
-			return tokens
-		}
-		line := lexer.line
-		column := lexer.pos - lexer.line_start + 1
-		c := source[lexer.pos]
-		match c {
-			`{` { tokens << VmlToken{ kind: .lbrace, text: '{', line: line, column: column } }
-			`}` { tokens << VmlToken{ kind: .rbrace, text: '}', line: line, column: column } }
-			`:` {
-				if lexer.pos + 1 < source.len && source[lexer.pos + 1] == `=` {
-					lexer.pos++
-					tokens << VmlToken{ kind: .declare, text: ':=', line: line, column: column }
-				} else {
-					tokens << VmlToken{ kind: .colon, text: ':', line: line, column: column }
-				}
-			}
-			`;` { tokens << VmlToken{ kind: .semicolon, text: ';', line: line, column: column } }
-			`[` { tokens << VmlToken{ kind: .lsbr, text: '[', line: line, column: column } }
-			`]` { tokens << VmlToken{ kind: .rsbr, text: ']', line: line, column: column } }
-			`(` { tokens << VmlToken{ kind: .lpar, text: '(', line: line, column: column } }
-			`)` { tokens << VmlToken{ kind: .rpar, text: ')', line: line, column: column } }
-			`,` { tokens << VmlToken{ kind: .comma, text: ',', line: line, column: column } }
-			`?` { tokens << VmlToken{ kind: .question, text: '?', line: line, column: column } }
-			`+` {
-				if lexer.pos + 1 < source.len && source[lexer.pos + 1] == `+` {
-					lexer.pos++
-					tokens << VmlToken{ kind: .increment, text: '++', line: line, column: column }
-				} else {
-					tokens << VmlToken{ kind: .plus, text: '+', line: line, column: column }
-				}
-			}
-			`-` {
-				if lexer.pos + 1 < source.len && source[lexer.pos + 1] == `-` {
-					lexer.pos++
-					tokens << VmlToken{ kind: .decrement, text: '--', line: line, column: column }
-				} else {
-					tokens << VmlToken{ kind: .minus, text: '-', line: line, column: column }
-				}
-			}
-			`*` { tokens << VmlToken{ kind: .mul, text: '*', line: line, column: column } }
-			`/` { tokens << VmlToken{ kind: .div, text: '/', line: line, column: column } }
-			`%` { tokens << VmlToken{ kind: .mod, text: '%', line: line, column: column } }
-			`!` {
-				lexer.pos++
-				if lexer.pos < source.len && source[lexer.pos] == `=` {
-					tokens << VmlToken{ kind: .ne, text: '!=', line: line, column: column }
-				} else {
-					tokens << VmlToken{ kind: .not, text: '!', line: line, column: column }
-					continue
-				}
-			}
-			`=` {
-				lexer.pos++
-				if lexer.pos >= source.len || source[lexer.pos] != `=` {
-					tokens << VmlToken{ kind: .assign, text: '=', line: line, column: column }
-					continue
-				}
-				tokens << VmlToken{ kind: .eq, text: '==', line: line, column: column }
-			}
-			`<` {
-				lexer.pos++
-				if lexer.pos < source.len && source[lexer.pos] == `=` {
-					tokens << VmlToken{ kind: .le, text: '<=', line: line, column: column }
-				} else {
-					tokens << VmlToken{ kind: .lt, text: '<', line: line, column: column }
-					continue
-				}
-			}
-			`>` {
-				lexer.pos++
-				if lexer.pos < source.len && source[lexer.pos] == `=` {
-					tokens << VmlToken{ kind: .ge, text: '>=', line: line, column: column }
-				} else {
-					tokens << VmlToken{ kind: .gt, text: '>', line: line, column: column }
-					continue
-				}
-			}
-			`&` {
-				lexer.pos++
-				if lexer.pos >= source.len || source[lexer.pos] != `&` {
-					return error('expected `&&` at line ${line}')
-				}
-				tokens << VmlToken{ kind: .and, text: '&&', line: line, column: column }
-			}
-			`|` {
-				lexer.pos++
-				if lexer.pos >= source.len || source[lexer.pos] != `|` {
-					return error('expected `||` at line ${line}')
-				}
-				tokens << VmlToken{ kind: .or, text: '||', line: line, column: column }
-			}
-			`"`, `'` {
-				tokens << lexer.read_string()!
-				continue
-			}
-			else {
-				if c.is_digit() {
-					tokens << lexer.read_number()
-					continue
-				}
-				if vml_is_name_char(c) {
-					tokens << lexer.read_name()
-					continue
-				}
-				return error('unexpected character `${[c].bytestr()}` at line ${line}')
-			}
-		}
-		lexer.pos++
-	}
-	return tokens
-}
-
-enum VmlExprKind {
-	literal
-	path
-	call
-	unary
-	binary
-	assignment
-	block
-	array
-	conditional
-	interpolation
-}
-
-struct VmlInterpolationPart {
-	text string
-	// A nil expression marks a literal-text part. V requires `unsafe` only to
-	// declare that sentinel pointer default; interpolation logic checks it before use.
-	expr &VmlExpr = unsafe { nil }
-}
-
-struct VmlExpr {
-	kind  VmlExprKind
-	value string
-	line  int
-mut:
-	column int = 1
-	source string
-	// The tagged expression tree is recursive. Nil marks child links unused by
-	// the current kind, and V requires `unsafe` only for those pointer defaults.
-	left     &VmlExpr = unsafe { nil }
-	right    &VmlExpr = unsafe { nil }
-	third    &VmlExpr = unsafe { nil }
-	args     []&VmlExpr
-	parts    []VmlInterpolationPart
-	quoted   bool
-	fallible bool
-}
-
-struct VmlProperty {
-	name   string
-	line   int
-	column int
-	expr   &VmlExpr
-}
-
-struct VmlNode {
-	tag    string
-	line   int
-	column int = 1
-mut:
-	source         string
-	imported       bool
-	import_id      bool
-	id             string
-	properties     []VmlProperty
-	children       []&VmlNode
-	component_name string
-	inputs         []VmlInput
-	data           []VmlData
-	functions      []VmlFunction
-	refs           []VmlParameter
-	caller_content bool
-	mount          []&VmlExpr
-	unmount        []&VmlExpr
-	cleanup        []&VmlExpr
-	styles         []VmlStyle
-}
-
-struct VmlSourceParser {
-	file   string
-	tokens []VmlToken
-mut:
-	pos int
-}
-
-fn (p &VmlSourceParser) at() VmlToken {
-	return if p.pos < p.tokens.len {
-		p.tokens[p.pos]
-	} else {
-		VmlToken{ kind: .eof, text: '', line: 0, column: 1 }
-	}
-}
-
-fn (mut p VmlSourceParser) take(kind VmlTokenKind) !VmlToken {
-	token := p.at()
-	if token.kind != kind {
-		return error('${p.file}:${token.line}:${token.column}: expected ${kind}, got ${token.kind} (`${token.text}`)')
-	}
-	p.pos++
-	return token
-}
-
-fn (mut p VmlSourceParser) parse_node() !&VmlNode {
-	tag := p.take(.name)!
-	mut node := &VmlNode{ tag: tag.text, line: tag.line, column: tag.column }
-	if p.at().kind == .lpar {
-		p.pos++
-		for p.at().kind != .rpar {
-			name := p.take(.name)!
-			if node.properties.any(it.name == name.text) {
-				return error('duplicate VML argument `${name.text}` at line ${name.line}:${name.column}')
-			}
-			p.take(.colon)!
-			expr := if vml_is_event(name.text) || name.text.starts_with('on_') {
-				p.parse_handler()!
-			} else {
-				p.parse_expression()!
-			}
-			if name.text.starts_with('on_') && expr.kind !in [.path, .call, .assignment, .block] {
-				return error('callback `${name.text}` requires a typed function reference or an action at line ${name.line}:${name.column}')
-			}
-			if name.text == 'id' {
-				if expr.kind != .literal || !expr.quoted {
-					return error('id must be a quoted local name at line ${name.line}:${name.column}')
-				}
-				node.id = expr.value
-			}
-			node.properties << VmlProperty{ name: name.text, line: name.line, column: name.column, expr: expr }
-			if p.at().kind != .comma { break }
-			p.pos++
-		}
-		p.take(.rpar)!
-	}
-	if p.at().kind == .lbrace {
-		p.pos++
-		for p.at().kind !in [.rbrace, .eof] {
-			if p.at().text in ['property', 'computed', 'state', 'style'] || (p.pos + 1 < p.tokens.len && p.tokens[p.pos + 1].kind == .colon) {
-				return error('${p.file}:${p.at().line}:${p.at().column}: element arguments use `Name(name: value)`; state/computed belong to the component body')
-			}
-			node.children << p.parse_node()!
-		}
-		p.take(.rbrace)!
-	}
-	return node
-}
+import vml
 
 const vml_event_names = ['on_click', 'on_change', 'on_active', 'on_submit', 'on_scroll', 'on_open',
 	'on_pointer_down', 'on_pointer_drag', 'on_pointer_up', 'on_long_press', 'on_swipe_left', 'on_link',
@@ -406,327 +13,31 @@ fn vml_is_event(name string) bool {
 	return name in vml_event_names
 }
 
-fn (mut p VmlSourceParser) parse_handler() !&VmlExpr {
-	if p.at().kind == .lbrace {
-		token := p.take(.lbrace)!
-		mut statements := []&VmlExpr{}
-		for p.at().kind !in [.rbrace, .eof] {
-			statements << p.parse_assignment()!
-			if p.at().kind == .semicolon { p.pos++ }
-		}
-		p.take(.rbrace)!
-		return &VmlExpr{ kind: .block, line: token.line, column: token.column, args: statements }
-	}
-	return p.parse_assignment()
-}
-
-fn (mut p VmlSourceParser) parse_assignment() !&VmlExpr {
-	left := p.parse_expression()!
-	if p.at().kind in [.assign, .increment, .decrement] && left.kind == .path && left.value.contains('.')
-		&& (!left.value.starts_with('app.') || left.value.count('.') != 1) {
-		return error('assignment target `${left.value}` is read-only at line ${left.line}, column ${left.column}')
-	}
-	if p.at().kind in [.increment, .decrement] {
-		op := p.at()
-		p.pos++
-		return &VmlExpr{
-			kind:   .assignment
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  &VmlExpr{
-				kind:  .binary
-				value: if op.kind == .increment {
-					'+'
-				} else {
-					'-'
-				}
-				left:  left
-				right: &VmlExpr{ kind: .literal, value: '1' }
-			}
-		}
-	}
-	if p.at().kind != .assign { return left }
-	op := p.take(.assign)!
-	return &VmlExpr{ kind: .assignment, line: op.line, column: op.column, left: left, right: p.parse_expression()! }
-}
-
-fn (mut p VmlSourceParser) parse_expression() !&VmlExpr {
-	return p.parse_conditional()
-}
-
-fn (mut p VmlSourceParser) parse_conditional() !&VmlExpr {
-	condition := p.parse_or()!
-	if p.at().kind != .question {
-		return condition
-	}
-	line := p.take(.question)!.line
-	when_true := p.parse_expression()!
-	p.take(.colon)!
-	return &VmlExpr{
-		kind:  .conditional
-		line:  line
-		left:  condition
-		right: when_true
-		third: p.parse_expression()!
+// vml_parse_config supplies the widget-specific checks that run while the shared
+// `vml` module parses a document.
+fn vml_parse_config() vml.ParseConfig {
+	return vml.ParseConfig{
+		validate_style:    validate_vml_named_style
+		validate_document: validate_compiled_vml_document
 	}
 }
 
-fn (mut p VmlSourceParser) parse_or() !&VmlExpr {
-	mut left := p.parse_and()!
-	for p.at().kind == .or {
-		op := p.at()
-		p.pos++
-		left = &VmlExpr{
-			kind:   .binary
-			value:  op.text
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  p.parse_and()!
-		}
-	}
-	return left
+fn validate_vml_named_style(owner &vml.Node, style &vml.Expr) ! {
+	validate_vml_style_expr(owner, style, false, false)!
 }
 
-fn (mut p VmlSourceParser) parse_and() !&VmlExpr {
-	mut left := p.parse_equality()!
-	for p.at().kind == .and {
-		op := p.at()
-		p.pos++
-		left = &VmlExpr{
-			kind:   .binary
-			value:  op.text
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  p.parse_equality()!
-		}
-	}
-	return left
+fn validate_compiled_vml_document(root &vml.Node, imported bool) ! {
+	if root.tag in ['Menu', 'MenuBar'] { validate_compiled_vml_menu(root)! }
+	validate_compiled_vml_visual(root, if imported {
+		vml_unknown_component_parent
+	} else {
+		''
+	})!
+	validate_compiled_vml_node(root)!
 }
 
-fn (mut p VmlSourceParser) parse_equality() !&VmlExpr {
-	mut left := p.parse_comparison()!
-	for p.at().kind in [.eq, .ne] {
-		op := p.at()
-		p.pos++
-		left = &VmlExpr{
-			kind:   .binary
-			value:  op.text
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  p.parse_comparison()!
-		}
-	}
-	return left
-}
-
-fn (mut p VmlSourceParser) parse_comparison() !&VmlExpr {
-	mut left := p.parse_term()!
-	for p.at().kind in [.lt, .le, .gt, .ge] {
-		op := p.at()
-		p.pos++
-		left = &VmlExpr{
-			kind:   .binary
-			value:  op.text
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  p.parse_term()!
-		}
-	}
-	return left
-}
-
-fn (mut p VmlSourceParser) parse_term() !&VmlExpr {
-	mut left := p.parse_factor()!
-	for p.at().kind in [.plus, .minus] {
-		op := p.at()
-		p.pos++
-		left = &VmlExpr{
-			kind:   .binary
-			value:  op.text
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  p.parse_factor()!
-		}
-	}
-	return left
-}
-
-fn (mut p VmlSourceParser) parse_factor() !&VmlExpr {
-	mut left := p.parse_unary()!
-	for p.at().kind in [.mul, .div, .mod] {
-		op := p.at()
-		p.pos++
-		left = &VmlExpr{
-			kind:   .binary
-			value:  op.text
-			line:   op.line
-			column: op.column
-			left:   left
-			right:  p.parse_unary()!
-		}
-	}
-	return left
-}
-
-fn (mut p VmlSourceParser) parse_unary() !&VmlExpr {
-	if p.at().kind in [.not, .minus] {
-		op := p.at()
-		p.pos++
-		return &VmlExpr{ kind: .unary, value: op.text, line: op.line, column: op.column, left: p.parse_unary()! }
-	}
-	return p.parse_primary()
-}
-
-fn (mut p VmlSourceParser) parse_primary() !&VmlExpr {
-	token := p.at()
-	match token.kind {
-		.string_ {
-			p.pos++
-			mut expr := parse_vml_interpolation(token)!
-			expr.column = token.column
-			return expr
-		}
-		.name, .number {
-			p.pos++
-			if p.at().kind == .lpar {
-				p.pos++
-				mut args := []&VmlExpr{}
-				if p.at().kind != .rpar {
-					for {
-						args << p.parse_expression()!
-						if p.at().kind != .comma {
-							break
-						}
-						p.pos++
-					}
-				}
-				p.take(.rpar)!
-				fallible := p.at().kind == .not
-				if fallible { p.pos++ }
-				return &VmlExpr{ fallible: fallible, kind: .call, value: token.text, line: token.line, column: token.column, args: args }
-			}
-			return &VmlExpr{
-				kind:   if token.kind == .number || token.text in ['true', 'false'] {
-					VmlExprKind.literal
-				} else {
-					VmlExprKind.path
-				}
-				value:  token.text
-				line:   token.line
-				column: token.column
-			}
-		}
-		.lsbr {
-			p.pos++
-			mut values := []&VmlExpr{}
-			for p.at().kind != .rsbr {
-				values << p.parse_expression()!
-				if p.at().kind != .comma { break }
-				p.pos++
-			}
-			p.take(.rsbr)!
-			return &VmlExpr{ kind: .array, args: values, line: token.line, column: token.column }
-		}
-		.lpar {
-			p.pos++
-			expr := p.parse_expression()!
-			p.take(.rpar)!
-			return expr
-		}
-		else {
-			return error('expected expression, got ${token.kind} (`${token.text}`) at line ${token.line}')
-		}
-	}
-}
-
-fn vml_interpolation_end(value string, start int) ?int {
-	mut quote := u8(0)
-	mut escaped := false
-	mut nested_braces := 0
-	for i := start; i < value.len; i++ {
-		ch := value[i]
-		if quote != 0 {
-			if escaped {
-				escaped = false
-			} else if ch == `\\` {
-				escaped = true
-			} else if ch == quote {
-				quote = 0
-			}
-			continue
-		}
-		if ch == `"` || ch == `'` {
-			quote = ch
-		} else if ch == `{` {
-			nested_braces++
-		} else if ch == `}` {
-			if nested_braces == 0 {
-				return i
-			}
-			nested_braces--
-		}
-	}
-	return none
-}
-
-fn parse_vml_interpolation(token VmlToken) !&VmlExpr {
-	value := token.text
-	line := token.line
-	if !value.contains(r'${') {
-		return &VmlExpr{ kind: .literal, value: value, line: line, quoted: true }
-	}
-	mut parts := []VmlInterpolationPart{}
-	mut cursor := 0
-	for cursor < value.len {
-		start_relative := value[cursor..].index(r'${') or {
-			parts << VmlInterpolationPart{ text: value[cursor..] }
-			break
-		}
-		start := cursor + start_relative
-		if start > cursor {
-			parts << VmlInterpolationPart{ text: value[cursor..start] }
-		}
-		end := vml_interpolation_end(value, start + 2) or {
-			return error('unterminated interpolation at line ${line}')
-		}
-		fragment := value[start + 2..end]
-		mut tokens := tokenize_vml(fragment) or {
-			return error('${token.line}:${token.column}: invalid interpolation: ${err}')
-		}
-		mut line_starts := [0]
-		for offset, ch in fragment {
-			if ch == `\n` { line_starts << offset + 1 }
-		}
-		// Decoded escapes can introduce newlines that do not exist in the file.
-		// Map fragment tokens back to the original string bytes, including nested
-		// strings, before parsing their expressions.
-		for index, part_token in tokens {
-			location := token.string_locations[start + 2 + line_starts[part_token.line - 1] + part_token.column - 1]
-			mut nested_locations := []VmlLocation{cap: part_token.string_locations.len}
-			for nested in part_token.string_locations {
-				nested_locations << token.string_locations[start + 2 + line_starts[nested.line - 1] + nested.column - 1]
-			}
-			tokens[index] = VmlToken{ ...part_token, line: location.line, column: location.column, string_locations: nested_locations }
-		}
-		mut parser := VmlSourceParser{ tokens: tokens }
-		parts << VmlInterpolationPart{ expr: parser.parse_expression()! }
-		parser.take(.eof) or { return error('invalid interpolation at line ${line}: ${err}') }
-		cursor = end + 1
-	}
-	return &VmlExpr{ kind: .interpolation, line: line, parts: parts }
-}
-
-fn parse_vml_source(source string) !&VmlNode {
-	tokens := tokenize_vml(source)!
-	mut parser := VmlSourceParser{ tokens: tokens }
-	root := parser.parse_vml_document()!
-	parser.take(.eof)!
+fn parse_vml_source(source string) !&vml.Node {
+	root := vml.parse_source(source, vml_parse_config())!
 	validate_compiled_vml_visual(root, if root.tag == '__Component' {
 		vml_unknown_component_parent
 	} else {
@@ -736,7 +47,13 @@ fn parse_vml_source(source string) !&VmlNode {
 	return root
 }
 
-fn validate_compiled_vml_node(node &VmlNode) ! {
+// parse_compiled_vml_file parses a `$vml` document and its imports with the
+// shared grammar; each document is validated after its imports are expanded.
+fn parse_compiled_vml_file(path string) !&vml.Node {
+	return vml.parse_file(path, vml_parse_config())
+}
+
+fn validate_compiled_vml_node(node &vml.Node) ! {
 	if node.tag == '__Component' {
 		for child in node.children { validate_compiled_vml_node(child)! }
 		return
@@ -772,41 +89,15 @@ fn validate_compiled_vml_node(node &VmlNode) ! {
 				return error('${property.expr.source}:${property.expr.line}:${property.expr.column}: unsupported `${property.name}` on Repeater')
 			}
 		}
-		if vml_find_property(node, 'model') == none {
+		if vml.find_property(node, 'model') == none {
 			return error('${node.source}:${node.line}:${node.column}: Repeater requires `model`')
 		}
-		if vml_find_property(node, 'key') == none {
+		if vml.find_property(node, 'key') == none {
 			return error('${node.source}:${node.line}:${node.column}: Repeater requires a stable `key`')
 		}
 	}
 	for child in node.children {
 		validate_compiled_vml_node(child)!
-	}
-}
-
-fn vml_expr_text(expr &VmlExpr) string {
-	return match expr.kind {
-		.literal, .path { expr.value }
-		.call { expr.value + '(' + expr.args.map(vml_expr_text(it)).join(', ') + ')' }
-		.unary { expr.value + vml_expr_text(expr.left) }
-		.binary { '${vml_expr_text(expr.left)} ${expr.value} ${vml_expr_text(expr.right)}' }
-		.assignment { '${vml_expr_text(expr.left)} = ${vml_expr_text(expr.right)}' }
-		.block { '{' + expr.args.map(vml_expr_text(it)).join('; ') + '}' }
-		.array { '[' + expr.args.map(vml_expr_text(it)).join(', ') + ']' }
-		.conditional {
-			'${vml_expr_text(expr.left)} ? ${vml_expr_text(expr.right)} : ${vml_expr_text(expr.third)}'
-		}
-		.interpolation {
-			mut value := ''
-			for part in expr.parts {
-				value += if isnil(part.expr) {
-					part.text
-				} else {
-					r'${' + vml_expr_text(part.expr) + '}'
-				}
-			}
-			value
-		}
 	}
 }
 
@@ -840,7 +131,7 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 		p.record_diagnostic('VML file `${path}` does not exist', call_start)
 		return p.add_val_id(5, '')
 	}
-	root := parse_compiled_vml_file(path, '', []) or {
+	root := parse_compiled_vml_file(path) or {
 		p.record_vml_diagnostic(path, os.read_file(path) or { '' }, err.msg(), call_start)
 		return p.add_val_id(5, '')
 	}
@@ -863,7 +154,7 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 	mut compiler := VmlCompiler{
 		callback_captures: callback_captures
 		explicit_frame:    int(explicit_frame) >= 0
-		uses_app:          vml_node_uses_path(root, 'app')
+		uses_app:          vml.node_uses_path(root, 'app')
 		guard_prefix:      'vml_check_${source_file.name.hash()}_${call_start}'
 	}
 	generated := compiler.compile(root)
@@ -931,58 +222,6 @@ fn (mut p Parser) parse_vml_template_expr(call_start int) flat.NodeId {
 	return result
 }
 
-fn vml_node_uses_path(node &VmlNode, base string) bool {
-	for data in node.data { if vml_expr_uses_path(data.expr, base) { return true } }
-	for input in node.inputs {
-		if !isnil(input.default_value) && vml_expr_uses_path(input.default_value, base) {
-			return true
-		}
-	}
-	for function in node.functions {
-		for statement in function.body { if vml_expr_uses_path(statement, base) { return true } }
-	}
-	for statement in node.mount { if vml_expr_uses_path(statement, base) { return true } }
-	for statement in node.cleanup { if vml_expr_uses_path(statement, base) { return true } }
-	for statement in node.unmount { if vml_expr_uses_path(statement, base) { return true } }
-	for property in node.properties {
-		if vml_expr_uses_path(property.expr, base) {
-			return true
-		}
-	}
-	for child in node.children {
-		if vml_node_uses_path(child, base) {
-			return true
-		}
-	}
-	return false
-}
-
-fn vml_expr_uses_path(expr &VmlExpr, base string) bool {
-	if expr.kind in [.path, .call] && (expr.value == base || expr.value.starts_with(base + '.')) {
-		return true
-	}
-	if !isnil(expr.left) && vml_expr_uses_path(expr.left, base) {
-		return true
-	}
-	if !isnil(expr.right) && vml_expr_uses_path(expr.right, base) {
-		return true
-	}
-	if !isnil(expr.third) && vml_expr_uses_path(expr.third, base) {
-		return true
-	}
-	for arg in expr.args {
-		if vml_expr_uses_path(arg, base) {
-			return true
-		}
-	}
-	for part in expr.parts {
-		if !isnil(part.expr) && vml_expr_uses_path(part.expr, base) {
-			return true
-		}
-	}
-	return false
-}
-
 struct VmlNamedValue {
 	frame        string
 	frame_signal string
@@ -997,7 +236,7 @@ mut:
 	ids               map[string]VmlNamedValue
 	special           map[string]string
 	writable          map[string]string
-	event_parameters  map[string][]VmlParameter
+	event_parameters  map[string][]vml.Parameter
 	component_aliases []string
 	component         string
 }
@@ -1007,7 +246,7 @@ struct VmlGuard {
 	model_path string
 	name       string
 	array      bool
-	location   VmlLocation
+	location   vml.Location
 }
 
 struct VmlCompiler {
@@ -1021,21 +260,21 @@ mut:
 	emitted_child_effects map[string]bool
 	slot_scopes           map[string]VmlScope
 	out                   strings.Builder
-	property_positions    map[string]VmlProperty
+	property_positions    map[string]vml.Property
 	property_memos        map[string]string
 	guards                []VmlGuard
-	location              VmlLocation
-	locations             []VmlLocation
+	location              vml.Location
+	locations             []vml.Location
 }
 
-fn (mut c VmlCompiler) compile(root &VmlNode) string {
+fn (mut c VmlCompiler) compile(root &vml.Node) string {
 	c.out = strings.new_builder(4096)
-	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
+	c.location = vml.Location{ path: root.source, line: root.line, column: root.column }
 	if root.tag in ['Menu', 'MenuBar'] {
 		c.writeln('')
 		return c.compile_menus(root)
 	}
-	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
+	c.location = vml.Location{ path: root.source, line: root.line, column: root.column }
 	mut capture_names := c.callback_captures.clone()
 	if c.uses_app { capture_names.insert(0, 'mut app') }
 
@@ -1051,7 +290,7 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	c.compile_node(root, '0', 'vml_input_0', scope, '', .normal)
 	if !c.explicit_frame {
 		bounds_root := if root.tag == '__Component' { root.children[0] } else { root }
-		c.writeln('\tvml_element_0.compiled_node.follow_viewport(${vml_find_property(bounds_root, 'width') == none}, ${vml_find_property(bounds_root, 'height') == none})')
+		c.writeln('\tvml_element_0.compiled_node.follow_viewport(${vml.find_property(bounds_root, 'width') == none}, ${vml.find_property(bounds_root, 'height') == none})')
 	}
 	c.writeln('\tui2.validate_element_tree(vml_element_0) or { panic(' + vml_quote(root.source + ':' + root.line.str() + ': ') + ' + err.msg()) }')
 	c.writeln('\tmut vml_layout_tree := ui2.LayoutTree{}')
@@ -1062,8 +301,8 @@ fn (mut c VmlCompiler) compile(root &VmlNode) string {
 	body := c.out.str()
 	body_locations := c.locations.clone()
 	c.out = strings.new_builder(body.len + 4096)
-	c.locations = []VmlLocation{}
-	c.location = VmlLocation{ path: root.source, line: root.line, column: root.column }
+	c.locations = []vml.Location{}
+	c.location = vml.Location{ path: root.source, line: root.line, column: root.column }
 	c.writeln('')
 	c.writeln('(fn ${capture}(vml_template_frame ui2.Rect) ui2.Element {')
 	c.out.write_string(body)
@@ -1110,7 +349,7 @@ enum VmlExprUse {
 	color
 }
 
-fn vml_property_use(property VmlProperty) VmlExprUse {
+fn vml_property_use(property vml.Property) VmlExprUse {
 	if property.name == 'text' { return .text }
 	if use := vml_overlay_property_use(property.name) { return use }
 	if use := vml_visual_property_use(property.name) { return use }
@@ -1143,7 +382,7 @@ fn vml_property_use(property VmlProperty) VmlExprUse {
 	return .string_
 }
 
-fn vml_expr_is_string(expr &VmlExpr) bool {
+fn vml_expr_is_string(expr &vml.Expr) bool {
 	if expr.kind == .interpolation || (expr.kind == .literal && expr.quoted) {
 		return true
 	}
@@ -1182,7 +421,7 @@ fn (c &VmlCompiler) resolve_path(path string, scope VmlScope) (string, bool) {
 	return path, path.contains('.')
 }
 
-fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
+fn (c &VmlCompiler) expr(expr &vml.Expr, scope VmlScope, use VmlExprUse) string {
 	if use == .text {
 		if expr.kind == .conditional {
 			condition := c.expr(expr.left, scope, .bool_)
@@ -1297,36 +536,27 @@ fn (c &VmlCompiler) expr(expr &VmlExpr, scope VmlScope, use VmlExprUse) string {
 	}
 }
 
-fn vml_find_property(node &VmlNode, name string) ?VmlProperty {
-	for property in node.properties {
-		if property.name == name {
-			return property
-		}
-	}
-	return none
-}
-
 fn vml_prop(properties map[string]string, name string, default_ string) string {
 	return properties[name] or { default_ }
 }
 
-fn vml_property_is_geometry(property VmlProperty) bool {
+fn vml_property_is_geometry(property vml.Property) bool {
 	return property.name in ['x', 'y', 'width', 'height']
 }
 
-fn vml_order_properties_by_dependencies(properties []VmlProperty, node_id string) []VmlProperty {
+fn vml_order_properties_by_dependencies(properties []vml.Property, node_id string) []vml.Property {
 	mut remaining := properties.clone()
 	if node_id.len == 0 || remaining.len < 2 {
 		return remaining
 	}
-	mut ordered := []VmlProperty{cap: remaining.len}
+	mut ordered := []vml.Property{cap: remaining.len}
 	for remaining.len > 0 {
-		mut deferred := []VmlProperty{cap: remaining.len}
+		mut deferred := []vml.Property{cap: remaining.len}
 		for property in remaining {
 			mut has_pending_dependency := false
 			for candidate in remaining {
 				if candidate.name != property.name
-					&& vml_expr_uses_path(property.expr, '${node_id}.${candidate.name}') {
+					&& vml.expr_uses_path(property.expr, '${node_id}.${candidate.name}') {
 					has_pending_dependency = true
 					break
 				}
@@ -1348,13 +578,13 @@ fn vml_order_properties_by_dependencies(properties []VmlProperty, node_id string
 	return ordered
 }
 
-fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
+fn (mut c VmlCompiler) compile_node(node &vml.Node, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
 	if node.caller_content {
 		mut lexical := vml_clone_scope(c.slot_scopes[incoming.component] or { incoming })
 		owner := 'vml_slot_component_' + vml_var(path)
 		c.writeln('mut ${owner} := ${lexical.component}.slot_child(mut ${incoming.component}, ' + vml_quote(path) + ') or { panic(err) }')
 		lexical.component = owner
-		value := &VmlNode{ ...node, caller_content: false }
+		value := &vml.Node{ ...node, caller_content: false }
 		c.compile_node(value, path, input, lexical, default_key, placement)
 		return incoming
 	}
@@ -1364,10 +594,10 @@ fn (mut c VmlCompiler) compile_node(node &VmlNode, path string, input string, in
 	return c.compile_node_body(node, path, input, incoming, default_key, placement)
 }
 
-fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
+fn (mut c VmlCompiler) compile_node_body(node &vml.Node, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
 	suffix := vml_var(path)
 	measure_mode := placement in [.preferred, .width_preferred, .inherited_preferred]
-	c.location = VmlLocation{ path: node.source, line: node.line, column: node.column }
+	c.location = vml.Location{ path: node.source, line: node.line, column: node.column }
 	c.writeln('\t_ = ${input}')
 	mut scope := vml_clone_scope(incoming)
 	if node.imported {
@@ -1434,7 +664,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	visible_children := if container {
 		node.children.filter(it.tag !in ['MenuItem', 'Option'])
 	} else {
-		[]&VmlNode{}
+		[]&vml.Node{}
 	}
 	if container {
 		c.writeln('\tmut ${children} := []ui2.Element{cap: ${visible_children.len}}')
@@ -1480,7 +710,7 @@ fn (mut c VmlCompiler) compile_node_body(node &VmlNode, path string, input strin
 	return vml_node_output_scope(node, incoming, scope)
 }
 
-fn vml_node_output_scope(node &VmlNode, incoming VmlScope, scope VmlScope) VmlScope {
+fn vml_node_output_scope(node &vml.Node, incoming VmlScope, scope VmlScope) VmlScope {
 	if !node.imported { return scope }
 	mut exported := vml_clone_scope(incoming)
 	if node.id.len > 0 { exported.ids[node.id] = scope.ids[node.id] }
@@ -1508,10 +738,10 @@ fn vml_value(properties map[string]string, name string, alternative string, defa
 	return default_
 }
 
-fn vml_binding_for_event(node &VmlNode, event_name string) ?VmlProperty {
+fn vml_binding_for_event(node &vml.Node, event_name string) ?vml.Property {
 	for property in node.properties {
 		if !property.name.starts_with('bind.') { continue }
-		selected := if property.name == 'bind.active' && vml_find_property(node, 'on_active') != none {
+		selected := if property.name == 'bind.active' && vml.find_property(node, 'on_active') != none {
 			'on_active'
 		} else {
 			'on_change'
@@ -1560,13 +790,13 @@ fn (c &VmlCompiler) root_text_style(properties map[string]string) string {
 	return c.text_style(unstyled)
 }
 
-fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) string {
+fn (c &VmlCompiler) menu_value(node &vml.Node, suffix string, scope VmlScope) string {
 	menu_items := node.children.filter(it.tag == 'MenuItem')
 	if menu_items.len > 0 {
 		mut entries := []string{cap: menu_items.len}
 		for index, item in menu_items {
 			id := c.event_callback(item, 'on_click', scope)
-			text := if property := vml_find_property(item, 'text') {
+			text := if property := vml.find_property(item, 'text') {
 				c.property_effect_value(item, property, vml_content_suffix(suffix, item), scope)
 			} else {
 				"''"
@@ -1581,7 +811,7 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 			if option.tag != 'Option' {
 				continue
 			}
-			text := if property := vml_find_property(option, 'text') {
+			text := if property := vml.find_property(option, 'text') {
 				c.property_effect_value(option, property, vml_content_suffix(suffix, option), scope)
 			} else {
 				"''"
@@ -1593,13 +823,13 @@ fn (c &VmlCompiler) menu_value(node &VmlNode, suffix string, scope VmlScope) str
 	return '[]ui2.MenuEntry{}'
 }
 
-fn (c &VmlCompiler) option_values(node &VmlNode, suffix string, scope VmlScope) string {
+fn (c &VmlCompiler) option_values(node &vml.Node, suffix string, scope VmlScope) string {
 	mut values := []string{}
 	for option in node.children {
 		if option.tag != 'Option' {
 			continue
 		}
-		value := if property := vml_find_property(option, 'text') {
+		value := if property := vml.find_property(option, 'text') {
 			c.property_effect_value(option, property, vml_content_suffix(suffix, option), scope)
 		} else {
 			"''"
@@ -1613,7 +843,7 @@ fn vml_array_literal(elem_type string, values []string) string {
 	return if values.len == 0 { '[]${elem_type}{}' } else { '[${values.join(', ')}]' }
 }
 
-fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame string, children string, properties map[string]string, incoming_scope VmlScope, default_key string) {
+fn (mut c VmlCompiler) compile_element(node &vml.Node, suffix string, frame string, children string, properties map[string]string, incoming_scope VmlScope, default_key string) {
 	mut scope := vml_clone_scope(incoming_scope)
 	scope.special['__node_suffix'] = suffix
 	id := c.control_id(node, suffix, scope)
@@ -1722,7 +952,7 @@ fn (mut c VmlCompiler) compile_element(node &VmlNode, suffix string, frame strin
 	}
 }
 
-fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
+fn (mut c VmlCompiler) compile_text_input(node &vml.Node, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	method := if node.tag == 'TextArea' { 'text_area' } else { 'text_input' }
 	config := if node.tag == 'TextArea' { 'TextAreaConfig' } else { 'TextInputConfig' }
 	c.writeln('\tvml_text_input_${suffix} := ui2.${method}(ui2.${config}{')
@@ -1742,7 +972,7 @@ fn (mut c VmlCompiler) compile_text_input(node &VmlNode, suffix string, frame st
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, properties map[string]string, scope VmlScope, role_default string, label_default string, value_default string) {
+fn (mut c VmlCompiler) write_common_fields(node &vml.Node, suffix string, properties map[string]string, scope VmlScope, role_default string, label_default string, value_default string) {
 	c.writeln('\t\tinteraction_style: ${vml_prop(properties, '@interaction_style', c.interaction_style(properties))}')
 	c.writeln('\t\tbutton_behavior: ${vml_prop(properties, 'button_behavior', 'false')}')
 	c.writeln('\t\tmenu: ${vml_prop(properties, '@menu', c.menu_value(node, suffix, scope))}')
@@ -1777,7 +1007,7 @@ fn (mut c VmlCompiler) write_common_fields(node &VmlNode, suffix string, propert
 	c.writeln('\t\tpadding_left: ${vml_prop(properties, '@padding_left', 'f64(12)')}')
 }
 
-fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
+fn (mut c VmlCompiler) compile_progress_bar(node &vml.Node, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	base := 'vml_progress_${suffix}'
 	c.writeln('\t${base}_config := ui2.ProgressBarConfig{')
 	c.writeln('\t\tid: ${c.control_id(node, suffix, scope)}')
@@ -1802,7 +1032,7 @@ fn (mut c VmlCompiler) compile_progress_bar(node &VmlNode, suffix string, frame 
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) compile_slider(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
+fn (mut c VmlCompiler) compile_slider(node &vml.Node, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	base := 'vml_slider_${suffix}'
 	style := '${base}_style'
 	orientation_value := '${base}_orientation'
@@ -1835,7 +1065,7 @@ fn (mut c VmlCompiler) compile_slider(node &VmlNode, suffix string, frame string
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) compile_switch(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
+fn (mut c VmlCompiler) compile_switch(node &vml.Node, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	base := 'vml_switch_${suffix}'
 	style := '${base}_style'
 	c.writeln('\t${style} := ui2.SwitchStyle{')
@@ -1859,7 +1089,7 @@ fn (mut c VmlCompiler) compile_switch(node &VmlNode, suffix string, frame string
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) compile_spinner(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
+fn (mut c VmlCompiler) compile_spinner(node &vml.Node, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	base := 'vml_spinner_${suffix}'
 	box := '${base}_box'
 	text_style := '${base}_text_style'
@@ -1882,7 +1112,7 @@ fn (mut c VmlCompiler) compile_spinner(node &VmlNode, suffix string, frame strin
 	c.writeln('\t}')
 }
 
-fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
+fn (mut c VmlCompiler) compile_message_box(node &vml.Node, suffix string, frame string, properties map[string]string, scope VmlScope, key string, action string) {
 	mut actions := []string{}
 	for child_index, child in node.children {
 		if child.tag != 'Button' {
@@ -1898,7 +1128,7 @@ fn (mut c VmlCompiler) compile_message_box(node &VmlNode, suffix string, frame s
 			c.event_references[event_key] = reference
 			reference
 		}
-		text := if property := vml_find_property(child, 'text') {
+		text := if property := vml.find_property(child, 'text') {
 			c.expr(property.expr, scope, .text)
 		} else {
 			"''"

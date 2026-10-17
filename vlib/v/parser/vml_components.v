@@ -1,241 +1,8 @@
 module parser
 
-struct VmlParameter {
-	name string
-	typ  string
-}
+import vml
 
-struct VmlInput {
-	name          string
-	typ           string
-	line          int
-	column        int
-	bindable      bool
-	parameters    []VmlParameter
-	default_value &VmlExpr = unsafe { nil }
-}
-
-struct VmlData {
-	name     string
-	computed bool
-	expr     &VmlExpr
-}
-
-struct VmlFunction {
-	name       string
-	parameters []VmlParameter
-mut:
-	body []&VmlExpr
-}
-
-fn (mut p VmlSourceParser) parse_vml_type() !string {
-	mut prefix := ''
-	for p.at().kind == .lsbr {
-		p.pos++
-		p.take(.rsbr)!
-		prefix += '[]'
-	}
-	return prefix + p.take(.name)!.text
-}
-
-fn (mut p VmlSourceParser) parse_vml_parameters() ![]VmlParameter {
-	p.take(.lpar)!
-	mut parameters := []VmlParameter{}
-	for p.at().kind != .rpar {
-		name := p.take(.name)!
-		if parameters.any(it.name == name.text) {
-			return error('duplicate callback parameter `${name.text}`')
-		}
-		parameters << VmlParameter{ name: name.text, typ: p.parse_vml_type()! }
-		if p.at().kind != .comma { break }
-		p.pos++
-	}
-	p.take(.rpar)!
-	return parameters
-}
-
-fn (mut p VmlSourceParser) parse_vml_component_document() !&VmlNode {
-	if p.at().text != 'component' { return p.parse_node() }
-	token := p.take(.name)!
-	name := p.take(.name)!
-	mut component := &VmlNode{ tag: '__Component', component_name: name.text, line: token.line, column: token.column }
-	p.take(.lpar)!
-	for p.at().kind != .rpar {
-		mut bindable := false
-		if p.at().text == 'bind' {
-			p.pos++
-			bindable = true
-		}
-		input_name := p.take(.name)!
-		typ := p.parse_vml_type()!
-		mut parameters := []VmlParameter{}
-		if typ == 'event' { parameters = p.parse_vml_parameters()! }
-		mut value := unsafe { nil }
-		if p.at().kind == .assign {
-			p.pos++
-			value = p.parse_expression()!
-		}
-		if typ == 'slot' && (bindable || !isnil(value)) {
-			return error('slots cannot be bindable or have default values')
-		}
-		if typ == 'event' && (bindable || !isnil(value)) {
-			return error('events cannot be bindable or have default values')
-		}
-		component.inputs << VmlInput{ name: input_name.text, typ: typ, line: input_name.line, column: input_name.column, bindable: bindable, parameters: parameters, default_value: value }
-		if p.at().kind != .comma { break }
-		p.pos++
-	}
-	p.take(.rpar)!
-	p.take(.lbrace)!
-	for p.at().kind !in [.rbrace, .eof] {
-		if p.at().text == 'style' {
-			component.styles << p.parse_vml_style()!
-		} else if p.at().text in ['state', 'computed'] {
-			kind := p.take(.name)!
-			data_name := p.take(.name)!
-			p.take(.declare)!
-			component.data << VmlData{ name: data_name.text, computed: kind.text == 'computed', expr: p.parse_expression()! }
-		} else if p.at().text == 'ref' {
-			p.pos++
-			ref_name := p.take(.name)!
-			component.refs << VmlParameter{ name: ref_name.text, typ: p.take(.name)!.text }
-		} else if p.at().text == 'fn' {
-			p.pos++
-			fn_name := p.take(.name)!
-			parameters := p.parse_vml_parameters()!
-			body := p.parse_handler()!
-			if body.kind != .block { return error('local functions require a body') }
-			component.functions << VmlFunction{ name: fn_name.text, parameters: parameters, body: body.args }
-		} else if p.at().text in ['mount', 'unmount', 'cleanup'] {
-			kind := p.take(.name)!
-			body := p.parse_handler()!
-			if body.kind != .block { return error('lifecycle declarations require a body') }
-			match kind.text {
-				'mount' { component.mount << body.args }
-				'unmount' { component.unmount << body.args }
-				else { component.cleanup << body.args }
-			}
-		} else {
-			component.children << p.parse_node()!
-		}
-		if p.at().kind == .semicolon { p.pos++ }
-	}
-	p.take(.rbrace)!
-	if component.children.len != 1 {
-		return error('component `${name.text}` requires exactly one root element')
-	}
-	validate_vml_component_names(component)!
-	return component
-}
-
-fn validate_vml_component_names(node &VmlNode) ! {
-	mut names := map[string]bool{}
-	for name in ['app', 'color', 'spacing', 'radius', 'typography'] { names[name] = true }
-	for input in node.inputs {
-		if input.name in names {
-			return error('duplicate/reserved component member `${input.name}`')
-		}
-		names[input.name] = true
-	}
-	for style in node.styles {
-		if style.name in names {
-			return error('duplicate/reserved component member `${style.name}`')
-		}
-		names[style.name] = true
-	}
-	for data in node.data {
-		if data.name in names { return error('duplicate/reserved component member `${data.name}`') }
-		names[data.name] = true
-	}
-	for function in node.functions {
-		if function.name in names {
-			return error('duplicate/reserved component member `${function.name}`')
-		}
-		names[function.name] = true
-	}
-	for reference in node.refs {
-		if reference.name in names {
-			return error('ref name collides with component member `${reference.name}`')
-		}
-		names[reference.name] = true
-	}
-	for data in node.data {
-		if data.computed {
-			for input in node.inputs {
-				if input.typ == 'event' && vml_expr_uses_path(data.expr, input.name) {
-					return error('computed `${data.name}` cannot emit events')
-				}
-			}
-			for function in node.functions {
-				if vml_expr_uses_path(data.expr, function.name) {
-					return error('computed `${data.name}` cannot call a handler')
-				}
-			}
-		}
-	}
-	validate_vml_component_ids(node.children[0], mut names)!
-	validate_vml_component_calls(node, node)!
-	for function in node.functions {
-		mut parameters := map[string]bool{}
-		for parameter in function.parameters {
-			if parameter.name in names || parameter.name in parameters {
-				return error('local function parameter `${parameter.name}` collides with a component member or id')
-			}
-			parameters[parameter.name] = true
-		}
-	}
-}
-
-fn validate_vml_component_calls(node &VmlNode, owner &VmlNode) ! {
-	for data in node.data { validate_vml_local_call_arity(data.expr, owner)! }
-	for function in node.functions {
-		for statement in function.body { validate_vml_local_call_arity(statement, owner)! }
-	}
-	for statement in node.mount { validate_vml_local_call_arity(statement, owner)! }
-	for statement in node.unmount { validate_vml_local_call_arity(statement, owner)! }
-	for statement in node.cleanup { validate_vml_local_call_arity(statement, owner)! }
-	for property in node.properties { validate_vml_local_call_arity(property.expr, owner)! }
-	for child in node.children {
-		if child.tag != '__Component' { validate_vml_component_calls(child, owner)! }
-	}
-}
-
-fn validate_vml_local_call_arity(expr &VmlExpr, owner &VmlNode) ! {
-	if expr.kind == .call {
-		for function in owner.functions {
-			if expr.value == function.name && expr.args.len != function.parameters.len {
-				return error('${expr.source}:${expr.line}:${expr.column}: local function `${expr.value}` requires ${function.parameters.len} arguments, received ${expr.args.len}')
-			}
-		}
-		for input in owner.inputs {
-			if input.typ == 'event' && expr.value == input.name && expr.args.len != input.parameters.len {
-				return error('${expr.source}:${expr.line}:${expr.column}: event `${expr.value}` requires ${input.parameters.len} payload arguments, received ${expr.args.len}')
-			}
-		}
-	}
-	if !isnil(expr.left) { validate_vml_local_call_arity(expr.left, owner)! }
-	if !isnil(expr.right) { validate_vml_local_call_arity(expr.right, owner)! }
-	if !isnil(expr.third) { validate_vml_local_call_arity(expr.third, owner)! }
-	for argument in expr.args { validate_vml_local_call_arity(argument, owner)! }
-	for part in expr.parts {
-		if !isnil(part.expr) { validate_vml_local_call_arity(part.expr, owner)! }
-	}
-}
-
-fn validate_vml_component_ids(node &VmlNode, mut names map[string]bool) ! {
-	if node.id.len > 0 {
-		if node.id in names {
-			return error('element id `${node.id}` collides with a component member or id')
-		}
-		names[node.id] = true
-	}
-	for child in node.children {
-		if child.tag == '__Component' { continue }
-		validate_vml_component_ids(child, mut names)!
-	}
-}
-
-fn vml_external_callbacks(node &VmlNode) []string {
+fn vml_external_callbacks(node &vml.Node) []string {
 	mut result := []string{}
 	for property in node.properties {
 		if property.name.starts_with('on_') && property.expr.kind == .path && !property.expr.value.contains('.') && property.expr.value !in result {
@@ -250,7 +17,7 @@ fn vml_external_callbacks(node &VmlNode) []string {
 	return result
 }
 
-fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
+fn (mut c VmlCompiler) compile_component(node &vml.Node, path string, input string, incoming VmlScope, default_key string, placement VmlPlacement) VmlScope {
 	suffix := vml_var(path)
 	for property in node.properties {
 		if property.name in ['id', 'key', 'ref'] || property.name in vml_flex_child_properties || property.name in [
@@ -281,13 +48,13 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 	c.prepare_style_tokens(node, owner)
 	mut scope := VmlScope{ component: owner, special: map[string]string{}, writable: map[string]string{}, ids: map[string]VmlNamedValue{} }
 	for parameter in node.inputs {
-		c.location = VmlLocation{ path: node.source, line: parameter.line, column: parameter.column }
+		c.location = vml.Location{ path: node.source, line: parameter.line, column: parameter.column }
 		if parameter.typ == 'slot' { continue }
 		if parameter.typ == 'event' {
 			variable := 'vml_event_${suffix}_${parameter.name}'
 			signature := parameter.parameters.map('${it.name} ${it.typ}').join(', ')
 			payload_args := parameter.parameters.map(it.name).join(', ')
-			action := vml_find_property(node, 'on_' + parameter.name)
+			action := vml.find_property(node, 'on_' + parameter.name)
 			if handler := action {
 				value := c.expr(handler.expr, incoming, .raw)
 				mut captures := vml_callback_captures(handler.expr, incoming)
@@ -318,8 +85,8 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			scope.event_parameters[parameter.name] = parameter.parameters
 			continue
 		}
-		argument := vml_find_property(node, parameter.name)
-		binding := vml_find_property(node, 'bind.' + parameter.name)
+		argument := vml.find_property(node, parameter.name)
+		binding := vml.find_property(node, 'bind.' + parameter.name)
 		if argument != none && binding != none {
 			c.writeln("$compile_error('component input cannot have both value and bind connection')")
 		}
@@ -335,9 +102,9 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			continue
 		}
 		if property := binding {
-			c.location = VmlLocation{ path: chosen.source, line: property.line, column: property.column }
+			c.location = vml.Location{ path: chosen.source, line: property.line, column: property.column }
 		} else if property := argument {
-			c.location = VmlLocation{ path: chosen.source, line: property.line, column: property.column }
+			c.location = vml.Location{ path: chosen.source, line: property.line, column: property.column }
 		}
 		value := if parameter.typ == 'ui2.StylePatch' {
 			c.style_expr(chosen, node, if argument != none || binding != none {
@@ -354,7 +121,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		if vml_style_uses_theme(chosen) { input_candidates << 'mut ' + input_scope.component }
 		mut input_captures := vml_used_captures(value, input_candidates)
 		if argument != none || binding != none {
-			app_dependency := vml_expr_uses_path(chosen, 'app')
+			app_dependency := vml.expr_uses_path(chosen, 'app')
 			if app_dependency { input_captures << 'mut ' + incoming.component }
 			dependency := if app_dependency { incoming.component + '.watch_app()!; ' } else { '' }
 			memo := variable + '_memo'
@@ -386,7 +153,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			scope.writable[parameter.name] = setter
 		}
 	}
-	c.location = VmlLocation{ path: node.source, line: node.line, column: node.column }
+	c.location = vml.Location{ path: node.source, line: node.line, column: node.column }
 	for reference in node.refs {
 		variable := 'vml_ref_${suffix}_${reference.name}'
 		c.writeln('\tmut ${variable} := ${owner}.ref[ui2.Vml${reference.typ}](' + vml_quote(reference.name) + ') or { panic(err) }')
@@ -398,7 +165,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		value := c.expr(data.expr, scope, .raw)
 		if data.computed {
 			mut captures := vml_callback_captures(data.expr, scope)
-			app_dependency := vml_expr_uses_path(data.expr, 'app')
+			app_dependency := vml.expr_uses_path(data.expr, 'app')
 			if app_dependency && ('mut ' + owner) !in captures { captures << 'mut ' + owner }
 			dependency := if app_dependency { owner + '.watch_app()!; ' } else { '' }
 			body := '${dependency} return ${value}'
@@ -418,7 +185,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 		for parameter in function.parameters {
 			function_scope.special[parameter.name] = parameter.name
 		}
-		body := &VmlExpr{ kind: .block, args: function.body }
+		body := &vml.Expr{ kind: .block, args: function.body }
 		c.write_app_action_checks(body)
 		action := c.compile_action(body, function_scope)
 		captures := vml_used_captures(action, vml_callback_captures(body, scope))
@@ -433,7 +200,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			else { node.cleanup }
 		}
 		if statements.len == 0 { continue }
-		body := &VmlExpr{ kind: .block, args: statements }
+		body := &vml.Expr{ kind: .block, args: statements }
 		c.write_app_action_checks(body)
 		action := c.compile_action(body, scope)
 		captures := vml_used_captures(action, vml_callback_captures(body, scope))
@@ -443,7 +210,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 			''
 		} + ' { ' + action + ' }) or { panic(err) }')
 	}
-	key := if property := vml_find_property(node, 'key') {
+	key := if property := vml.find_property(node, 'key') {
 		c.visual_property_value(node, property, property.expr, incoming)
 	} else {
 		default_key
@@ -451,7 +218,7 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 	// Invocation keys belong to the actual root, before it is retained. A nested
 	// component forwards this same key instead of exposing its private root key.
 	root := if key.len > 0 {
-		&VmlNode{ ...node.children[0], properties: node.children[0].properties.filter(it.name != 'key') }
+		&vml.Node{ ...node.children[0], properties: node.children[0].properties.filter(it.name != 'key') }
 	} else {
 		node.children[0]
 	}
@@ -460,8 +227,8 @@ fn (mut c VmlCompiler) compile_component(node &VmlNode, path string, input strin
 	c.writeln('\t_ = vml_node_${suffix}')
 	c.writeln('\tvml_element_${suffix} := vml_element_${suffix}_root')
 	c.writeln('\t_ = vml_element_${suffix}')
-	if reference := vml_find_property(node, 'ref') {
-		c.location = VmlLocation{ path: reference.expr.source, line: reference.line, column: reference.column }
+	if reference := vml.find_property(node, 'ref') {
+		c.location = vml.Location{ path: reference.expr.source, line: reference.line, column: reference.column }
 		mut control := root
 		for control.tag == '__Component' { control = control.children[0] }
 		ref_type := incoming.special['__ref_' + reference.expr.value] or { '' }
@@ -483,7 +250,7 @@ fn (c &VmlCompiler) compile_write(target string, value string, scope VmlScope) s
 	return '$compile_error(' + vml_quote('VML target `${target}` is read-only or unknown; use state or an explicit bind connection') + ')'
 }
 
-fn (c &VmlCompiler) compile_action(expr &VmlExpr, scope VmlScope) string {
+fn (c &VmlCompiler) compile_action(expr &vml.Expr, scope VmlScope) string {
 	if expr.kind == .block { return expr.args.map(c.compile_action(it, scope)).join('\n') }
 	if expr.kind == .assignment {
 		return c.compile_write(expr.left.value, c.expr(expr.right, scope, .raw), scope)
@@ -509,7 +276,7 @@ fn (c &VmlCompiler) compile_action(expr &VmlExpr, scope VmlScope) string {
 
 // Payload temporaries validate exact types without losing V's contextual enum
 // literals or empty arrays. Expressions still execute once, inside the action.
-fn (c &VmlCompiler) event_payload_value(expr &VmlExpr, expected string, scope VmlScope) string {
+fn (c &VmlCompiler) event_payload_value(expr &vml.Expr, expected string, scope VmlScope) string {
 	if expr.kind == .path && expr.value.starts_with('.') { return expected + expr.value }
 	if expr.kind == .conditional {
 		return '(if ' + c.expr(expr.left, scope, .bool_) + ' { ' + c.event_payload_value(expr.right, expected, scope) + ' } else { ' + c.event_payload_value(expr.third, expected, scope) + ' })'
@@ -520,16 +287,16 @@ fn (c &VmlCompiler) event_payload_value(expr &VmlExpr, expected string, scope Vm
 	return c.expr(expr, scope, .raw)
 }
 
-fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlScope, placement VmlPlacement) {
+fn (mut c VmlCompiler) retain_element(node &vml.Node, suffix string, scope VmlScope, placement VmlPlacement) {
 	owner := scope.component
 	variable := 'vml_node_${suffix}'
 	declaration := 'vml_declaration_${suffix}'
-	authored_width := vml_find_property(node, 'width') != none
-	authored_height := vml_find_property(node, 'height') != none
+	authored_width := vml.find_property(node, 'width') != none
+	authored_height := vml.find_property(node, 'height') != none
 	inherited := placement in [.normal, .inherited_preferred]
 	c.writeln('\tmut ${variable} := ${owner}.element(${declaration}, identity: ${c.node_identity(node, suffix, scope)}, authored_width: ${authored_width}, authored_height: ${authored_height}, inherit_width: ${inherited && !authored_width}, inherit_height: ${inherited && !authored_height}) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
 	c.writeln('\t${variable}.set_element_children(${declaration}.children) or { panic(' + vml_quote('${node.source}:${node.line}:${node.column}: ') + ' + err.msg()) }')
-	if property := vml_find_property(node, 'style') {
+	if property := vml.find_property(node, 'style') {
 		value := c.property_effect_value(node, property, suffix, scope)
 		mut captures := vml_callback_captures(property.expr, scope)
 		captures << c.property_memo_capture(suffix, 'style')
@@ -539,7 +306,7 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 	}
 	c.compile_structural_effect(node, suffix, scope)
 	c.compile_overlay_effect(node, suffix, scope)
-	if reference := vml_find_property(node, 'ref') {
+	if reference := vml.find_property(node, 'ref') {
 		ref_type := scope.special['__ref_' + reference.expr.value] or { '' }
 		if ref_type != vml_overlay_ref_tag(node.tag) {
 			c.writeln('$compile_error(' + vml_quote('ref `${reference.expr.value}` requires ${ref_type}; received ${node.tag}') + ')')
@@ -552,7 +319,7 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 			continue
 		}
 		if !vml_property_is_reactive(property, scope) { continue }
-		app_dependency := vml_expr_uses_path(property.expr, 'app')
+		app_dependency := vml.expr_uses_path(property.expr, 'app')
 		value := c.property_effect_value(node, property, suffix, scope)
 		patch := vml_property_patch(node, property.name, value) or { continue }
 		mut captures := vml_callback_captures(property.expr, scope)
@@ -571,30 +338,6 @@ fn (mut c VmlCompiler) retain_element(node &VmlNode, suffix string, scope VmlSco
 	c.compile_child_segments(node, suffix, scope)
 	c.writeln('\tvml_element_${suffix} := ${variable}.element()')
 	c.writeln('\t_ = vml_element_${suffix}')
-}
-
-fn expand_vml_slots(node &VmlNode, content map[string][]&VmlNode) !&VmlNode {
-	mut result := vml_clone_node(node)
-	mut children := []&VmlNode{}
-	for child in result.children {
-		if child.tag == 'Slot' {
-			name := if property := vml_find_property(child, 'name') {
-				property.expr.value
-			} else {
-				'content'
-			}
-			supplied := content[name] or { return error('unknown slot `${name}`') }
-			for value in supplied {
-				children << &VmlNode{ ...vml_clone_node(value), caller_content: true }
-			}
-		} else if child.tag == '__Component' {
-			children << child
-		} else {
-			children << expand_vml_slots(child, content)!
-		}
-	}
-	result.children = children
-	return result
 }
 
 // Parser workers merge local ASTs with shifted node ids. Inferred closure

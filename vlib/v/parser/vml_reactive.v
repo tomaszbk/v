@@ -3,10 +3,11 @@ module parser
 import v.pref
 import v.scanner
 import v.token
+import vml
 
 // Structural declarations register ordered child groups after their parent is
 // retained. ui2 owns reconciliation and per-key component lifetimes.
-fn (mut c VmlCompiler) compile_child_segments(node &VmlNode, suffix string, scope VmlScope) {
+fn (mut c VmlCompiler) compile_child_segments(node &vml.Node, suffix string, scope VmlScope) {
 	canonical := suffix.trim_string_right('_base')
 	if !node.children.any(it.tag == 'Repeater') { return }
 	parent := 'vml_node_' + suffix
@@ -23,7 +24,7 @@ fn (mut c VmlCompiler) compile_child_segments(node &VmlNode, suffix string, scop
 	}
 }
 
-fn (mut c VmlCompiler) write_child_layout(node &VmlNode, variable string, suffix string, parent string, scope VmlScope) {
+fn (mut c VmlCompiler) write_child_layout(node &vml.Node, variable string, suffix string, parent string, scope VmlScope) {
 	mut properties := map[string]string{}
 	for property in node.properties {
 		if property.name in vml_flex_child_properties || property.name in [
@@ -48,9 +49,9 @@ fn (mut c VmlCompiler) write_child_layout(node &VmlNode, variable string, suffix
 	c.write_child_layout_effects(node, variable, parent, scope)
 }
 
-fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent string, geometry_parent string, parent_tag string, incoming VmlScope) {
-	model := vml_find_property(node, 'model') or { return }
-	key := vml_find_property(node, 'key') or { return }
+fn (mut c VmlCompiler) compile_keyed_repeater(node &vml.Node, path string, parent string, geometry_parent string, parent_tag string, incoming VmlScope) {
+	model := vml.find_property(node, 'model') or { return }
+	key := vml.find_property(node, 'key') or { return }
 	suffix := vml_var(path)
 	collection := 'vml_collection_' + suffix
 	source := c.expr(model.expr, incoming, .raw)
@@ -138,7 +139,7 @@ fn (mut c VmlCompiler) compile_keyed_repeater(node &VmlNode, path string, parent
 	error_prefix := vml_quote('${node.source}:${node.line}:${node.column}: ')
 	c.writeln('}) or { panic(${error_prefix} + err.msg()) }')
 	mut captures := vml_callback_captures(model.expr, incoming)
-	dependency := if vml_expr_uses_path(model.expr, 'app') {
+	dependency := if vml.expr_uses_path(model.expr, 'app') {
 		if ('mut ' + incoming.component) !in captures { captures << 'mut ' + incoming.component }
 		incoming.component + '.watch_app()!; '
 	} else {
@@ -206,7 +207,7 @@ fn vml_used_captures(body string, candidates []string) []string {
 	return captures
 }
 
-fn (mut c VmlCompiler) write_child_layout_effects(node &VmlNode, variable string, parent string, scope VmlScope) {
+fn (mut c VmlCompiler) write_child_layout_effects(node &vml.Node, variable string, parent string, scope VmlScope) {
 	for property in node.properties {
 		name := property.name
 		if name !in vml_flex_child_properties && name !in ['column_span', 'row_span', 'align_self_x',
@@ -247,7 +248,7 @@ fn (mut c VmlCompiler) write_child_layout_effects(node &VmlNode, variable string
 		mut captures := vml_callback_captures(property.expr, scope)
 		captures << c.property_memo_capture(variable.trim_string_left('vml_node_'), property.name)
 		captures << 'mut ' + variable
-		app_dependency := vml_expr_uses_path(property.expr, 'app')
+		app_dependency := vml.expr_uses_path(property.expr, 'app')
 		if app_dependency { captures << 'mut ' + scope.component }
 		dependency := if app_dependency { scope.component + '.watch_app()!; ' } else { '' }
 		body := '${dependency} current := ${variable}.child_rule(); ${variable}.set_child_layout(ui2.VmlChildLayout{...current, ${kind}: ui2.${typ}{...current.${kind}, ${field}: ${value}}})!'

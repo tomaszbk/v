@@ -70,10 +70,10 @@ fn test_vml_component_private_ids_do_not_leak_into_caller_layout_scope() {
 	os.write_file(component, 'component Box() { Absolute(id: "size") { View(width: size.width) } }')!
 	os.write_file(os.join_path(dir, 'host.vml'), 'import Box\ncomponent Host(size Size) { Column { Box {} View(width: size.width) } }')!
 	os.write_file(document, 'import Host\nScreen(id: "size") { Host(size: app.size) }')!
-	parse_compiled_vml_file(document, '', [])!
+	parse_compiled_vml_file(document)!
 	os.write_file(component, 'component Box() { Column(id: "root") { View(width: root.width) } }')!
 	os.write_file(document, 'import Box\nAbsolute { Box {} }')!
-	parse_compiled_vml_file(document, '', []) or {
+	parse_compiled_vml_file(document) or {
 		assert err.msg().contains('element geometry'), err.msg()
 		return
 	}
@@ -88,16 +88,16 @@ fn test_vml_slot_geometry_uses_the_author_ids_and_actual_parent_layout() {
 	document := os.join_path(dir, 'main.vml')
 	os.write_file(component, 'component Card(content slot) { Absolute { Slot {} } }')!
 	os.write_file(document, 'import Card\nScreen(id: "root") { Card { View(width: root.width) } }')!
-	parse_compiled_vml_file(document, '', [])!
+	parse_compiled_vml_file(document)!
 	// A member of the author's component remains data even when the receiving
 	// component has an element with the same local name.
 	os.write_file(component, 'component Card(content slot) { Column(id: "root") { Slot {} } }')!
 	os.write_file(os.join_path(dir, 'host.vml'), 'import Card\ncomponent Host(root Size) { Card { View(width: root.width) } }')!
 	os.write_file(document, 'import Host\nScreen { Host(root: app.size) }')!
-	parse_compiled_vml_file(document, '', [])!
+	parse_compiled_vml_file(document)!
 	os.write_file(component, 'component Card(content slot) { Column { Slot {} } }')!
 	os.write_file(document, 'import Card\nScreen(id: "root") { Card { View(width: root.width) } }')!
-	parse_compiled_vml_file(document, '', []) or {
+	parse_compiled_vml_file(document) or {
 		assert err.msg().contains('${os.real_path(document)}:2:34:'), err.msg()
 		assert err.msg().contains('element geometry'), err.msg()
 		return
@@ -112,7 +112,7 @@ fn test_component_invocation_geometry_exports_only_the_root_alias() ! {
 	os.write_file(os.join_path(dir, 'card.vml'), 'component Card() { View(id: "private", width: 100) { Label(id: "caption", text: private.width) } }')!
 	document := os.join_path(dir, 'main.vml')
 	os.write_file(document, 'import Card\nAbsolute { Card(id: "public") View(width: public.width) }')!
-	root := parse_compiled_vml_file(document, '', [])!
+	root := parse_compiled_vml_file(document)!
 	mut compiler := VmlCompiler{}
 	generated := compiler.compile(root)
 	assert generated.contains('(vml_node_0_0.frame() or { panic(err) }).width'), generated
@@ -121,7 +121,7 @@ fn test_component_invocation_geometry_exports_only_the_root_alias() ! {
 	assert 'public' in scope.ids && 'private' !in scope.ids && 'caption' !in scope.ids
 	for parent in ['Column', 'Row'] {
 		os.write_file(document, 'import Card\n${parent} { Card(id: "public") View(width: public.width) }')!
-		parse_compiled_vml_file(document, '', []) or {
+		parse_compiled_vml_file(document) or {
 			assert err.msg().contains('element geometry'), err.msg()
 			assert err.msg().contains('parent Absolute'), err.msg()
 			continue
@@ -138,7 +138,7 @@ fn test_component_invocation_ref_checks_the_real_nested_root_type() ! {
 	os.write_file(os.join_path(dir, 'nested.vml'), 'import Card\ncomponent Nested() { Card {} }')!
 	document := os.join_path(dir, 'main.vml')
 	os.write_file(document, 'import Nested\ncomponent Host() { ref target Button Absolute { Nested(ref: target) } }')!
-	root := parse_compiled_vml_file(document, '', [])!
+	root := parse_compiled_vml_file(document)!
 	mut compiler := VmlCompiler{}
 	generated := compiler.compile(root)
 	assert generated.contains('ref `target` requires Button; received View'), generated
@@ -155,11 +155,11 @@ fn test_imported_positioned_roots_validate_the_actual_invocation_parent() ! {
 	os.write_file(os.join_path(dir, 'nested.vml'), 'import Positioned\ncomponent Nested() { Positioned(x: 12, y: 13) }')!
 	document := os.join_path(dir, 'main.vml')
 	os.write_file(document, 'import Nested\nAbsolute { Nested {} }')!
-	parse_compiled_vml_file(document, '', [])!
+	parse_compiled_vml_file(document)!
 	for source in ['import Nested\nRow { Nested {} }', 'import Nested\nColumn { Nested {} }',
 		'import Nested\nNested {}', definition] {
 		os.write_file(document, source)!
-		parse_compiled_vml_file(document, '', []) or {
+		parse_compiled_vml_file(document) or {
 			assert err.msg().contains('x/y require a parent Absolute'), err.msg()
 			continue
 		}
@@ -168,7 +168,7 @@ fn test_imported_positioned_roots_validate_the_actual_invocation_parent() ! {
 	// Deferring the root never exempts an invalid descendant.
 	os.write_file(os.join_path(dir, 'positioned.vml'), 'component Positioned() { Column { View(x: 12) } }')!
 	os.write_file(document, 'import Positioned\nAbsolute { Positioned {} }')!
-	parse_compiled_vml_file(document, '', []) or {
+	parse_compiled_vml_file(document) or {
 		assert err.msg().contains('x/y require a parent Absolute'), err.msg()
 		return
 	}

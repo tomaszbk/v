@@ -1,8 +1,10 @@
 module parser
 
+import vml
+
 // Every dynamic presentation property patches its canonical ui2 field. The
 // runtime validates and publishes retained nodes; layout remains in ui2.
-fn vml_property_patch(node &VmlNode, name string, value string) ?string {
+fn vml_property_patch(node &vml.Node, name string, value string) ?string {
 	if node.tag == 'Slider' && name in ['background', 'color', 'value_track_color', 'thumb_color',
 		'track_width', 'thumb_size'] {
 		field := match name {
@@ -136,13 +138,13 @@ fn vml_property_patch(node &VmlNode, name string, value string) ?string {
 	return none
 }
 
-fn (mut c VmlCompiler) compile_structural_effect(node &VmlNode, suffix string, incoming VmlScope) {
+fn (mut c VmlCompiler) compile_structural_effect(node &vml.Node, suffix string, incoming VmlScope) {
 	if node.tag !in ['Accordion', 'AccordionItem', 'TabbedPanel', 'Tab', 'TreeView', 'TreeNode',
 		'ScreenManager', 'Screen', 'ManagedScreen', 'ScreenView', 'Carousel', 'ToggleButton',
 		'MessageBox', 'ProgressBar', 'Spinner'] {
 		return
 	}
-	if node.tag == 'Screen' && vml_find_property(node, 'name') == none { return }
+	if node.tag == 'Screen' && vml.find_property(node, 'name') == none { return }
 	variable := 'vml_node_' + suffix
 	sources := 'vml_children_' + suffix.trim_string_right('_base')
 	if node.tag !in ['MessageBox', 'ProgressBar', 'Spinner'] {
@@ -206,21 +208,21 @@ fn (mut c VmlCompiler) compile_structural_effect(node &VmlNode, suffix string, i
 	c.writeln('}) or { panic(err) }')
 }
 
-fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scope VmlScope) {
+fn (mut c VmlCompiler) compile_content_effect(node &vml.Node, suffix string, scope VmlScope) {
 	runs := node.children.filter(it.tag == 'Run')
 	menu := node.children.filter(it.tag in ['Option', 'MenuItem'])
 	if runs.len == 0 && menu.len == 0 { return }
-	mut expressions := []&VmlExpr{}
+	mut expressions := []&vml.Expr{}
 	for property in node.properties {
 		if property.name in vml_text_properties || property.name == 'style' {
 			expressions << property.expr
 		}
 	}
 	for child in runs { expressions << child.properties.map(it.expr) }
-	for child in menu { if title := vml_find_property(child, 'text') { expressions << title.expr } }
-	expression := &VmlExpr{ kind: .block, args: expressions }
+	for child in menu { if title := vml.find_property(child, 'text') { expressions << title.expr } }
+	expression := &vml.Expr{ kind: .block, args: expressions }
 	mut captures := vml_callback_captures(expression, scope)
-	app_dependency := vml_expr_uses_path(expression, 'app')
+	app_dependency := vml.expr_uses_path(expression, 'app')
 	if app_dependency { captures << 'mut ' + scope.component }
 	variable := 'vml_node_' + suffix
 	initial := 'vml_declaration_' + suffix
@@ -260,7 +262,7 @@ fn (mut c VmlCompiler) compile_content_effect(node &VmlNode, suffix string, scop
 	} else {
 		mut values := []string{}
 		for index, child in menu {
-			text := if property := vml_find_property(child, 'text') {
+			text := if property := vml.find_property(child, 'text') {
 				child_suffix := vml_content_suffix(suffix, child)
 				captures << c.property_memo_capture(child_suffix, property.name)
 				c.property_effect_value(child, property, child_suffix, scope)

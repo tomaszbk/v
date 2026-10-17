@@ -1,5 +1,7 @@
 module parser
 
+import vml
+
 const vml_overlay_properties = ['open', 'owner', 'anchor', 'point', 'placement', 'gap', 'margin',
 	'initial_focus', 'dismiss_on_escape', 'dismiss_on_outside', 'backdrop', 'backdrop_opacity',
 	'tooltip_delay']
@@ -8,8 +10,8 @@ fn vml_overlay_tag(tag string) bool {
 	return tag in ['Dialog', 'Popover', 'MenuOverlay', 'ContextMenu', 'Tooltip']
 }
 
-fn vml_has_overlay(node &VmlNode) bool {
-	return vml_overlay_tag(node.tag) || (node.tag == 'View' && vml_find_property(node, 'overlay') != none)
+fn vml_has_overlay(node &vml.Node) bool {
+	return vml_overlay_tag(node.tag) || (node.tag == 'View' && vml.find_property(node, 'overlay') != none)
 }
 
 fn vml_overlay_ref_tag(tag string) string {
@@ -18,11 +20,11 @@ fn vml_overlay_ref_tag(tag string) string {
 
 // Literal references name controls in the current component's lexical scope.
 // Values from V state or an opaque config already contain resolved public ids.
-fn vml_overlay_local_reference(property VmlProperty) bool {
+fn vml_overlay_local_reference(property vml.Property) bool {
 	return vml_overlay_local_reference_expr(property.name, property.expr)
 }
 
-fn vml_overlay_local_reference_expr(name string, expr &VmlExpr) bool {
+fn vml_overlay_local_reference_expr(name string, expr &vml.Expr) bool {
 	return name in ['anchor', 'owner', 'initial_focus']
 		&& expr.kind == .literal && expr.quoted && expr.value.len > 0
 }
@@ -30,7 +32,7 @@ fn vml_overlay_local_reference_expr(name string, expr &VmlExpr) bool {
 // A component invocation aliases its actual private root, whose public id is
 // available only after lowering the invocation. Ordinary local ids are known
 // from their author and may still be referenced before their declaration.
-fn vml_overlay_component_aliases(nodes []&VmlNode) []string {
+fn vml_overlay_component_aliases(nodes []&vml.Node) []string {
 	mut aliases := []string{}
 	for node in nodes {
 		if node.caller_content || node.tag == 'Repeater' { continue }
@@ -43,7 +45,7 @@ fn vml_overlay_component_aliases(nodes []&VmlNode) []string {
 	return aliases
 }
 
-fn validate_vml_overlay_component_alias(property VmlProperty, expr &VmlExpr, scope VmlScope) ! {
+fn validate_vml_overlay_component_alias(property vml.Property, expr &vml.Expr, scope VmlScope) ! {
 	if vml_overlay_local_reference_expr(property.name, expr)
 		&& expr.value in scope.component_aliases && expr.value !in scope.ids {
 		return vml_visual_error(property, 'overlay `${property.name}` references component alias `${expr.value}` before its declaration; declare the component first or pass a resolved control id')
@@ -54,7 +56,7 @@ fn validate_vml_overlay_component_alias(property VmlProperty, expr &VmlExpr, sco
 	}
 }
 
-fn vml_overlay_reference_captures(name string, expr &VmlExpr, scope VmlScope) []string {
+fn vml_overlay_reference_captures(name string, expr &vml.Expr, scope VmlScope) []string {
 	if vml_overlay_local_reference_expr(name, expr) {
 		if named := scope.ids[expr.value] {
 			if named.frame_node.len > 0 { return [named.frame_node] }
@@ -93,13 +95,13 @@ fn vml_overlay_typed_value(name string, value string) ?string {
 	}
 }
 
-fn vml_overlay_effect_property(node &VmlNode, name string) bool {
+fn vml_overlay_effect_property(node &vml.Node, name string) bool {
 	if !vml_has_overlay(node) { return false }
 	return name in ['hidden', 'accessibility_role', 'overlay']
 		|| (vml_overlay_tag(node.tag) && name in vml_overlay_properties)
 }
 
-fn (c &VmlCompiler) overlay_config(node &VmlNode, suffix string, properties map[string]string) string {
+fn (c &VmlCompiler) overlay_config(node &vml.Node, suffix string, properties map[string]string) string {
 	mut callbacks := []string{}
 	for name in ['on_open', 'on_dismiss'] {
 		if callback := c.event_references[suffix + ':' + name] {
@@ -131,7 +133,7 @@ fn (c &VmlCompiler) overlay_config(node &VmlNode, suffix string, properties map[
 // Overlay updates patch the retained surface and keep its children mounted.
 // Reapply authored visibility instead of carrying a previous closed state into
 // with_overlay, so reopening restores the same focus/edit/lifecycle identity.
-fn (mut c VmlCompiler) compile_overlay_effect(node &VmlNode, suffix string, scope VmlScope) {
+fn (mut c VmlCompiler) compile_overlay_effect(node &vml.Node, suffix string, scope VmlScope) {
 	if !vml_has_overlay(node) { return }
 	properties := node.properties.filter(vml_overlay_effect_property(node, it.name))
 	if !properties.any(vml_property_is_reactive(it, scope)) { return }
@@ -143,7 +145,7 @@ fn (mut c VmlCompiler) compile_overlay_effect(node &VmlNode, suffix string, scop
 		values[property.name] = c.property_effect_value(node, property, suffix, scope)
 		captures << vml_callback_captures(property.expr, scope)
 		captures << c.property_memo_capture(suffix, property.name)
-		app_dependency = app_dependency || vml_expr_uses_path(property.expr, 'app')
+		app_dependency = app_dependency || vml.expr_uses_path(property.expr, 'app')
 	}
 	for name in ['on_open', 'on_dismiss'] {
 		if callback := c.event_references[suffix + ':' + name] { captures << callback }

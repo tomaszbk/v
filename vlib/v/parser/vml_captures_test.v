@@ -1,5 +1,7 @@
 module parser
 
+import vml
+
 fn test_switch_change_dispatches_both_callbacks_after_one_binding() {
 	root := parse_vml_source('Switch(bind.active: app.checked,
         on_active: first, on_change: second)')!
@@ -49,7 +51,7 @@ fn test_bound_input_readers_capture_getters_and_writers_capture_setters() {
         Button(text: copy, on_click: clear)
     }')!
 	invocation := parse_vml_source('TextInput(bind.text: app.name)')!
-	root := &VmlNode{ ...definition, properties: invocation.properties }
+	root := &vml.Node{ ...definition, properties: invocation.properties }
 	mut compiler := VmlCompiler{ uses_app: true }
 	generated := compiler.compile(root)
 	reader := generated.split_into_lines().filter(it.contains('.computed['))[0]

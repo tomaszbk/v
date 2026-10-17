@@ -196,7 +196,7 @@ fn test_overlay_component_aliases_require_declaration_before_literal_references(
 				'anchor: "button", ${property}: ${value}'
 			}
 			os.write_file(view, 'import Card\nView {\n    Popover(${arguments}) {}\n    Card(id: "card")\n    Button(id: "button")\n}')!
-			parse_compiled_vml_file(view, '', []) or {
+			parse_compiled_vml_file(view) or {
 				assert err.msg().contains('component alias `card` before its declaration'), err.msg()
 				assert err.msg().contains('${view}:3:'), err.msg()
 				continue
@@ -205,14 +205,14 @@ fn test_overlay_component_aliases_require_declaration_before_literal_references(
 		}
 	}
 	os.write_file(view, 'import Card\nView { Card(id: "card") Popover(anchor: "card") {} }')!
-	valid := parse_compiled_vml_file(view, '', [])!
+	valid := parse_compiled_vml_file(view)!
 	mut compiler := VmlCompiler{}
 	generated := compiler.compile(valid)
 	assert generated.contains('ui2.Element{text: vml_node_0_0.element().id}.text'), generated
 	os.write_file(view, 'View { Popover(anchor: "button", initial_focus: "first") { Button(id: "first") } Button(id: "button") }')!
-	parse_compiled_vml_file(view, '', [])!
+	parse_compiled_vml_file(view)!
 	os.write_file(view, 'import Card\nView { Repeater(model: app.items, key: item.id) { Popover(anchor: "card") {} Card(id: "card") } }')!
-	parse_compiled_vml_file(view, '', []) or {
+	parse_compiled_vml_file(view) or {
 		assert err.msg().contains('component alias `card` before its declaration'), err.msg()
 		return
 	}

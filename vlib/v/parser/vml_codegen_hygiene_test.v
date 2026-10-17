@@ -24,7 +24,7 @@ Screen {
         }
     }
 }')!
-	root := parse_compiled_vml_file(document, '', [])!
+	root := parse_compiled_vml_file(document)!
 	mut compiler := VmlCompiler{
 		uses_app:     true
 		guard_prefix: 'vml_check_hygiene'
