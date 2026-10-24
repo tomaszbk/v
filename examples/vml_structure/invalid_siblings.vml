@@ -1,4 +1,0 @@
-View() {
-    Button(key: "duplicate", text: "First")
-    Button(key: "duplicate", text: "Second")
-}

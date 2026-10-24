@@ -1,3 +1,0 @@
-Menu(text: app.ready ? app.count : "waiting") {
-    MenuItem(id: "amount", text: app.amount)
-}

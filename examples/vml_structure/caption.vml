@@ -1,3 +1,0 @@
-component Caption(text string = "Caption") {
-    Label(id: "caption", text: text, width: 280, height: 28)
-}

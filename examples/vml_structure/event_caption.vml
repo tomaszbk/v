@@ -1,3 +1,0 @@
-component EventCaption(text string) {
-    Label(id: "caption", text: text)
-}

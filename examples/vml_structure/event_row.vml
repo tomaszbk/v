@@ -1,7 +1,0 @@
-import EventCaption
-component EventRow(row_id int, caption string) {
-    View(id: "record") {
-        EventCaption(text: caption)
-        Button(id: "select", on_click: app.record(row_id + app.count))
-    }
-}
