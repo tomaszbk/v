@@ -6140,8 +6140,8 @@ fn (tc &TypeChecker) qualify_type_text_with_generic_params(typ string, generic_p
 // module's caller may stay bare when the module-qualified spelling does not
 // exist. Never use for registration.
 fn (tc &TypeChecker) qualify_resolution_type_text(typ string) string {
-	if typ.contains('typeof(__vml_expr_') {
-		resolved := tc.resolve_vml_inferred_type_text(typ)
+	if typ.contains('typeof(__expr_') {
+		resolved := tc.resolve_inferred_type_text(typ)
 		if resolved != typ { return tc.qualify_type_text_impl(resolved, true, []string{}) }
 	}
 	return tc.qualify_type_text_impl(typ, true, []string{})
@@ -6275,7 +6275,7 @@ pub fn (mut tc TypeChecker) disable_resolution_type_view_cache() {
 
 fn (tc &TypeChecker) qualify_type_text_impl(typ string, resolution bool, generic_params []string) string {
 	clean := trimmed_space(typ)
-	if clean.starts_with('typeof(__vml_expr_') { return clean }
+	if clean.starts_with('typeof(__expr_') { return clean }
 	if clean.len == 0 {
 		return typ
 	}
@@ -8673,11 +8673,11 @@ fn (mut tc TypeChecker) annotate_node(id flat.NodeId) {
 			continue
 		}
 		node := tc.a.nodes[int(current_id)]
-		if node.typ.contains('typeof(__vml_expr_') {
-			_ = tc.resolve_vml_inferred_type_text(node.typ)
+		if node.typ.contains('typeof(__expr_') {
+			_ = tc.resolve_inferred_type_text(node.typ)
 		}
-		if node.kind == .ident && node.value.contains('typeof(__vml_expr_') {
-			_ = tc.resolve_vml_inferred_type_text(node.value)
+		if node.kind == .ident && node.value.contains('typeof(__expr_') {
+			_ = tc.resolve_inferred_type_text(node.value)
 		}
 		match node.kind {
 			.decl_assign {

@@ -1073,11 +1073,11 @@ fn parse_merge_copy_thread(arg voidptr) voidptr {
 		if node.children_count != 0 {
 			node.children_start += child_shift
 		}
-		if node.typ.contains('typeof(__vml_expr_') {
-			node.typ = shift_vml_inferred_type(node.typ, node_shift)
+		if node.typ.contains('typeof(__expr_') {
+			node.typ = shift_inferred_type(node.typ, node_shift)
 		}
-		if node.kind == .ident && node.value.contains('typeof(__vml_expr_') {
-			node.value = shift_vml_inferred_type(node.value, node_shift)
+		if node.kind == .ident && node.value.contains('typeof(__expr_') {
+			node.value = shift_inferred_type(node.value, node_shift)
 		}
 		// Declaration attributes are linked by an internal directive whose value
 		// embeds the worker-local declaration id; relocate it like a child id.
@@ -1267,11 +1267,11 @@ fn (mut p Parser) merge_parsed_worker(mut w Parser, mut starts []int, chunk_star
 			w.a.nodes.len = 0
 		}
 		for k in nodes_old_len .. p.a.nodes.len {
-			if p.a.nodes[k].typ.contains('typeof(__vml_expr_') {
-				p.a.nodes[k].typ = shift_vml_inferred_type(p.a.nodes[k].typ, node_shift)
+			if p.a.nodes[k].typ.contains('typeof(__expr_') {
+				p.a.nodes[k].typ = shift_inferred_type(p.a.nodes[k].typ, node_shift)
 			}
-			if p.a.nodes[k].kind == .ident && p.a.nodes[k].value.contains('typeof(__vml_expr_') {
-				p.a.nodes[k].value = shift_vml_inferred_type(p.a.nodes[k].value, node_shift)
+			if p.a.nodes[k].kind == .ident && p.a.nodes[k].value.contains('typeof(__expr_') {
+				p.a.nodes[k].value = shift_inferred_type(p.a.nodes[k].value, node_shift)
 			}
 			// Declaration attributes are linked by an internal directive whose value embeds the
 			// worker-local declaration id. Relocate that id just like child NodeId references.

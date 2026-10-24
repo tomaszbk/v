@@ -132,20 +132,3 @@ fn (mut p Parser) record_vml_diagnostic(path string, source string, message stri
 		message: text
 	})
 }
-
-// Parser workers merge local ASTs with shifted node ids. Inferred closure
-// annotations hold expression links and relocate with the ordinary child links.
-fn shift_vml_inferred_type(typ string, shift int) string {
-	mut result := typ
-	mut offset := 0
-	marker := 'typeof(__vml_expr_'
-	for offset < result.len {
-		start := result[offset..].index(marker) or { break } + offset
-		end := result[start..].index(')') or { break } + start
-		value := result[start + marker.len..end].int()
-		replacement := marker + (value + shift).str() + ')'
-		result = result[..start] + replacement + result[end + 1..]
-		offset = start + replacement.len
-	}
-	return result
-}

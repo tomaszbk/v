@@ -2,7 +2,7 @@ module types
 
 import v.flat
 
-fn test_vml_inferred_type_witness_resolves_before_expression_annotation() {
+fn test_inferred_type_witness_resolves_before_expression_annotation() {
 	mut a := flat.FlatAst.new()
 	mut tc := TypeChecker.new(&a)
 	for kind, text in {
@@ -15,7 +15,7 @@ fn test_vml_inferred_type_witness_resolves_before_expression_annotation() {
 		if _ := tc.expr_type(value) {
 			assert false, 'the detached witness must not have been checked'
 		}
-		annotation := 'typeof(__vml_expr_${int(value)})'
+		annotation := 'typeof(__expr_${int(value)})'
 		expected := match kind {
 			.bool_literal { 'bool' }
 			.int_literal { 'int' }
@@ -24,15 +24,15 @@ fn test_vml_inferred_type_witness_resolves_before_expression_annotation() {
 		}
 		assert tc.parse_type(annotation).name() == expected
 		assert tc.parse_type('!${annotation}').name() == '!${expected}'
-		assert tc.resolve_vml_inferred_type_text('&Signal[${annotation}]') == '&Signal[${expected}]'
+		assert tc.resolve_inferred_type_text('&Signal[${annotation}]') == '&Signal[${expected}]'
 	}
 }
 
-fn test_vml_inferred_type_witness_uses_current_lexical_scope() {
+fn test_inferred_type_witness_uses_current_lexical_scope() {
 	mut a := flat.FlatAst.new()
 	mut tc := TypeChecker.new(&a)
 	value := a.add_node(flat.Node{ kind: .ident, value: 'value' })
-	annotation := 'typeof(__vml_expr_${int(value)})'
+	annotation := 'typeof(__expr_${int(value)})'
 	for payload in ['bool', 'string', 'int', 'f64'] {
 		tc.cur_scope = new_scope(tc.file_scope)
 		tc.cur_scope.insert('value', tc.parse_type(payload))

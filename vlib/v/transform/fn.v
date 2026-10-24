@@ -1178,8 +1178,8 @@ fn (t &Transformer) generic_call_type_arg_name(id flat.NodeId) string {
 	node := t.a.node(id)
 	match node.kind {
 		.ident {
-			if node.value.contains('typeof(__vml_expr_') {
-				return t.resolve_vml_inferred_type_text(node.value)
+			if node.value.contains('typeof(__expr_') {
+				return t.resolve_inferred_type_text(node.value)
 			}
 			// Map type arguments are represented by a synthetic `Map_key_value`
 			// identifier, while `typ` retains the source-level `map[key]value`.
@@ -3454,8 +3454,8 @@ fn (t &Transformer) decl_param_type_in_module(typ string, module_name string) st
 }
 
 fn (t &Transformer) decl_param_type_in_scope(typ string, module_name string, file_name string) string {
-	if typ.contains('typeof(__vml_expr_') {
-		resolved := t.resolve_vml_inferred_type_text(typ)
+	if typ.contains('typeof(__expr_') {
+		resolved := t.resolve_inferred_type_text(typ)
 		if resolved != typ { return t.decl_param_type_in_scope(resolved, module_name, file_name) }
 		return typ
 	}

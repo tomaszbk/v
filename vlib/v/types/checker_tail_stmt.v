@@ -15680,8 +15680,8 @@ pub fn type_text_contains_typeof(s string) bool {
 }
 
 pub fn (tc &TypeChecker) parse_type(typ string) Type {
-	if typ.contains('typeof(__vml_expr_') {
-		resolved := tc.resolve_vml_inferred_type_text(typ)
+	if typ.contains('typeof(__expr_') {
+		resolved := tc.resolve_inferred_type_text(typ)
 		if resolved != typ { return tc.parse_type(resolved) }
 	}
 	if tc.type_param_texts.len > 0 {
@@ -15742,7 +15742,7 @@ pub fn (tc &TypeChecker) parse_type(typ string) Type {
 pub fn (tc &TypeChecker) parse_type_ref(typ string, text_id u16) Type {
 	// Expression-derived VML types depend on lexical bindings, unlike ordinary
 	// canonical type texts. Collection may see them before those locals exist.
-	if typ.contains('typeof(__vml_expr_') { return tc.parse_type(typ) }
+	if typ.contains('typeof(__expr_') { return tc.parse_type(typ) }
 
 	if text_id == 0 || !tc.fast_type_text_refs || tc.type_cache == unsafe { nil }
 		|| !tc.type_cache.parse_enabled {
@@ -17020,11 +17020,11 @@ fn (tc &TypeChecker) parse_type_uncached(typ string) Type {
 
 // VML closure annotations can infer array items and nested generic payloads.
 // Resolve the expression before generic specialization records concrete names.
-pub fn (tc &TypeChecker) resolve_vml_inferred_type_text(typ string) string {
+pub fn (tc &TypeChecker) resolve_inferred_type_text(typ string) string {
 	mut result := typ
 	mut offset := 0
 	for offset < result.len {
-		start := result[offset..].index('typeof(__vml_expr_') or { break } + offset
+		start := result[offset..].index('typeof(__expr_') or { break } + offset
 		end := result[start..].index(')') or { break } + start + 1
 		annotation := result[start..end]
 		value := tc.type_from_typeof_type_text(annotation) or { break }
@@ -17043,8 +17043,8 @@ fn (tc &TypeChecker) type_from_typeof_type_text(typ string) ?Type {
 		return none
 	}
 	inner := trimmed_space(clean[7..clean.len - 1])
-	if inner.starts_with('__vml_expr_') {
-		expression_id := flat.NodeId(inner.all_after('__vml_expr_').int())
+	if inner.starts_with('__expr_') {
+		expression_id := flat.NodeId(inner.all_after('__expr_').int())
 		if int(expression_id) >= 0 && int(expression_id) < tc.a.nodes.len {
 			// Generated VML memo callbacks have ordinary inferred V expression
 			// types. Resolve in the lexical closure scope without evaluating it.
@@ -17052,7 +17052,7 @@ fn (tc &TypeChecker) type_from_typeof_type_text(typ string) ?Type {
 			// Parse in the current phase; never publish a scratch-arena Type into
 			// the original source-node cache from transform.
 			witness := tc.a.nodes[int(expression_id)].typ
-			if witness.len > 0 && !witness.contains('typeof(__vml_expr_') && witness !in [
+			if witness.len > 0 && !witness.contains('typeof(__expr_') && witness !in [
 				'array',
 				'unknown',
 				'void',
@@ -17062,7 +17062,7 @@ fn (tc &TypeChecker) type_from_typeof_type_text(typ string) ?Type {
 			// Type witnesses are detached from the generated executable body.
 			// Resolve them in the current lexical scope before a checked cache exists.
 			value := tc.expr_type(expression_id) or { tc.resolve_type(expression_id) }
-			if value is Void || value is Unknown || type_contains_unknown(value) || value.name().contains('typeof(__vml_expr_') {
+			if value is Void || value is Unknown || type_contains_unknown(value) || value.name().contains('typeof(__expr_') {
 				return none
 			}
 			return value

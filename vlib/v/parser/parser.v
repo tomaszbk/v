@@ -15422,7 +15422,7 @@ fn (mut p Parser) fn_literal() flat.NodeId {
 	ret_type_start := p.tok_pos
 	if p.tok != .lcbr && p.tok != .semicolon && p.tok != .eof {
 		if p.tok == .name || p.tok == .amp || p.tok == .question || p.tok == .not || p.tok == .lsbr
-			|| p.tok == .lpar || p.tok == .key_fn {
+			|| p.tok == .lpar || p.tok == .key_fn || p.tok == .key_typeof {
 			ret_type = p.parse_type_name()
 			p.record_inline_sum_return_type_diagnostic(ret_type, ret_type_start)
 		} else {
@@ -17259,16 +17259,18 @@ fn (mut p Parser) parse_type_name() string {
 		p.inside_array_init_type_expr = true
 		typeof_id := p.typeof_expr()
 		p.inside_array_init_type_expr = saved_type_context
-		if p.inside_vml_types {
-			typeof_node := p.a.node(typeof_id)
-			if typeof_node.children_count == 1 {
-				return 'typeof(__vml_expr_' + int(p.a.child(typeof_node, 0)).str() + ')'
-			}
-		}
 		if p.tok == .dot && p.peek() == .name && p.peek_lit in ['element_type', 'key_type',
 			'payload_type', 'pointee_type', 'return_type', 'value_type'] {
 			p.next()
 			p.next()
+		} else {
+			// `typeof(expr)` used as a type names the type of `expr`, resolved in the
+			// lexical scope the type is written in (like C++ `decltype`): code
+			// generators can declare closures and containers of inferred types.
+			typeof_node := p.a.node(typeof_id)
+			if typeof_node.children_count == 1 {
+				return 'typeof(__expr_' + int(p.a.child(typeof_node, 0)).str() + ')'
+			}
 		}
 		if p.tok_pos > start && p.tok_pos <= p.s.src.len {
 			return p.s.src[start..p.tok_pos].trim_space()

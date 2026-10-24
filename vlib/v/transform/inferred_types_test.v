@@ -3,23 +3,23 @@ module transform
 import v.flat
 import v.types
 
-fn vml_inference_test_node(mut a flat.FlatAst, kind flat.NodeKind, children []flat.NodeId) flat.NodeId {
+fn inference_test_node(mut a flat.FlatAst, kind flat.NodeKind, children []flat.NodeId) flat.NodeId {
 	start := a.children.len
 	for child in children { a.add_child(child) }
 	return a.add_node(flat.Node{ kind: kind, children_start: start, children_count: flat.child_count(children.len) })
 }
 
-fn test_vml_inferred_witness_uses_current_lexical_binding_for_each_specialization() {
+fn test_inferred_witness_uses_current_lexical_binding_for_each_specialization() {
 	mut a := flat.FlatAst.new()
 	mut tc := types.TypeChecker.new(&a)
 	mut t := new_transformer(mut a, &tc, map[string]bool{})
 	value := a.add_node(flat.Node{ kind: .ident, value: 'value' })
-	annotation := 'ui2.Signal[typeof(__vml_expr_${int(value)})]'
+	annotation := 'ui2.Signal[typeof(__expr_${int(value)})]'
 	t.scope_parallel_workers = true
 	t.scoped_base_nodes = a.nodes.len
 	for payload in ['int', 'f64', '[]ui2.RowData'] {
 		t.set_var_type('value', payload)
-		assert t.resolve_vml_inferred_type_text(annotation) == 'ui2.Signal[${payload}]'
+		assert t.resolve_inferred_type_text(annotation) == 'ui2.Signal[${payload}]'
 		assert a.node(value).typ == payload
 		assert value in t.scoped_owned_base_log
 	}
@@ -63,8 +63,8 @@ fn test_vml_immediately_called_builder_still_promotes_its_borrowed_application()
 	mut tc := types.TypeChecker.new(&a)
 	mut t := new_transformer(mut a, &tc, map[string]bool{})
 	capture := a.add_node(flat.Node{ kind: .ident, value: 'app', is_mut: true, op: .amp })
-	literal := vml_inference_test_node(mut a, .fn_literal, [capture])
-	call := vml_inference_test_node(mut a, .call, [literal])
+	literal := inference_test_node(mut a, .fn_literal, [capture])
+	call := inference_test_node(mut a, .call, [literal])
 	t.collect_mut_capture_sources(call)
 	assert t.escaping_amp_sources['app']
 }

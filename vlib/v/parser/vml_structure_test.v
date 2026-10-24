@@ -137,9 +137,3 @@ fn test_vml_guards_leave_the_caller_its_export_attribute() {
 		'build': 'view_build'
 	}
 }
-
-fn test_vml_inferred_types_relocate_every_nested_expression_link() {
-	assert shift_vml_inferred_type('![]&ui2.Signal[typeof(__vml_expr_12)]', 100) == '![]&ui2.Signal[typeof(__vml_expr_112)]'
-	assert shift_vml_inferred_type('fn(typeof(__vml_expr_1)) typeof(__vml_expr_22)', 10) == 'fn(typeof(__vml_expr_11)) typeof(__vml_expr_32)'
-	assert shift_vml_inferred_type('[]int', 10) == '[]int'
-}

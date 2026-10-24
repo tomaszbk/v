@@ -2,13 +2,13 @@ module transform
 
 import v.flat
 
-// Generated closure type annotations retain their ordinary V expression.
+// `typeof(expr)` type annotations retain their ordinary V expression.
 // Resolve them while transform owns the same lexical locals as that expression,
 // before recording a concrete callback signature or generic specialization.
-fn (t &Transformer) resolve_vml_inferred_type_text(typ string) string {
+fn (t &Transformer) resolve_inferred_type_text(typ string) string {
 	mut result := typ
 	mut offset := 0
-	marker := 'typeof(__vml_expr_'
+	marker := 'typeof(__expr_'
 	for offset < result.len {
 		start := result[offset..].index(marker) or { break } + offset
 		end := result[start..].index(')') or { break } + start + 1
