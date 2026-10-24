@@ -9,12 +9,12 @@ fn test_specialized_builder_borrows_locked_main_model_type() {
 	id := a.add_val(.ident, 'model')
 	mut tc := types.TypeChecker.new(&a)
 	mut transformer := new_transformer(mut a, &tc, map[string]bool{})
-	assert transformer.resolved_receiver_arg_compatible(id, 'main.App', '&App')
-	assert transformer.resolved_receiver_arg_compatible(id, '&main.App', 'App')
-	assert !transformer.resolved_receiver_arg_compatible(id, 'other.App', '&App')
-	assert !transformer.resolved_receiver_arg_compatible(id, 'main.App', '&other.App')
-	assert !transformer.resolved_receiver_arg_compatible(id, 'main.App', '&&App')
-	assert !transformer.resolved_receiver_arg_compatible(id, 'fn (mut App)', 'fn (App)')
+	assert transformer.resolved_receiver_arg_compatible(id, flat.source_type_id('main.App'), flat.source_type_id('&App'))
+	assert transformer.resolved_receiver_arg_compatible(id, flat.source_type_id('&main.App'), flat.source_type_id('App'))
+	assert !transformer.resolved_receiver_arg_compatible(id, flat.source_type_id('other.App'), flat.source_type_id('&App'))
+	assert !transformer.resolved_receiver_arg_compatible(id, flat.source_type_id('main.App'), flat.source_type_id('&other.App'))
+	assert !transformer.resolved_receiver_arg_compatible(id, flat.source_type_id('main.App'), flat.source_type_id('&&App'))
+	assert !transformer.resolved_receiver_arg_compatible(id, flat.source_type_id('fn (mut App)'), flat.source_type_id('fn (App)'))
 }
 
 fn test_scoped_batch_publishes_capture_context_through_worker() {
@@ -30,7 +30,7 @@ fn test_scoped_batch_publishes_capture_context_through_worker() {
 		mut batch := worker.fork_scoped_batch_worker(&a, batch_tc)
 		start := a.nodes.len
 		batch.add_fn_literal_capture_context('__vml_capture_Ctx', 'main', ['value'], {
-			'value': 'int'
+			'value': flat.source_type_id('int')
 		})
 		assert '__vml_capture_Ctx' !in worker_tc.structs
 		worker.absorb_scoped_batch(batch, unsafe { nil }, start)
@@ -67,10 +67,10 @@ fn test_parallel_vml_work_items_have_distinct_capture_names() {
 	assert second_name == '__anon_fn_work_200_0'
 	assert first_name != second_name
 	first.add_fn_literal_capture_context('${first_name}_Ctx', 'main', ['app'], {
-		'app': '&main.App'
+		'app': flat.source_type_id('&main.App')
 	})
 	second.add_fn_literal_capture_context('${second_name}_Ctx', 'main', ['row'], {
-		'row': 'int'
+		'row': flat.source_type_id('int')
 	})
 	master.merge_worker_used_fns(first)
 	master.merge_worker_used_fns(second)

@@ -18,7 +18,7 @@ fn vml_capture_batch_task(raw voidptr) voidptr {
 		mut batch := worker.fork_scoped_batch_worker(worker.a, batch_tc)
 		start := worker.a.nodes.len
 		batch.add_fn_literal_capture_context('__vml_lane_${arg.lane}_${index}_Ctx', 'main', ['value'], {
-			'value': 'int'
+			'value': flat.source_type_id('int')
 		})
 		worker.absorb_scoped_batch(batch, unsafe { nil }, start)
 	}

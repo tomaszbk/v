@@ -3,6 +3,7 @@ module c
 import os
 import v.cmdexec
 import v.flat
+import v.pref
 import v.types
 
 fn test_partial_c_closure_view_keeps_the_v_runtime_layout() {
@@ -84,6 +85,9 @@ fn main() {
 
 fn test_portable_native_helpers_precede_gc_runtime_redirects() {
 	mut g := FlatGen.new()
+	// The gc pthread redirects are emitted only for non-Windows targets, so pin one
+	// rather than inheriting the host's target.
+	g.set_target(pref.target_from('linux', 'amd64') or { panic(err) })
 	g.set_output_cross_c(true)
 	g.compile_defines << 'gcboehm'
 	g.portable_native_runtime_helpers()
@@ -237,10 +241,51 @@ fn test_portable_gc_helper_preserves_linux_header_linkage() ! {
 	os.write_file(source, '#include <gc.h>\n#ifndef __linux__\n#define __linux__ 1\n#endif\n' + code)!
 	// Enable the Linux helper branch with the host SDK; this checks preprocessing,
 	// not execution of Linux-specific root registration on another platform.
-	preprocessed := cmdexec.run(cc, ['-E', '-P', '-I',
-		os.join_path(@VEXEROOT, 'thirdparty', 'libgc', 'include'), '-o', output, source])
+	mut args := ['-E', '-P', '-I', os.join_path(@VEXEROOT, 'thirdparty', 'libgc', 'include')]
+	$if !linux {
+		// The portable text also contains the Linux syscall facade. Supply its
+		// unavailable SDK include for preprocessing; this fixture does not compile
+		// or execute that facade, and Linux hosts keep using their real SDK.
+		sdk := os.join_path(root, 'linux_sdk')
+		os.mkdir_all(os.join_path(sdk, 'sys'))!
+		os.write_file(os.join_path(sdk, 'sys', 'prctl.h'), '#pragma once\nint prctl(int, ...);\n')!
+		args << ['-I', sdk]
+	}
+	args << ['-o', output, source]
+	preprocessed := cmdexec.run(cc, args)
 	assert preprocessed.exit_code == 0, preprocessed.output
 	text := os.read_file(output)!
 	assert text.contains('v_gc_can_register_main_data_roots_impl'), text
 	assert !text.contains('static inline static')
+}
+
+fn test_linux_gettid_respects_header_and_headerless_syscall_declarations() ! {
+	cc := os.find_abs_path_of_executable('clang') or { return }
+	mut g := FlatGen.new()
+	g.libc_compat_fns['gettid'] = true
+	g.libc_compat_decls()
+	code := g.sb.str()
+	root := os.join_path(os.vtmp_dir(), 'linux_gettid_declarations_${os.getpid()}')
+	os.mkdir_all(root)!
+	defer { os.rmdir_all(root) or {} }
+	for system_headers in [false, true] {
+		source := os.join_path(root, '${system_headers}.c')
+		output := os.join_path(root, '${system_headers}.i')
+		// Model the declaration supplied by unistd.h before object output applies
+		// internal_linkage. No Linux SDK or Linux runtime is needed for this check.
+		prefix := if system_headers {
+			'#define V_MANUAL_STDLIB_HEADERS 1\nlong syscall(long number, ...);\n#pragma clang attribute push (__attribute__((internal_linkage)), apply_to = function)\n'
+		} else {
+			''
+		}
+		os.write_file(source, '#define __linux__ 1\n#define SYS_gettid 178\ntypedef unsigned int u32;\n' +
+			prefix + code + if system_headers { '\n#pragma clang attribute pop\n' } else { '' })!
+		preprocessed := cmdexec.run(cc, ['-E', '-P', '-o', output, source])
+		assert preprocessed.exit_code == 0, preprocessed.output
+		text := os.read_file(output)!
+		assert text.count('long syscall(long number, ...);') == 1, text
+		assert text.contains('return (u32)syscall(178);'), text
+		checked := cmdexec.run(cc, ['-fsyntax-only', '-Werror=implicit-function-declaration', source])
+		assert checked.exit_code == 0, checked.output
+	}
 }

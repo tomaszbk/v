@@ -133,6 +133,20 @@ fn (mut p Parser) record_vml_diagnostic(path string, source string, message stri
 	})
 }
 
+// shift_vml_inferred_type_id is `shift_vml_inferred_type` for an interned node
+// annotation; other spellings keep their ID without reading their bytes.
+@[inline]
+fn shift_vml_inferred_type_id(typ u32, shift int) u32 {
+	if !flat.source_type_shape(typ).has(.typeof_expr) {
+		return typ
+	}
+	text := flat.source_type_name(typ)
+	if !text.contains('typeof(__vml_expr_') {
+		return typ
+	}
+	return flat.source_type_id(shift_vml_inferred_type(text, shift))
+}
+
 // Parser workers merge local ASTs with shifted node ids. Inferred closure
 // annotations hold expression links and relocate with the ordinary child links.
 fn shift_vml_inferred_type(typ string, shift int) string {

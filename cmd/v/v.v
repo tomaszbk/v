@@ -43,6 +43,7 @@ const external_commands = [
 	'download',
 	'env',
 	'fmt',
+	'generate',
 	'git-fmt-hook',
 	'gret',
 	'init',
@@ -129,6 +130,9 @@ fn main() {
 		run_external_tool(args, -1, 'repl')
 		return
 	}
+	if reuse_shared_test_compiler(args) {
+		return
+	}
 	compiler_args := compiler_args_before_program(args)
 	command_index, command := find_command(args)
 	// Tool arguments belong to the tool, including a completion query for the removed flag.
@@ -140,6 +144,10 @@ fn main() {
 	// Reject the removed flag before compatibility fallback or tool dispatch can accept it.
 	if compiler_option_requested(option_args, '-usecache') {
 		eprintln('unknown option `-usecache`; caching is enabled by default, use `-nocache` to disable it')
+		exit(1)
+	}
+	if native_backend_rejected(command, option_args) {
+		eprintln(pref.native_backend_replacement_message)
 		exit(1)
 	}
 	// TinyCC is not a -prod compiler. Refuse the pair before any compiler starts, including the
@@ -199,9 +207,13 @@ fn main() {
 		eprintln('The eval backend has been removed.')
 		exit(1)
 	}
+	if command == 'wipe-cache' {
+		run_wipe_cache(args, command_index)
+		return
+	}
 	if command in external_commands
-		|| command in ['new', 'init', 'install', 'link', 'list', 'outdated', 'remove', 'registry',
-			'search', 'show', 'unlink', 'update', 'upgrade', 'vlib-docs'] {
+		|| command in ['new', 'init', 'generate', 'install', 'link', 'list', 'outdated', 'remove',
+			'registry', 'search', 'show', 'unlink', 'update', 'upgrade', 'vlib-docs'] {
 		run_external_tool(args, command_index, command)
 		return
 	}
@@ -295,13 +307,35 @@ fn ownership_compiler_is_required(args []string) bool {
 	return false
 }
 
+fn compiler_bootstrap_requested(args []string, vroot string) bool {
+	entries := ['cmd/v', 'vlib/v'].map(os.real_path(os.join_path(vroot, it)))
+	mut option_value_follows := false
+	for arg in args {
+		if option_value_follows {
+			option_value_follows = false
+			continue
+		}
+		if arg == '-cf' || pref.option_may_consume_value(arg) {
+			option_value_follows = true
+			continue
+		}
+		if arg.starts_with('-') || arg in ['run', 'crun'] {
+			continue
+		}
+		if !os.exists(arg) {
+			return false
+		}
+		input := os.real_path(arg)
+		if os.is_dir(input) {
+			return input in entries
+		}
+		return os.file_name(input) == 'v.v' && os.dir(input) in entries
+	}
+	return false
+}
+
 fn ownership_compiler_bootstrap_input(args []string, vroot string) bool {
-	compiler_sources := [
-		os.real_path(os.join_path(vroot, 'cmd', 'v')),
-		os.real_path(os.join_path(vroot, 'cmd', 'v', 'v.v')),
-		os.real_path(os.join_path(vroot, 'vlib', 'v', 'v.v')),
-	]
-	return args.any(os.exists(it) && os.real_path(it) in compiler_sources)
+	return compiler_bootstrap_requested(args, vroot)
 }
 
 // ownership_bootstrap_can_use_current_compiler distinguishes compiling in support from
@@ -312,6 +346,10 @@ fn ownership_bootstrap_can_use_current_compiler(args []string, vroot string) boo
 	}
 	return ownership_compiler_bootstrap_input(args, vroot)
 }
+
+// ownership_compiler_build_args turn `cmd/v` into the V3 executable that contains the optional
+// ownership checker.
+const ownership_compiler_build_args = ['-d', 'ownership', '-gc', 'none', '-prealloc']
 
 // launch_ownership_compiler builds and starts a V3 executable that contains the optional
 // ownership checker. The regular compiler stays small and preserves normal value semantics;
@@ -332,9 +370,12 @@ fn launch_ownership_compiler(args []string) {
 		driver.run(args)
 		exit(0)
 	}
-	entry := tool_cache_entry(vexe, vroot, 'v3_ownership', compiler_source, ['-d', 'ownership',
-		'-gc', 'none', '-prealloc']) or {
+	if tool_cache_is_disabled() {
+		run_uncached_ownership_compiler(vexe, compiler_source, args)
+	}
+	entry := tool_cache_entry(vexe, vroot, 'v3_ownership', compiler_source, ownership_compiler_build_args) or {
 		eprintln('cannot find a writable cache for the V3 ownership compiler')
+		eprintln(err.msg())
 		exit(1)
 	}
 	reason := tool_cache_stale_reason(entry)
@@ -348,6 +389,47 @@ fn launch_ownership_compiler(args []string) {
 		}
 	}
 	exec_cached_tool(entry.binary, args)
+}
+
+// run_uncached_ownership_compiler honours `VTOOLS_NO_CACHE` for the ownership compiler, the way
+// `launch_external_tool` does for the other tools: nothing is read from or written to the tool
+// cache. The compiler is built into a new private folder in `VTMP`, where every compilation
+// already keeps its generated C, run once with `args`, and removed again.
+@[noreturn]
+fn run_uncached_ownership_compiler(vexe string, compiler_source string, args []string) {
+	stage_dir := create_tool_cache_stage_dir(os.vtmp_dir()) or {
+		eprintln('cannot build the V3 ownership compiler: ${err.msg()}')
+		exit(1)
+	}
+	binary := os.join_path(stage_dir, 'v3_ownership${tool_exe_suffix()}')
+	if tool_cache_is_verbose() {
+		eprintln('> ${tool_cache_disable_env} is set, building `v3_ownership` in `${stage_dir}`')
+	}
+	mut build_args := ownership_compiler_build_args.clone()
+	build_args << ['-o', binary, compiler_source]
+	mut environment := os.environ()
+	// As in `build_tool_binary`: the build has to fail loudly rather than retry with the
+	// compatibility compiler, and `VFLAGS` belongs to the compilation that follows, not to it.
+	environment[v3_no_fallback_env] = '1'
+	environment['VFLAGS'] = ''
+	mut build := os.new_process(vexe)
+	build.set_args(build_args)
+	build.set_environment(environment)
+	build.wait()
+	build_code := build.code
+	build.close()
+	if build_code != 0 || !os.is_file(binary) {
+		os.rmdir_all(stage_dir) or {}
+		eprintln('cannot build the V3 ownership compiler')
+		exit(1)
+	}
+	mut compiler := os.new_process(binary)
+	compiler.set_args(args)
+	compiler.wait()
+	code := compiler.code
+	compiler.close()
+	os.rmdir_all(stage_dir) or {}
+	exit(code)
 }
 
 // fallback_is_disabled reports whether retrying with the compatibility compiler was turned off.
@@ -401,8 +483,8 @@ fn find_command(args []string) (int, string) {
 		}
 		if arg in external_commands
 			|| arg in ['version', '-version', '--version', 'help', '-h', '--help', 'get', 'interpret',
-				'new', 'init', 'install', 'link', 'list', 'outdated', 'remove', 'registry', 'search',
-				'show', 'unlink', 'update', 'upgrade', 'vlib-docs', 'build-module'] {
+				'new', 'init', 'generate', 'install', 'link', 'list', 'outdated', 'remove', 'registry',
+				'search', 'show', 'unlink', 'update', 'upgrade', 'vlib-docs', 'build-module'] {
 			return i, arg
 		}
 		if !arg.starts_with('-') {
@@ -487,6 +569,13 @@ fn external_tool_runtime_args(command string, prefix_args []string, command_args
 	if command in ['build-examples', 'build-tools', 'self', 'test', 'test-self'] {
 		tool_args << prefix_args
 	}
+	if command == 'watch' {
+		// `v watch` reconstructs the compiler command from its own argv (see
+		// `all_args_before_watch_cmd` in cmd/tools/vwatch.v), so prefix compiler options like
+		// `-d veb_livereload` have to reach the tool again instead of only affecting
+		// the compilation of the watcher binary.
+		tool_args << prefix_args
+	}
 	if command == 'fmt' {
 		backend_args, _ := split_tool_backend_args(prefix_args)
 		tool_args << backend_args
@@ -539,8 +628,10 @@ fn launch_external_tool(vroot string, tool_name string, tool_source string, pref
 				exit(1)
 			}
 			exec_cached_tool(entry.binary, tool_args)
-		} else if tool_cache_is_verbose() {
-			eprintln('> no usable tool cache directory, running `${tool_name}` from source')
+		} else {
+			if tool_cache_is_verbose() {
+				eprintln('> running `${tool_name}` from source, because ${err.msg()}')
+			}
 		}
 	}
 	install_external_tool_modules(tool_name, tool_source, compile_args)
@@ -832,6 +923,8 @@ fn launch_v1(args []string, reason string, report_state RetryState) {
 	}
 	os.unsetenv(v3_fallback_file_env)
 	os.unsetenv(v3_c_error_dir_env)
+	// A source retry's private marker must not reach the compatibility compiler.
+	os.unsetenv('V3_INTERNAL_CACHE_FORCE_SOURCE')
 	mut launch_args := v1_fallback_args(args)
 	_, launched_command := find_command(args)
 	if launched_command == 'build-module' {
@@ -1060,6 +1153,10 @@ fn v1_fallback_compiler_prefix_len(args []string) int {
 }
 
 fn v1_fallback_selected_backend(args []string) string {
+	return selected_backend(args, true)
+}
+
+fn selected_backend(args []string, include_compile_backends bool) string {
 	mut backend := 'c'
 	mut backend_value_follows := false
 	mut option_value_follows := false
@@ -1073,11 +1170,15 @@ fn v1_fallback_selected_backend(args []string) string {
 			option_value_follows = false
 			continue
 		}
-		if arg in ['-b', '-backend', '-compile-backend', '--compile-backend'] {
+		if arg in ['-b', '-backend']
+			|| (include_compile_backends && arg in ['-compile-backend', '--compile-backend']) {
 			backend_value_follows = true
 			continue
 		}
 		for option in ['-b=', '-backend=', '-compile-backend=', '--compile-backend='] {
+			if !include_compile_backends && option in ['-compile-backend=', '--compile-backend='] {
+				continue
+			}
 			if arg.starts_with(option) {
 				backend = arg.all_after(option)
 				break
@@ -1466,4 +1567,15 @@ fn v1_fallback_make_hint() string {
 		return 'On Windows, install GNU make in MSYS2 (`make` or `mingw32-make`) and put its tools, including `sh`, on PATH.'
 	}
 	return 'Install make.'
+}
+
+// native_backend_rejected reports whether the removed `-b native` backend has to
+// be refused for `command`. `vfmt` is the one tool that still accepts the alias,
+// because it maps `native` onto the C formatter, so the launcher must let it
+// through instead of rejecting the flag before the tool ever sees it.
+fn native_backend_rejected(command string, option_args []string) bool {
+	if command == 'fmt' {
+		return false
+	}
+	return selected_backend(compiler_args_before_program(option_args), false) == 'native'
 }

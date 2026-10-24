@@ -22,8 +22,8 @@ fn test_vml_inferred_type_witness_resolves_before_expression_annotation() {
 			.float_literal { 'f64' }
 			else { 'string' }
 		}
-		assert tc.parse_type(annotation).name() == expected
-		assert tc.parse_type('!${annotation}').name() == '!${expected}'
+		assert tc.parse_type(flat.source_type_id(annotation)).name() == expected
+		assert tc.parse_type(flat.source_type_id('!${annotation}')).name() == '!${expected}'
 		assert tc.resolve_vml_inferred_type_text('&Signal[${annotation}]') == '&Signal[${expected}]'
 	}
 }
@@ -35,7 +35,7 @@ fn test_vml_inferred_type_witness_uses_current_lexical_scope() {
 	annotation := 'typeof(__vml_expr_${int(value)})'
 	for payload in ['bool', 'string', 'int', 'f64'] {
 		tc.cur_scope = new_scope(tc.file_scope)
-		tc.cur_scope.insert('value', tc.parse_type(payload))
-		assert tc.parse_type(annotation).name() == payload
+		tc.cur_scope.insert('value', *tc.parse_type(flat.source_type_id(payload)))
+		assert tc.parse_type(flat.source_type_id(annotation)).name() == payload
 	}
 }

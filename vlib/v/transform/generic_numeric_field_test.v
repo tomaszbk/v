@@ -103,6 +103,70 @@ fn main() {
 	assert run.exit_code == 0, run.output
 }
 
+fn test_numeric_field_errors_remain_separate_across_generic_instances() ! {
+	directory := os.join_path(os.vtmp_dir(), 'numeric_field_diagnostics_${os.getpid()}')
+	os.mkdir_all(directory)!
+	defer { os.rmdir_all(directory) or {} }
+	source := 'module main
+struct Named { name string }
+struct Number { width int }
+fn number[T](value T) Number { return Number{width: value.name} }
+fn main() {
+    _ = number[int](1)
+    _ = number[Named](Named{name: "named"})
+}'
+	for check in [false, true] {
+		result := generic_numeric_field_program(directory, 'instances_${check}', source, check)
+		assert result.exit_code != 0, result.output
+		// Native Windows builds leave concrete member checks to the C compiler;
+		// -check validates them everywhere, and other hosts also check during builds.
+		$if windows {
+			if check {
+				assert result.output.contains('`int` has no property `name`'), result.output
+			}
+		} $else {
+			assert result.output.contains('`int` has no property `name`'), result.output
+		}
+		assert result.output.count('cannot assign to field `width`') == 1, result.output
+		assert result.output.contains('expected `int`, not `string`'), result.output
+	}
+}
+
+fn test_imported_numeric_alias_fields_validate_generic_values() ! {
+	directory := os.join_path(os.vtmp_dir(), 'imported_numeric_fields_${os.getpid()}')
+	os.mkdir_all(os.join_path(directory, 'numeric_fields'))!
+	defer { os.rmdir_all(directory) or {} }
+	os.write_file(os.join_path(directory, 'numeric_fields', 'types.v'), 'module numeric_fields
+pub type Measure = f64
+pub struct Number {
+pub:
+	width Measure
+}
+')!
+	for index, value in ['true', '"12"', 'numeric_fields.Measure(12.5)'] {
+		verification := if index == 2 {
+			'assert f64(number(${value}).width) == 12.5'
+		} else {
+			'_ = number(${value})'
+		}
+		source := 'module main\nimport numeric_fields\nfn number[T](value T) numeric_fields.Number { return numeric_fields.Number{width: value} }\nfn main() { ${verification} }\n'
+		for check in [false, true] {
+			name := 'imported_${index}_${check}'
+			result := generic_numeric_field_program(directory, name, source, check)
+			if index == 2 {
+				assert result.exit_code == 0, result.output
+			} else {
+				assert result.exit_code != 0, result.output
+				assert result.output.contains('cannot assign to field `width`'), result.output
+			}
+		}
+		if index == 2 {
+			run := os.exec([os.join_path(directory, 'imported_2_false')])
+			assert run.exit_code == 0, run.output
+		}
+	}
+}
+
 fn test_generic_numeric_fields_validate_fallible_generic_method_results() {
 	directory := os.join_path(os.vtmp_dir(), 'generic_numeric_methods_${os.getpid()}')
 	os.mkdir_all(directory) or { panic(err) }
@@ -241,7 +305,7 @@ fn test_explicit_generic_callees_keep_type_arguments_before_fallible_arguments()
 	os.mkdir_all(directory) or { panic(err) }
 	defer { os.rmdir_all(directory) or {} }
 	source := 'module main
-import x.json2
+import json2
 struct User { name string }
 fn values() ![]int { return [2, 3] }
 fn data() !string { return \'[{"name":"Ada"}]\' }
@@ -293,4 +357,50 @@ fn main() {
 	}
 	run := os.exec([os.join_path(directory, 'runtime_callees')])
 	assert run.exit_code == 0, run.output
+}
+
+fn test_generic_numeric_fields_auto_dereference_matching_reference_values() {
+	directory := os.join_path(os.vtmp_dir(), 'generic_numeric_references_${os.getpid()}')
+	os.mkdir_all(directory) or { panic(err) }
+	defer { os.rmdir_all(directory) or {} }
+	source := 'module main
+type Count = int
+type Measure = f64
+struct Number { width int }
+struct Fraction { width f64 }
+fn number[T](value &T) Number { return Number{width: value} }
+fn fraction[T](value &T) Fraction { return Fraction{width: value} }
+fn main() {
+    value := 42
+    alias_value := Count(7)
+    fraction_value := Measure(1.25)
+    assert number(value).width == 42
+    assert number(alias_value).width == 7
+    assert fraction(fraction_value).width == 1.25
+}'
+	result := generic_numeric_field_program(directory, 'references', source, false)
+	assert result.exit_code == 0, result.output
+	run := os.exec([os.join_path(directory, 'references')])
+	assert run.exit_code == 0, run.output
+}
+
+fn test_generic_numeric_fields_reject_references_to_incompatible_values() {
+	directory := os.join_path(os.vtmp_dir(), 'generic_numeric_bad_references_${os.getpid()}')
+	os.mkdir_all(directory) or { panic(err) }
+	defer { os.rmdir_all(directory) or {} }
+	for index, entry in [
+		['int', "'wrong'", 'string'],
+		['int', 'true', 'bool'],
+		['int', '1.5', 'f64'],
+		['f64', '1', 'int'],
+	] {
+		source := 'module main\nstruct Number { width ${entry[0]} }\nfn number[T](value &T) Number { return Number{width: value} }\nfn main() { value := ${entry[1]} _ = number(value) }\n'
+		for check in [false, true] {
+			result := generic_numeric_field_program(directory, 'bad_ref_${index}_${check}', source,
+				check)
+			assert result.exit_code != 0, result.output
+			assert result.output.contains('cannot assign to field `width`'), result.output
+			assert result.output.contains('expected `${entry[0]}`, not `&${entry[2]}`'), result.output
+		}
+	}
 }

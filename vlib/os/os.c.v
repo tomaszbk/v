@@ -2,13 +2,17 @@ module os
 
 import strings
 
-$if macos {
-	// needed for os.executable():
-	fn C._dyld_get_image_name(image u32) &char
-}
+// needed for os.executable() on macOS. Declared outside `$if macos`: `-cross` output
+// keeps the macOS branch of executable(), while a top-level `$if macos` is resolved
+// for the host that generates it.
+fn C._dyld_get_image_name(image u32) &char
 
-$if freebsd || openbsd {
-}
+// BSD sysctl identifiers stay in V so executable lookup does not require C headers.
+const sysctl_ctl_kern = i32(1)
+const freebsd_kern_proc = i32(14)
+const freebsd_kern_proc_pathname = i32(12)
+const openbsd_kern_proc_args = i32(55)
+const openbsd_kern_proc_argv = i32(1)
 
 @[markused]
 pub const args = arguments()
@@ -380,6 +384,7 @@ fn vpopen(path string) voidptr {
 	$if windows {
 		mode := 'rb'
 		wpath := path.to_wide()
+		windows_avoid_long_temp_env()
 		return C._wpopen(wpath, mode.to_wide())
 	} $else {
 		cpath := path.str
@@ -453,6 +458,7 @@ pub fn system(cmd string) int {
 		wcmd := if cmd.len > 1 && cmd[0] == `"` && cmd[1] != `"` { '"${cmd}"' } else { cmd }
 		flush_stdout()
 		flush_stderr()
+		windows_avoid_long_temp_env()
 		unsafe {
 			ret = C._wsystem(wcmd.to_wide())
 		}
@@ -501,8 +507,10 @@ pub fn system(cmd string) int {
 // whether lstat returns any result or a "not exists" error gives a clear indication of whether the path is occupied.
 pub fn exists(path string) bool {
 	$if windows {
+		// GetFileAttributesW is a Win32 call, so a longPathAware executable can use paths
+		// past MAX_PATH with it, where the CRT's _waccess cannot.
 		p := path.replace('/', '\\')
-		return C._waccess(p.to_wide(), f_ok) != -1
+		return C.GetFileAttributesW(p.to_wide()) != u32(C.INVALID_FILE_ATTRIBUTES)
 	} $else {
 		return C.access(&char(path.str), f_ok) != -1
 	}
@@ -664,7 +672,7 @@ pub fn get_raw_line() string {
 		unsafe {
 			initial_size := 256 * wide_char_size
 			mut buf := malloc_noscan(initial_size)
-			defer { buf.free() }
+			defer { unsafe { buf.free() } }
 			mut capacity := initial_size
 			mut offset := 0
 
@@ -874,7 +882,7 @@ pub fn executable() string {
 	}
 	$if freebsd {
 		bufsize := usize(max_path_buffer_size)
-		mib := [i32(C.CTL_KERN), C.KERN_PROC, C.KERN_PROC_PATHNAME, -1]! // C `int` mib buffer
+		mib := [sysctl_ctl_kern, freebsd_kern_proc, freebsd_kern_proc_pathname, -1]! // C `int` mib buffer
 		unsafe { C.sysctl(&mib[0], mib.len, &result[0], &bufsize, 0, 0) }
 		res := unsafe { tos_clone(&result[0]) }
 		return res
@@ -889,7 +897,7 @@ pub fn executable() string {
 		mut pbuf := unsafe { &&u8(&result[0]) }
 		bufsize := usize(max_path_buffer_size)
 		pid := C.getpid()
-		mib := [i32(C.CTL_KERN), C.KERN_PROC_ARGS, pid, C.KERN_PROC_ARGV]! // C `int` mib buffer
+		mib := [sysctl_ctl_kern, openbsd_kern_proc_args, pid, openbsd_kern_proc_argv]! // C `int` mib buffer
 		if unsafe { C.sysctl(&mib[0], mib.len, nil, &bufsize, nil, 0) } == 0 {
 			if bufsize > max_path_buffer_size {
 				pbuf = unsafe { &&u8(malloc(int(bufsize))) }
@@ -1251,8 +1259,11 @@ pub fn open_append(path string) !File {
 	if isnil(file.cfile) {
 		return error_posix(msg: 'failed to create(append) file "${path}"')
 	}
-	file.is_opened = true
-	return file
+	return File{
+		cfile:     file.cfile
+		fd:        fileno(file.cfile)
+		is_opened: true
+	}
 }
 
 // execvp - loads and executes a new child process, *in place* of the current process.
@@ -1269,6 +1280,7 @@ pub fn execvp(cmdpath string, cmdargs []string) ! {
 	cargs << &char(unsafe { nil })
 	mut res := int(0)
 	$if windows {
+		windows_avoid_long_temp_env()
 		res = C._execvp(&char(cmdpath.str), cargs.data)
 	} $else {
 		res = C.execvp(&char(cmdpath.str), cargs.data)
@@ -1294,8 +1306,16 @@ pub fn execve(cmdpath string, cmdargs []string, envs []string) ! {
 	for i in 0 .. cmdargs.len {
 		cargv << &char(cmdargs[i].str)
 	}
-	for i in 0 .. envs.len {
-		cenvs << &char(envs[i].str)
+	$if windows {
+		windows_avoid_long_temp_env()
+	}
+	child_envs := $if windows {
+		windows_temp_env_entries_fix(envs, windows_temp_env_candidates)
+	} $else {
+		envs
+	}
+	for i in 0 .. child_envs.len {
+		cenvs << &char(child_envs[i].str)
 	}
 	cargv << &char(unsafe { nil })
 	cenvs << &char(unsafe { nil })

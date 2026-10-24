@@ -128,8 +128,11 @@ see also `v help build`.
       cached `.o` files when V can find the corresponding source on disk.
 
    -freestanding
-      Build the executable without dependency on libc.
-      Supported only on `linux` targets currently.
+      Build the executable without dependency on libc. It is linked with
+      `-static -nostdlib` and without a garbage collector, and takes its
+      process entry point, syscalls and memory allocator from the bare builtin
+      implementation (see `-bare-builtin-dir`).
+      Supported only on `linux` targets, on amd64 and arm64, currently.
 
    -bare-builtin-dir <bare-builtin-dir>
       Use with `-freestanding`. This specifies the directory to the
@@ -179,6 +182,7 @@ see also `v help build`.
          __exit(code int)
             Exit with code code. code is allowed to be ignored.
 
+         The implementation also defines the process entry point, `_start`.
          The module declaration should be `builtin`. The default Linux
          implementation can be found in `vlib/builtin/linux_bare`.
 
@@ -322,7 +326,9 @@ see also `v help build`.
       larger program, potentially written in another language.
       The flag can also be combined with `-o file.c`, to generate C source that can be
       compiled and linked together with other `-is_o` generated V units.
-      Note: this option currently works with gcc/clang/tcc, but not msvc.
+      This also applies to -o file.o. Production objects retain machine code
+      rather than automatically enabling LTO. On Windows, MSVC writes a staged
+      .obj file, which V moves to the requested output path.
       Note: use either -no-skip-unused or tag the functions you expect to be publicly
       usable in the .o file with `@[markused]` . Adding `-gc none` may be also needed,
       unless you plan to link with -lgc later.
@@ -475,7 +481,8 @@ see also `v help build`.
       Set V_C_ERROR_BUG_REPORT_DISABLED=1 to disable automatic report submission.
 
    -dump-c-flags file.txt
-      Write all C flags into `file.txt`, one flag per line.
+      Write the C flags passed to the selected compiler into `file.txt`,
+      one flag per line. The monolithic bundled TCC command uses the same flag plan.
       If `file.txt` is `-`, write to stdout instead.
 
    -dump-modules file.txt
