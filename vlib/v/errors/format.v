@@ -134,8 +134,7 @@ fn (mut run DiagnosticRun) formatted_source_error(kind string, message string, f
 		position.column
 	}
 	location := '${path}:${position.line}:${reported_column}:'
-	shown := if position.filename.ends_with('.vml') { vml_message(message) } else { message }
-	result.writeln('${ansi.bold(location)} ${formatted_message(kind, shown)}')
+	result.writeln('${ansi.bold(location)} ${formatted_message(kind, message)}')
 	// The span, relative to the start of its source line. The column is the same in the
 	// logical line.
 	line_start := pos.offset - position.column + 1
@@ -178,59 +177,6 @@ fn (mut run DiagnosticRun) formatted_source_error(kind string, message string, f
 	}
 	write_source_excerpt(mut result, kind, lines, position.line, span_start, span_end)
 	return result.str().trim_right('\n')
-}
-
-// vml_message words a diagnostic located in a VML document in VML terms. The
-// generic lowering builds each tag `X` as the props type `ui2.XProps`, so V names
-// that type and its fields: `type \`ui2.SliderProps\` has no field named \`maxx\``
-// reads `element \`Slider\` has no property named \`maxx\``.
-fn vml_message(message string) string {
-	if !message.contains('Props`') {
-		return message
-	}
-	mut result := strings.new_builder(message.len)
-	mut rest := message
-	mut renamed := false
-	for {
-		start := rest.index('`') or { break }
-		end := rest.index_after('`', start + 1) or { break }
-		name := rest[start + 1..end]
-		base := name.all_after_last('.')
-		mut before := rest[..start]
-		mut element := false
-		if base.len > 'Props'.len && base.ends_with('Props') && base[0].is_capital() {
-			for word in ['in struct literal of type ', 'struct literal of type ', 'type ', 'struct '] {
-				if before.ends_with(word) {
-					before = before[..before.len - word.len] + if word.starts_with('in ') {
-						'of element '
-					} else {
-						'element '
-					}
-					element = true
-					break
-				}
-			}
-		}
-		if element {
-			module_prefix := if name.contains('.') && !name.starts_with('ui2.') {
-				name.all_before_last('.') + '.'
-			} else {
-				''
-			}
-			result.write_string(before)
-			result.write_string('`' + module_prefix + base.trim_string_right('Props') + '`')
-			renamed = true
-		} else {
-			result.write_string(rest[..end + 1])
-		}
-		rest = rest[end + 1..]
-	}
-	result.write_string(rest)
-	if !renamed {
-		return message
-	}
-	return result.str().replace('has no field named', 'has no property named').replace('unknown field',
-		'unknown property').replace('to field `', 'to property `')
 }
 
 // source_lines_through returns the lines `source.split_into_lines()` holds up to the 1-based

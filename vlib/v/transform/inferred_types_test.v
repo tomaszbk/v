@@ -30,7 +30,7 @@ fn test_inferred_witness_uses_current_lexical_binding_for_each_specialization() 
 	}
 }
 
-fn test_vml_app_address_capture_keeps_pointer_storage_and_ordinary_captures_keep_values() {
+fn test_address_capture_keeps_pointer_storage_and_ordinary_captures_keep_values() {
 	for borrowed in [false, true] {
 		mut a := flat.FlatAst.new()
 		mut tc := types.TypeChecker.new(&a)
@@ -58,7 +58,7 @@ fn test_vml_app_address_capture_keeps_pointer_storage_and_ordinary_captures_keep
 	}
 }
 
-fn test_vml_immediately_called_builder_still_promotes_its_borrowed_application() {
+fn test_immediately_called_literal_still_promotes_its_address_capture() {
 	mut a := flat.FlatAst.new()
 	mut tc := types.TypeChecker.new(&a)
 	mut t := new_transformer(mut a, &tc, map[string]bool{})

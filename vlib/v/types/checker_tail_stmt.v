@@ -15740,7 +15740,7 @@ pub fn (tc &TypeChecker) parse_type(typ string) Type {
 // identity. Context remains part of the key because an unqualified spelling
 // can denote different types in different files/modules.
 pub fn (tc &TypeChecker) parse_type_ref(typ string, text_id u16) Type {
-	// Expression-derived VML types depend on lexical bindings, unlike ordinary
+	// `typeof(expr)` types depend on lexical bindings, unlike ordinary
 	// canonical type texts. Collection may see them before those locals exist.
 	if typ.contains('typeof(__expr_') { return tc.parse_type(typ) }
 
@@ -17018,7 +17018,7 @@ fn (tc &TypeChecker) parse_type_uncached(typ string) Type {
 	})
 }
 
-// VML closure annotations can infer array items and nested generic payloads.
+// `typeof(expr)` annotations can infer array items and nested generic payloads.
 // Resolve the expression before generic specialization records concrete names.
 pub fn (tc &TypeChecker) resolve_inferred_type_text(typ string) string {
 	mut result := typ
@@ -17046,7 +17046,7 @@ fn (tc &TypeChecker) type_from_typeof_type_text(typ string) ?Type {
 	if inner.starts_with('__expr_') {
 		expression_id := flat.NodeId(inner.all_after('__expr_').int())
 		if int(expression_id) >= 0 && int(expression_id) < tc.a.nodes.len {
-			// Generated VML memo callbacks have ordinary inferred V expression
+			// `typeof(expr)` closure annotations have ordinary inferred V expression
 			// types. Resolve in the lexical closure scope without evaluating it.
 			// Transformer records the concrete source witness as owned AST text.
 			// Parse in the current phase; never publish a scratch-arena Type into

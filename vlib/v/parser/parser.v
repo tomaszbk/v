@@ -169,8 +169,6 @@ mut:
 	pending_aligned                   string
 	skip_next_decl                    bool
 	disable_fn_body                   bool
-	vml_declarations                  []flat.NodeId
-	inside_vml_types                  bool
 	pending_decl_pub                  bool
 	pending_decl_attrs                []string
 	pending_decl_attr_kinds           []int
@@ -458,7 +456,6 @@ fn (mut p Parser) reset_file_state(path string) {
 	p.skip_next_decl = false
 	p.disable_fn_body = false
 	p.pending_decl_pub = false
-	p.vml_declarations.clear()
 	p.pending_decl_attrs.clear()
 	p.pending_decl_attr_kinds.clear()
 	p.pending_decl_attr_sources.clear()
@@ -666,7 +663,6 @@ fn (mut p Parser) parse_buffer(path string, stable_src string) {
 			ids << implicit_os_id
 		}
 	}
-	ids << p.vml_declarations
 	start := p.add_children(ids)
 	trailing_id := p.add_node(flat.Node{
 		kind:           .file
@@ -8104,9 +8100,6 @@ fn (mut p Parser) parse_comptime_expr() flat.NodeId {
 	if p.tok == .name && p.lit == 'embed_file' {
 		return p.parse_embed_file_expr()
 	}
-	if p.tok == .name && p.lit == 'vml' {
-		return p.parse_vml_template_expr(dollar_pos)
-	}
 	if p.tok == .name && p.lit in ['zero', 'new'] {
 		name := p.lit
 		p.next()
@@ -14153,7 +14146,6 @@ fn (mut p Parser) index_part_expr() flat.NodeId {
 	// Preserve type-only heads as a single type expression so `f[fn (int) int]()`
 	// does not turn the function signature into a body-less anonymous function.
 	is_type_only_head := p.tok in [.question, .not, .amp, .and, .key_fn, .key_shared, .key_atomic]
-		|| (p.inside_vml_types && p.tok == .key_typeof)
 	shared_starts_type := p.tok != .key_shared || !p.shared_token_is_identifier(false)
 	reference_starts_type := p.tok !in [.not, .amp, .and] || p.isreftype_prefix_arg_starts_type()
 	if is_type_only_head && shared_starts_type && reference_starts_type {
@@ -15365,14 +15357,6 @@ fn (mut p Parser) fn_literal() flat.NodeId {
 	} else if capture_ids.len > 0 && p.tok == .lsbr {
 		generic_params = p.parse_generic_param_names()
 	}
-	// VML-generated closures use the calling V function's inferred payload types.
-	// Retain those generic parameters through anonymous function specialization.
-	if p.inside_vml_types {
-		for parameter in p.cur_fn_generic_params {
-			if parameter !in generic_params { generic_params << parameter }
-		}
-	}
-
 	for capture_id in capture_ids {
 		capture := p.a.node(capture_id)
 		if !p.prefs.is_fmt && capture.value.len > 0 && !p.global_names[capture.value]
@@ -16505,7 +16489,7 @@ fn (mut p Parser) typeof_expr() flat.NodeId {
 	p.check(.lpar)
 	inner := p.expr(.lowest)
 	p.check(.rpar)
-	if p.unsafe_depth == 0 && !p.inside_array_init_type_expr && !p.inside_vml_types && p.tok != .dot
+	if p.unsafe_depth == 0 && !p.inside_array_init_type_expr && p.tok != .dot
 		&& (start == 0 || p.s.src[start - 1] != `$`)
 		&& p.line_nr_for_pos(start) == p.line_nr_for_pos(p.tok_pos) {
 		p.record_warning_span('use e.g. `typeof(expr).name` or `sum_type_instance.type_name()` instead', start, start + 'typeof'.len)

@@ -8329,8 +8329,8 @@ fn (mut t Transformer) collect_mut_capture_sources(id flat.NodeId) {
 		// materialized as a scoped temporary during call lowering, so its mutable
 		// fixed-array captures can keep borrowing this frame's storage.
 		if node.kind == .call && i == 0 && t.fn_literal_has_runtime_captures(child_id) {
-			// VML's retained result can contain callbacks borrowing app even
-			// though its construction closure itself is called immediately.
+			// The call's result can retain callbacks that borrow an address
+			// capture even though the literal itself is called immediately.
 			mut literal_id := child_id
 			for t.a.nodes[int(literal_id)].kind == .paren {
 				literal_id = t.a.child(&t.a.nodes[int(literal_id)], 0)

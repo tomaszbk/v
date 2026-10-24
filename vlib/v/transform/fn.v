@@ -13050,7 +13050,7 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 				// closure is returned and would make separate instances interfere.
 				// A fixed array is the exception: `[mut values]` shares the storage of
 				// the captured array, so writes on either side are seen by the other.
-				// Generated VML app borrows use an address capture. Ordinary
+				// An address capture (`op == .amp`) borrows the outer storage. Ordinary
 				// mutable V captures retain their closure-owned value semantics.
 				context_field_types[child.value] = if is_ref_capture
 					&& (child.op == .amp || t.is_fixed_array_type(capture_type)) {
@@ -13342,7 +13342,7 @@ fn (t &Transformer) current_source_module() string {
 }
 
 fn (mut t Transformer) new_fn_literal_name() string {
-	// Lowering a work item can introduce a VML closure after the literal scan.
+	// Lowering a work item can introduce a closure after the literal scan.
 	// Private helper maps cannot see names created concurrently by other items.
 	prefix := if t.literal_free_fn_body && t.item_range_hi >= 0 {
 		'anon_fn_work_${t.item_range_hi}'

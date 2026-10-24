@@ -1,3 +1,0 @@
-View {
-    Button(on_click: app.nested.count = 1)
-}
