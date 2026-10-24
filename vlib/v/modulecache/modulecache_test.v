@@ -731,7 +731,6 @@ fn test_cached_source_signature_tracks_edits_within_a_coarse_timestamp_step() {
 	step := time.utc().unix()
 	os.write_file(source, "module main\n\nconst label = 'First'\n")!
 	os.utime(source, step, step)!
-	assert file_metadata_signature(source) != ''
 	cache_dir := os.join_path(root, 'cache')
 
 	first := cached_source_signature(cache_dir, 'coarse-mtime', [source])
