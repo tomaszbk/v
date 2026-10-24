@@ -29,27 +29,27 @@ fn test_scoped_batch_publishes_capture_context_through_worker() {
 		batch_tc := worker_tc.fork_for_parallel_transform(&a)
 		mut batch := worker.fork_scoped_batch_worker(&a, batch_tc)
 		start := a.nodes.len
-		batch.add_fn_literal_capture_context('__vml_capture_Ctx', 'main', ['value'], {
+		batch.add_fn_literal_capture_context('__capture_Ctx', 'main', ['value'], {
 			'value': flat.source_type_id('int')
 		})
-		assert '__vml_capture_Ctx' !in worker_tc.structs
+		assert '__capture_Ctx' !in worker_tc.structs
 		worker.absorb_scoped_batch(batch, unsafe { nil }, start)
-		assert '__vml_capture_Ctx' !in master.structs
-		assert '__vml_capture_Ctx' !in tc.structs
-		assert '__vml_capture_Ctx' !in tc.struct_modules
-		assert '__vml_capture_Ctx' !in tc.struct_files
-		assert '__vml_capture_Ctx' !in peer.structs
-		assert '__vml_capture_Ctx' !in peer_tc.structs
-		assert worker.structs['__vml_capture_Ctx'].fields[0].name == 'value'
-		assert worker_tc.structs['__vml_capture_Ctx'][0].name == 'value'
-		assert '__vml_capture_Ctx' in worker.generated_capture_contexts
+		assert '__capture_Ctx' !in master.structs
+		assert '__capture_Ctx' !in tc.structs
+		assert '__capture_Ctx' !in tc.struct_modules
+		assert '__capture_Ctx' !in tc.struct_files
+		assert '__capture_Ctx' !in peer.structs
+		assert '__capture_Ctx' !in peer_tc.structs
+		assert worker.structs['__capture_Ctx'].fields[0].name == 'value'
+		assert worker_tc.structs['__capture_Ctx'][0].name == 'value'
+		assert '__capture_Ctx' in worker.generated_capture_contexts
 		master.merge_worker_used_fns(worker)
-		assert tc.structs['__vml_capture_Ctx'][0].typ == types.Type(types.int_)
-		assert master.structs['__vml_capture_Ctx'].fields[0].name == 'value'
+		assert tc.structs['__capture_Ctx'][0].typ == types.Type(types.int_)
+		assert master.structs['__capture_Ctx'].fields[0].name == 'value'
 	}
 }
 
-fn test_parallel_vml_work_items_have_distinct_capture_names() {
+fn test_parallel_work_items_have_distinct_capture_names() {
 	mut a := flat.FlatAst.new()
 	mut tc := types.TypeChecker.new(&a)
 	mut master := new_transformer(mut a, &tc, map[string]bool{})

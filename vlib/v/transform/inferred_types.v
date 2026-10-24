@@ -2,34 +2,34 @@ module transform
 
 import v.flat
 
-const vml_inferred_type_marker = 'typeof(__vml_expr_'
+const inferred_type_marker = 'typeof(__expr_'
 
-// vml_inferred_type_id reports whether an interned spelling holds a generated
-// VML closure annotation. The shape check keeps ordinary spellings byte-free.
+// inferred_type_id reports whether an interned spelling holds a `typeof(expr)`
+// type annotation. The shape check keeps ordinary spellings byte-free.
 @[inline]
-fn vml_inferred_type_id(typ_id u32) bool {
+fn inferred_type_id(typ_id u32) bool {
 	return flat.source_type_shape(typ_id).has(.typeof_expr)
-		&& flat.source_type_name(typ_id).contains(vml_inferred_type_marker)
+		&& flat.source_type_name(typ_id).contains(inferred_type_marker)
 }
 
-// resolve_vml_inferred_type_id is `resolve_vml_inferred_type_text` for an
+// resolve_inferred_type_id is `resolve_inferred_type_text` for an
 // interned spelling; other spellings are returned unchanged.
-fn (t &Transformer) resolve_vml_inferred_type_id(typ_id u32) u32 {
-	if !vml_inferred_type_id(typ_id) {
+fn (t &Transformer) resolve_inferred_type_id(typ_id u32) u32 {
+	if !inferred_type_id(typ_id) {
 		return typ_id
 	}
 	typ := flat.source_type_name(typ_id)
-	resolved := t.resolve_vml_inferred_type_text(typ)
+	resolved := t.resolve_inferred_type_text(typ)
 	return if resolved == typ { typ_id } else { flat.source_type_id(resolved) }
 }
 
-// Generated closure type annotations retain their ordinary V expression.
+// `typeof(expr)` type annotations retain their ordinary V expression.
 // Resolve them while transform owns the same lexical locals as that expression,
 // before recording a concrete callback signature or generic specialization.
-fn (t &Transformer) resolve_vml_inferred_type_text(typ string) string {
+fn (t &Transformer) resolve_inferred_type_text(typ string) string {
 	mut result := typ
 	mut offset := 0
-	marker := vml_inferred_type_marker
+	marker := inferred_type_marker
 	for offset < result.len {
 		start := result[offset..].index(marker) or { break } + offset
 		end := result[start..].index(')') or { break } + start + 1

@@ -1229,8 +1229,8 @@ fn (t &Transformer) generic_call_type_arg_name(id flat.NodeId) u32 {
 	node := t.a.node(id)
 	match node.kind {
 		.ident {
-			if node.value.contains(vml_inferred_type_marker) {
-				return flat.source_type_id(t.resolve_vml_inferred_type_text(node.value))
+			if node.value.contains(inferred_type_marker) {
+				return flat.source_type_id(t.resolve_inferred_type_text(node.value))
 			}
 			// Map type arguments are represented by a synthetic `Map_key_value`
 			// identifier, while `typ` retains the source-level `map[key]value`.
@@ -3758,8 +3758,8 @@ fn (t &Transformer) decl_param_type_in_module(typ_id u32, module_name string) u3
 }
 
 fn (t &Transformer) decl_param_type_in_scope(typ_id u32, module_name string, file_name string) u32 {
-	if vml_inferred_type_id(typ_id) {
-		resolved := t.resolve_vml_inferred_type_id(typ_id)
+	if inferred_type_id(typ_id) {
+		resolved := t.resolve_inferred_type_id(typ_id)
 		if resolved != typ_id { return t.decl_param_type_in_scope(resolved, module_name, file_name) }
 		return typ_id
 	}
@@ -13800,7 +13800,7 @@ fn (mut t Transformer) lift_fn_literal(_id flat.NodeId, node flat.Node) flat.Nod
 				// closure is returned and would make separate instances interfere.
 				// A fixed array is the exception: `[mut values]` shares the storage of
 				// the captured array, so writes on either side are seen by the other.
-				// Generated VML app borrows use an address capture. Ordinary
+				// An address capture (`op == .amp`) borrows the outer storage. Ordinary
 				// mutable V captures retain their closure-owned value semantics.
 				context_field_types[child.value] = if is_ref_capture
 					&& (child.op == .amp || t.is_fixed_array_type(capture_type)) {
@@ -14120,7 +14120,7 @@ fn (t &Transformer) current_source_module() string {
 }
 
 fn (mut t Transformer) new_fn_literal_name() string {
-	// Lowering a work item can introduce a VML closure after the literal scan.
+	// Lowering a work item can introduce a closure after the literal scan.
 	// Private helper maps cannot see names created concurrently by other items.
 	prefix := if t.literal_free_fn_body && t.item_range_hi >= 0 {
 		'anon_fn_work_${t.item_range_hi}'
