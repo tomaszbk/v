@@ -11,30 +11,15 @@ pub const native_backend_replacement_message = '`-b native` has been replaced by
 	'Enable ARM64 support with `v -compile-backend arm64 self`, then use `v -b arm64 -gc none file.v`.\n' +
 	'On Linux AMD64, first run `v -compile-backend x64 self`, then `v -b x64 file.v`.'
 
-const macos_v3_caller_vexe_env = 'V_MACOS_V3_CALLER_VEXE'
-const macos_v3_caller_vexe_present_env = 'V_MACOS_V3_CALLER_VEXE_PRESENT'
-const macos_v3_caller_vchild_env = 'V_MACOS_V3_CALLER_VCHILD'
-const macos_v3_caller_vchild_present_env = 'V_MACOS_V3_CALLER_VCHILD_PRESENT'
-const macos_v3_caller_no_fallback_env = 'V_MACOS_V3_CALLER_NO_FALLBACK'
-const macos_v3_caller_no_fallback_present_env = 'V_MACOS_V3_CALLER_NO_FALLBACK_PRESENT'
-const macos_v3_private_environment_names = [
-	'V_MACOS_V3_FALLBACK_FILE',
-	'V_MACOS_V3_C_ERROR_DIR',
-	'V_MACOS_V3_SOURCE_MANIFEST',
+// private_environment_names are compiler-internal variables that compiled programs never see.
+const private_environment_names = [
 	'V_MACOS_V3_VHASH',
 	'V_MACOS_V3_VCURRENT_HASH',
 	'V_MACOS_V3_EMBEDDED',
-	'V_MACOS_V3_RETRY',
 	'V3_CRUN_BUILD_IDENTITY',
 	'V3_INTERNAL_RESTART',
 	'V3_INTERNAL_CACHE_RECOVERY',
 	'V3_INTERNAL_CACHE_FORCE_SOURCE',
-	macos_v3_caller_vexe_env,
-	macos_v3_caller_vexe_present_env,
-	macos_v3_caller_vchild_env,
-	macos_v3_caller_vchild_present_env,
-	macos_v3_caller_no_fallback_env,
-	macos_v3_caller_no_fallback_present_env,
 ]
 
 // Subsystem selects the Windows executable subsystem.
@@ -284,68 +269,21 @@ fn two_digits(value int) string {
 	return value.str()
 }
 
-// has_macos_v3_caller_environment reports whether the macOS driver transported
-// the environment that should remain visible to compiled programs.
-pub fn has_macos_v3_caller_environment() bool {
-	return os.getenv(macos_v3_caller_vexe_present_env) in ['0', '1']
-		&& os.getenv(macos_v3_caller_vchild_present_env) in ['0', '1']
-}
-
-// macos_v3_caller_env_value returns the caller-visible value for compile-time `$env`.
-pub fn macos_v3_caller_env_value(name string) string {
-	if name in macos_v3_private_environment_names {
+// caller_env_value returns the caller-visible value for compile-time `$env`.
+pub fn caller_env_value(name string) string {
+	if name in private_environment_names {
 		return ''
-	}
-	if !has_macos_v3_caller_environment() {
-		return os.getenv(name)
-	}
-	if name == 'VEXE' {
-		return if os.getenv(macos_v3_caller_vexe_present_env) == '1' {
-			os.getenv(macos_v3_caller_vexe_env)
-		} else {
-			''
-		}
-	}
-	if name == 'VCHILD' {
-		return if os.getenv(macos_v3_caller_vchild_present_env) == '1' {
-			os.getenv(macos_v3_caller_vchild_env)
-		} else {
-			''
-		}
-	}
-	if name == 'V_MACOS_V3_NO_FALLBACK'
-		&& os.getenv(macos_v3_caller_no_fallback_present_env) in ['0', '1'] {
-		return if os.getenv(macos_v3_caller_no_fallback_present_env) == '1' {
-			os.getenv(macos_v3_caller_no_fallback_env)
-		} else {
-			''
-		}
 	}
 	return os.getenv(name)
 }
 
-// macos_v3_caller_environment returns the environment that delegated run children should see.
-pub fn macos_v3_caller_environment() map[string]string {
+// caller_environment returns the environment that run children should see.
+pub fn caller_environment() map[string]string {
 	mut environment := os.environ()
-	if has_macos_v3_caller_environment() {
-		restore_macos_v3_caller_environment_value(mut environment, 'VEXE', macos_v3_caller_vexe_env, macos_v3_caller_vexe_present_env)
-		restore_macos_v3_caller_environment_value(mut environment, 'VCHILD', macos_v3_caller_vchild_env, macos_v3_caller_vchild_present_env)
-	}
-	if os.getenv(macos_v3_caller_no_fallback_present_env) in ['0', '1'] {
-		restore_macos_v3_caller_environment_value(mut environment, 'V_MACOS_V3_NO_FALLBACK', macos_v3_caller_no_fallback_env, macos_v3_caller_no_fallback_present_env)
-	}
-	for name in macos_v3_private_environment_names {
+	for name in private_environment_names {
 		environment.delete(name)
 	}
 	return environment
-}
-
-fn restore_macos_v3_caller_environment_value(mut environment map[string]string, name string, value_name string, present_name string) {
-	if os.getenv(present_name) == '1' {
-		environment[name] = os.getenv(value_name)
-	} else {
-		environment.delete(name)
-	}
 }
 
 fn target_build_time() time.Time {

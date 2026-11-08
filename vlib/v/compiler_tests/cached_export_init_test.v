@@ -93,7 +93,7 @@ println(os.args[1..].join(','))
 		for index, shape in order {
 			source := os.join_path(root, '${shape}.c.v')
 			executable := os.join_path(root, '${order[0]}_${shape}')
-			compiled := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-cc', @CCOMPILER,
+			compiled := os.exec([@VEXE, '-no-retry-compilation', '-cc', @CCOMPILER,
 				'-gc', 'none', '-show-timings', '-o', executable, source])
 			assert compiled.exit_code == 0, '${order}: ${compiled.output}'
 			objects := cached_export_objects(cache)
@@ -159,7 +159,7 @@ fn main() {
 	os.setenv('V3CACHE', cache, true)
 	executable := os.join_path(root, 'naked')
 	// Unlike -keepc and -o file.c, -cg retains C without disabling module caching.
-	compiled := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-cc', cc, '-gc', 'none',
+	compiled := os.exec([@VEXE, '-no-retry-compilation', '-cc', cc, '-gc', 'none',
 		'-cg', '-o', executable, source])
 	assert compiled.exit_code == 0, compiled.output
 	assert cached_export_objects(cache).len > 0, 'no cached export module in ${cache}'

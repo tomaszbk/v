@@ -136,31 +136,11 @@ compiled by the default compiler.
 compiler implementation is no longer kept in this repository. External tools are first compiled
 with the default compiler, and `test` is handled by the default compiler directly.
 
-`-new-compiler` remains accepted for command-line compatibility and normally selects the same
-in-process driver. The standard bootstrap does not build the sibling `v1_fallback`
-(`v1_fallback.exe` on Windows). When a compatibility fallback is needed and the sibling is
-missing, V reports that it is running `make v1`. That target reuses or downloads the complete
-0.5.2 release under the user cache; if its release binary cannot be used, `oldv` clones the 0.5.2
-V sources and their matching `vc` snapshot and builds the fallback there. Run `make v1` explicitly
-to prepare it ahead of time. Automatic provisioning keeps its launcher metadata in the user cache,
-so an older read-only sibling installation can remain untouched. The installer exposes
-`crypto.subtle` at its current public path in the fallback vlib, and fallback resolution reruns the
-installer when an older cached tree lacks that path. `-old-compiler` launches the fallback
-explicitly, and ordinary user builds and external tools retry through it after a compiler or C
-compilation failure.
-
-The installer supplements the cached fallback vlib with modules whose public paths moved after
-0.5.2. Fallback roots missing these compatibility modules are not used. If a fallback command exits
-unsuccessfully, V notes where the default compiler stopped and how to show its suppressed
-diagnostics. For a command that may have run user code, the note preserves the child's status
-without mislabeling it as a compiler failure. Re-run the command with `-new-compiler` to see the
-default-compiler diagnostics without a fallback retry.
+There is no compatibility compiler: a failed build reports its own diagnostics and is never
+retried with another compiler.
 
 The in-process path supports the split module cache and uses parallel stages while the input
 remains within its scratch-memory safety limit.
-
-Explicit `-new-compiler` builds remain strict default-compiler operations and do not retry with
-V1.
 
 ## Machine-readable diagnostics
 
@@ -185,11 +165,9 @@ as one JSON object per line on stderr, instead of the text with a source excerpt
 A diagnostic without a source position has no location members. The same diagnostics are
 reported as without the option, in the same order and with the same exit code, and `-W` and
 `-message-limit` apply as usual. Two things differ: every error is printed, where the text
-form stops after 20 of them, and a failed build is not retried with the compatibility compiler.
+form stops after 20 of them.
 Messages that are not diagnostics of the V source, like the output of a failing C compiler, stay
-text: a line is a diagnostic when it starts with `{`. `-old-compiler`, and `-vls-mode` without
-`-new-compiler`, build with the compatibility compiler, which reads `-json-errors` in its own way
-and does not print this format.
+text: a line is a diagnostic when it starts with `{`.
 
 ## Profile-guided compiler build
 

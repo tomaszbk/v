@@ -107,7 +107,7 @@ would otherwise rebuild the tool for every input until the job times out.
 
 Pkg-config steps run the current compiler's argument-query and compile-time detection
 tests. The bootstrap contract also checks that explicit source and test paths in the
-Windows workflows exist; archived V1 tests under `vlib/v/legacy_tests` are fixtures.
+Windows workflows exist.
 Direct C compilation checks link V3's native runtime helpers, disable GC
 dependencies, and run the resulting compiler's version command.
 Cross-platform C-generation probes select a compiler for their target explicitly;

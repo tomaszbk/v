@@ -9,7 +9,7 @@ fn test_sumtype_pointer_owners_move_once_and_borrows_remain_copyable() {
 	defer { os.rmdir_all(dir) or {} }
 	compiler := os.join_path(dir, 'v-ownership')
 	vlib := os.join_path(@VEXEROOT, 'vlib')
-	build := os.exec([@VEXE, '-new-compiler', '-b', 'c', '-cc', cc, '-gc', 'none', '-d', 'ownership',
+	build := os.exec([@VEXE, '-b', 'c', '-cc', cc, '-gc', 'none', '-d', 'ownership',
 		'-path', vlib, '-o', compiler, os.join_path(vlib, 'v', 'v.v')])
 	assert build.exit_code == 0, build.output
 	header := os.join_path(dir, 'drops.h')
@@ -461,7 +461,7 @@ fn main() {
 		for mode in ['-autofree', '-ownership'] {
 			for prealloc in [false, true] {
 				for program in [source, ordinary_source, or_source] {
-					mut command := [compiler, '-new-compiler', '-nocache', '-no-closures', '-gc',
+					mut command := [compiler, '-nocache', '-no-closures', '-gc',
 						'none', '-cc', cc, mode]
 					if prealloc { command << '-prealloc' }
 					command << ['run', program]

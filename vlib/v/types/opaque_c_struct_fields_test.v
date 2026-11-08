@@ -88,7 +88,7 @@ fn main() {
 	assert C.native_alias_value(copied.native) == i64(9876543210123)
 }
 ')!
-	result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-cc', @CCOMPILER, 'run',
+	result := os.exec([@VEXE, '-no-retry-compilation', '-cc', @CCOMPILER, 'run',
 		source])
 	assert result.exit_code == 0, result.output
 }

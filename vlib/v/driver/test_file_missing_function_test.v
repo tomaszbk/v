@@ -34,7 +34,7 @@ fn test_test_files_without_active_functions_report_located_errors() {
 				flags << '-no-parallel'
 			}
 			output := os.join_path(root, '${input.name}_${serial}')
-			result := os.exec([@VEXE, '-new-compiler', '-nocache', '-no-retry-compilation', '-nocolor',
+			result := os.exec([@VEXE, '-nocache', '-no-retry-compilation', '-nocolor',
 				...flags, '-o', output, path])
 			assert result.exit_code == 1, result.output
 			location := '${os.real_path(path)}:${input.line}:1: error: '
@@ -88,7 +88,7 @@ fn test_result() ! {
 				defines << ['-d', 'missing_test_function_enabled']
 			}
 			output := os.join_path(root, '${os.file_name(path).all_before_last('.v')}_${serial}')
-			build := os.exec([@VEXE, '-new-compiler', '-nocache', '-no-retry-compilation', '-nocolor',
+			build := os.exec([@VEXE, '-nocache', '-no-retry-compilation', '-nocolor',
 				...flags, ...defines, '-o', output, path])
 			assert build.exit_code == 0, build.output
 			run := os.exec([output])
@@ -114,7 +114,7 @@ fn test_result() ! {
 		},
 	] {
 		os.write_file(invalid, input.source)!
-		result := os.exec([@VEXE, '-new-compiler', '-nocache', '-no-retry-compilation', '-nocolor',
+		result := os.exec([@VEXE, '-nocache', '-no-retry-compilation', '-nocolor',
 			'-check', invalid])
 		assert result.exit_code == 1, result.output
 		assert result.output.contains('${os.real_path(invalid)}:3:1: error: invalid test signature: ${input.name}'), result.output

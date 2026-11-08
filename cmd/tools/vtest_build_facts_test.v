@@ -37,7 +37,6 @@ fn testsuite_begin() {
 	// One attempt: the runner compiles `VTEST_MAX_COMPILATION_RETRIES` times, so 0 would skip compiling.
 	os.setenv('VTEST_MAX_COMPILATION_RETRIES', '1', true)
 	os.setenv('V_C_ERROR_BUG_REPORT_DISABLED', '1', true)
-	os.setenv('V_MACOS_V3_NO_FALLBACK', '1', true)
 	host := pref.host_target()
 	write_facts_fixture('host_os_test.v', host.os, true)
 	write_facts_fixture('not_host_os_test.v', '!${host.os}', false)

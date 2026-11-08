@@ -31,7 +31,7 @@ fn main() { holder := Holder{values: [&Item{}]}
 	defer { os.rm(path) or {} }
 	for i, source in sources {
 		os.write_file(path, source)!
-		result := os.exec([@VEXE, '-new-compiler', '-check', path])
+		result := os.exec([@VEXE, '-check', path])
 		assert result.exit_code != 0, source
 		assert result.output.contains(expected[i]), result.output
 	}
@@ -51,7 +51,7 @@ type Value = int | Pair
 fn pack(x int) Value { return Pair{x, x + 1} }
 fn main() { println(pack(3)) }'
 	os.write_file(path, source)!
-	result := os.exec([@VEXE, '-new-compiler', '-o', output, path])
+	result := os.exec([@VEXE, '-o', output, path])
 	assert result.exit_code == 0, result.output
 	generated := os.read_file(output)!
 	body := sumtype_test_function_body(generated, 'pack')
@@ -85,7 +85,7 @@ fn main() {
 	os.write_file(os.join_path(dir, 'model', 'model.v'), model)!
 	path := os.join_path(dir, 'main.v')
 	os.write_file(path, program)!
-	result := os.exec([@VEXE, '-new-compiler', 'run', path])
+	result := os.exec([@VEXE, 'run', path])
 	assert result.exit_code == 0, result.output
 }
 
@@ -139,7 +139,7 @@ fn main() {
  } else { assert false }
 }'
 	os.write_file(path, source)!
-	generated_result := os.exec([@VEXE, '-new-compiler', '-nocache', '-o', output, path])
+	generated_result := os.exec([@VEXE, '-nocache', '-o', output, path])
 	assert generated_result.exit_code == 0, generated_result.output
 	generated := os.read_file(output)!
 	local := sumtype_test_function_body(generated, 'from_local')
@@ -150,7 +150,7 @@ fn main() {
 		assert !body.contains('memdup'), body
 		assert !body.contains('._pointer_variant_is_owned = true'), body
 	}
-	run := os.exec([@VEXE, '-new-compiler', '-nocache', 'run', path])
+	run := os.exec([@VEXE, '-nocache', 'run', path])
 	assert run.exit_code == 0, run.output
 }
 
@@ -183,7 +183,7 @@ fn main() {
  assert voidptr(null as &Item) == unsafe { nil }
 }')!
 	for flags in [['-nocache'], []string{}] {
-		result := os.exec([@VEXE, '-new-compiler', ...flags, '-no-closures', 'run', path])
+		result := os.exec([@VEXE, ...flags, '-no-closures', 'run', path])
 		assert result.exit_code == 0, result.output
 	}
 }

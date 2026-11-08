@@ -22,9 +22,6 @@ fn test_pure_v_math_module() {
 }
 
 fn self_tests() {
-	// Never select the V1 compatibility compiler here. It is a separate V 0.5.2
-	// installation, so `test-self vlib` would resolve `vlib` under *its* VROOT and
-	// test the release's own standard library instead of this repository's.
 	if common.is_github_job {
 		exec_args(['v', '-W', '-silent', 'test-self', 'vlib'])
 	} else {
@@ -586,7 +583,6 @@ fn run_ci_tasks(reset bool) ! {
 	os.setenv('CI', 'true', true)
 	os.setenv('GITHUB_ACTIONS', 'true', true)
 	os.setenv('RUNNER_OS', 'Linux', true)
-	os.setenv('V_MACOS_V3_NO_FALLBACK', '1', true)
 	// Stop test/build sessions promptly while retaining Linux CI's normal worker count.
 	os.setenv('VTEST_FAIL_FAST', '1', true)
 	os.setenv('VTEST_SHOW_LONGEST_BY_RUNTIME', '3', true)

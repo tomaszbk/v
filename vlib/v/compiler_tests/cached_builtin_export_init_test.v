@@ -37,7 +37,7 @@ fn main() {
 		executable := os.join_path(root, phase)
 		// Debug builds retain musl's exported backtrace stubs, whose cached
 		// wrappers call the initializer. This also reproduces on glibc hosts.
-		compiled := cmdexec.run_in_merged_with_env(@VEXE, ['-new-compiler', '-no-retry-compilation',
+		compiled := cmdexec.run_in_merged_with_env(@VEXE, ['-no-retry-compilation',
 			'-cc', 'cc', '-gc', 'none', '-d', 'musl', '-cg', '-show-timings', '-o', executable,
 			source], os.dir(@VEXE), environment)
 		assert compiled.exit_code == 0, '${phase}: ${compiled.output}'

@@ -137,7 +137,7 @@ fn main() {
 		output := os.join_path(dir, 'main_${jobs}.c')
 		// Configure only the child; the surrounding test session keeps its own job count.
 		mut command := os.new_process(@VEXE)
-		command.set_args(['-new-compiler', '-nocache', '-o', output, path])
+		command.set_args(['-nocache', '-o', output, path])
 		mut environment := os.environ()
 		environment['VJOBS'] = jobs
 		command.set_environment(environment)
@@ -152,7 +152,7 @@ fn main() {
 		assert generated.contains('void* _ptr__2Node;')
 		assert generated.contains('__attribute__((may_alias))')
 		for autofree in [false, true] {
-			mut args := [@VEXE, '-new-compiler', '-nocache', '-prod', '-cc', 'clang']
+			mut args := [@VEXE, '-nocache', '-prod', '-cc', 'clang']
 			if autofree { args << ['-gc', 'none', '-autofree'] }
 			args << ['run', path]
 			result := os.exec(args)
@@ -169,7 +169,7 @@ fn test_owned_aligned_fixed_array_sum_drops_elements_once() {
 	defer { os.rmdir_all(dir) or {} }
 	compiler := os.join_path(dir, 'v-ownership')
 	vlib := os.join_path(@VEXEROOT, 'vlib')
-	build := os.exec([@VEXE, '-new-compiler', '-b', 'c', '-cc', cc, '-gc', 'none', '-d', 'ownership',
+	build := os.exec([@VEXE, '-b', 'c', '-cc', cc, '-gc', 'none', '-d', 'ownership',
 		'-path', vlib, '-o', compiler, os.join_path(vlib, 'v', 'v.v')])
 	assert build.exit_code == 0, build.output
 	source_dir := os.join_path(@VMODROOT, 'vlib', 'v', 'gen', 'c', 'testdata', 'sumtype_fixed_array_pointer')
@@ -181,7 +181,7 @@ fn test_owned_aligned_fixed_array_sum_drops_elements_once() {
 				['autofree', 'ownership']
 			}
 			for mode in modes {
-				mut args := ['-new-compiler', '-nocache', '-no-closures', '-gc', 'none', '-cc',
+				mut args := ['-nocache', '-no-closures', '-gc', 'none', '-cc',
 					cc, '-${mode}']
 				if prealloc { args << '-prealloc' }
 				args << ['run', os.join_path(source_dir, source_name)]
@@ -190,7 +190,7 @@ fn test_owned_aligned_fixed_array_sum_drops_elements_once() {
 			}
 		}
 		for mode in ['autofree', 'ownership'] {
-			mut args := ['-new-compiler', '-nocache', '-no-closures', '-gc', 'none', '-${mode}']
+			mut args := ['-nocache', '-no-closures', '-gc', 'none', '-${mode}']
 			if prealloc { args << '-prealloc' }
 			args << ['-check', os.join_path(source_dir, 'owning_slot_rebind_err.c.v')]
 			rejected := os.exec([compiler, ...args])

@@ -1,4 +1,3 @@
-// vtest vflags: -new-compiler
 
 struct ConditionalStack {
 mut:

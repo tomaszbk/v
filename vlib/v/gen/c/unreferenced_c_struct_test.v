@@ -37,7 +37,7 @@ fn main() {
  holder := Holder{}
  assert holder.items[0].value == 0
 }')!
-	generated_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-o', output, source])
+	generated_result := cmdexec.run(@VEXE, ['-nocache', '-o', output, source])
 	assert generated_result.exit_code == 0, generated_result.output
 	generated := os.read_file(output)!
 	assert !generated.contains('struct pollfd {')
@@ -50,7 +50,7 @@ fn main() {
 	assert generated.contains('struct DirectLayout {')
 	assert generated.contains('struct SizeOnlyLayout {')
 	assert generated.contains('struct OffsetOnlyLayout {')
-	run_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', 'run', source])
+	run_result := cmdexec.run(@VEXE, ['-nocache', 'run', source])
 	assert run_result.exit_code == 0, run_result.output
 }
 
@@ -61,10 +61,10 @@ fn check_auxiliary_c_struct_declarations(name string, declarations string, retai
 	source := os.join_path(root, 'main.v')
 	output := os.join_path(root, 'main.c')
 	os.write_file(source, declarations + '\nfn main() {}\n')!
-	generated_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-enable-globals', '-o',
+	generated_result := cmdexec.run(@VEXE, ['-nocache', '-enable-globals', '-o',
 		output, source])
 	assert generated_result.exit_code == 0, generated_result.output
-	run_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-enable-globals', '-cc', 'clang',
+	run_result := cmdexec.run(@VEXE, ['-nocache', '-enable-globals', '-cc', 'clang',
 		'run', source])
 	assert run_result.exit_code == 0, run_result.output
 	generated := os.read_file(output)!
@@ -129,11 +129,11 @@ fn main() {
 	assert "\${boxed}".contains("BoxedInterfaceLayout")
 	assert boxed is C.BoxedInterfaceLayout
 }')!
-	generated_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-o', output, source])
+	generated_result := cmdexec.run(@VEXE, ['-nocache', '-o', output, source])
 	assert generated_result.exit_code == 0, generated_result.output
 	generated := os.read_file(output)!
 	assert !generated.contains('UnusedInterfaceLayout')
 	assert generated.contains('struct BoxedInterfaceLayout {')
-	run_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-cc', 'clang', 'run', source])
+	run_result := cmdexec.run(@VEXE, ['-nocache', '-cc', 'clang', 'run', source])
 	assert run_result.exit_code == 0, run_result.output
 }

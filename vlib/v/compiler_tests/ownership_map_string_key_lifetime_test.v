@@ -34,7 +34,7 @@ fn test_ownership_map_clones_string_key_storage_before_releasing_the_source() {
 ")!
 	for mode in ['', '-no-parallel'] {
 		for gc_mode in ['vgc', 'none'] {
-			mut args := [@VEXE, '-new-compiler', '-nocache', '-ownership', '-d', 'ownership',
+			mut args := [@VEXE, '-nocache', '-ownership', '-d', 'ownership',
 				'-autofree', '-gc', gc_mode, '-no-prealloc']
 			if mode != '' { args << mode }
 			args << ['run', source]

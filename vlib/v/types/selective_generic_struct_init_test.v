@@ -69,7 +69,7 @@ fn main() {
 	assert typeof(local).name == "Vec2[f32]"
 }
 ')!
-	result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-cc', @CCOMPILER, 'run',
+	result := os.exec([@VEXE, '-no-retry-compilation', '-cc', @CCOMPILER, 'run',
 		root])
 	assert result.exit_code == 0, result.output
 }

@@ -104,7 +104,7 @@ fn main() {
 	for case in cases {
 		path := os.join_path(root, '${case.name}.v')
 		os.write_file(path, forwarded_pointer_error_prelude + case.source)!
-		result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', '-cc',
+		result := os.exec([@VEXE, '-no-retry-compilation', '-nocache', '-cc',
 			'clang', '-check', path])
 		assert result.exit_code == 1, result.output
 		assert result.output.count('error:') == 1, result.output

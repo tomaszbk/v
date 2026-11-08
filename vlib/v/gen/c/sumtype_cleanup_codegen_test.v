@@ -10,7 +10,7 @@ fn test_sum_storage_acquires_only_active_literal_and_shares_cleanup() {
 	defer { os.rmdir_all(dir) or {} }
 	compiler := os.join_path(dir, 'v-ownership')
 	vlib := os.join_path(@VEXEROOT, 'vlib')
-	build := os.exec([@VEXE, '-new-compiler', '-cc', cc, '-gc', 'none', '-d', 'ownership', '-path',
+	build := os.exec([@VEXE, '-cc', cc, '-gc', 'none', '-d', 'ownership', '-path',
 		vlib, '-o', compiler, os.join_path(vlib, 'v', 'v.v')])
 	assert build.exit_code == 0, build.output
 	source := os.join_path(dir, 'main.v')

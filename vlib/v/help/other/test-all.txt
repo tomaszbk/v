@@ -12,7 +12,4 @@ invariants of the compiler.
 Compiler options given to `v test-all`, or set through VFLAGS, are
 applied to all of the checks.
 
-Passing `-new-compiler` (and not `-old-compiler`) selects strict V3
-mode: checks that are not compatible with the V3 compiler are then
-skipped, and the remaining ones are run with exactly the given
-options.
+Checks that are not compatible with the V3 compiler are skipped.

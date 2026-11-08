@@ -28,25 +28,20 @@ fn main() {
 	raw_vflags := os.getenv('VFLAGS')
 	mut requested_args := vflags.tokenize_to_args(raw_vflags)
 	requested_args << vflags.tokenize_to_args(vargs)
-	strict_v3 := '-new-compiler' in requested_args && '-old-compiler' !in requested_args
 	strict_flags := requested_args.map(os.quoted_path(it)).join(' ')
-	if strict_v3 {
-		os.unsetenv('VFLAGS')
-	}
+	os.unsetenv('VFLAGS')
 	mut all_commands := get_all_commands()
 	mut commands := []Command{}
 	for mut cmd in all_commands {
-		if strict_v3 {
-			if !cmd.v3_compatible {
-				eprintln('> strict V3: skipping unsupported check: ${cmd.line}')
-				continue
-			}
-			if cmd.v3_line.len > 0 {
-				cmd.line = cmd.v3_line
-			}
-			cmd.line = cmd.line.replace_once(vexe, '${vexe} ${strict_flags}')
-			if cmd.arguments.len > 0 { cmd.arguments << requested_args }
+		if !cmd.v3_compatible {
+			eprintln('> strict V3: skipping unsupported check: ${cmd.line}')
+			continue
 		}
+		if cmd.v3_line.len > 0 {
+			cmd.line = cmd.v3_line
+		}
+		cmd.line = cmd.line.replace_once(vexe, '${vexe} ${strict_flags}')
+		if cmd.arguments.len > 0 { cmd.arguments << requested_args }
 		commands << cmd
 	}
 	// summary

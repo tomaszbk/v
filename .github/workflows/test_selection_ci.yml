@@ -52,4 +52,4 @@ jobs:
       - name: Build V
         run: ${{ matrix.build }}
       - name: Check explicit and recursive test selection
-        run: ${{ matrix.v }} -new-compiler -gc none cmd/tools/vtest_selection_test.v
+        run: ${{ matrix.v }} -gc none cmd/tools/vtest_selection_test.v

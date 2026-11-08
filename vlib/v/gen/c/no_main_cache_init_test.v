@@ -17,7 +17,7 @@ assert os.args.len == 3
 assert script_callback() == 3
 assert os.args[1..] == ['alpha', 'beta']
 println(os.args[1..].join(','))\n")!
-	compiled := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', '-cc',
+	compiled := os.exec([@VEXE, '-no-retry-compilation', '-nocache', '-cc',
 		@CCOMPILER, '-o', executable, script])
 	assert compiled.exit_code == 0, compiled.output
 	run := os.exec([executable, 'alpha', 'beta'])

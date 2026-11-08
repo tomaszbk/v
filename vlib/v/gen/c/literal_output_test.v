@@ -241,7 +241,7 @@ fn test_windows_literal_cli_output_matches_native_crt_declarations() ! {
 		'fn main() { print("a\\x00b"); eprintln("c"); print("d") }'] {
 		os.write_file(source, program)!
 		for cc in ['clang', 'msvc'] {
-			generated := run_literal_output_v(['-new-compiler', '-nocache', '-os', 'windows',
+			generated := run_literal_output_v(['-nocache', '-os', 'windows',
 				'-arch', 'amd64', '-cc', cc, '-o', c_file, source])
 			assert generated.exit_code == 0, generated.output
 			code := os.read_file(c_file)!
@@ -270,7 +270,7 @@ fn test_windows_literal_cli_output_matches_native_crt_declarations() ! {
 		}
 	}
 	os.write_file(source, 'fn main() { println("привет") }')!
-	generated := run_literal_output_v(['-new-compiler', '-nocache', '-gc', 'none', '-os', 'windows',
+	generated := run_literal_output_v(['-nocache', '-gc', 'none', '-os', 'windows',
 		'-arch', 'amd64', '-o', c_file, source])
 	assert generated.exit_code == 0, generated.output
 	assert os.read_file(c_file)!.contains('MultiByteToWideChar'), 'Unicode console support must remain reachable'

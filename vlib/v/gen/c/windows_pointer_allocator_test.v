@@ -123,7 +123,7 @@ fn main() {
 	release_c(foreign)
 }
 ')!
-	generated_result := os.exec([@VEXE, '-new-compiler', '-nocache', '-os', 'windows', '-gc', 'none',
+	generated_result := os.exec([@VEXE, '-nocache', '-os', 'windows', '-gc', 'none',
 		'-manualfree', '-o', c_source, source])
 	assert generated_result.exit_code == 0, generated_result.output
 	generated := os.read_file(c_source)!
@@ -194,7 +194,7 @@ fn test_windows_implicit_pointer_sum_drops_keep_the_v_allocator_family() {
 	c_source := os.join_path(dir, 'main.c')
 	ownership_compiler := os.join_path(dir, 'v-ownership')
 	vlib := os.join_path(@VEXEROOT, 'vlib')
-	build_compiler := os.exec([@VEXE, '-new-compiler', '-b', 'c', '-cc', cc, '-gc', 'none', '-d',
+	build_compiler := os.exec([@VEXE, '-b', 'c', '-cc', cc, '-gc', 'none', '-d',
 		'ownership', '-path', vlib, '-o', ownership_compiler, os.join_path(vlib, 'v', 'v.v')])
 	assert build_compiler.exit_code == 0, build_compiler.output
 	os.write_file(source, '@[aligned: 64]
@@ -244,7 +244,7 @@ fn main() { implicit_aligned()
  implicit_generic_nested_aligned()
  implicit_generic_borrowed_wrapper(&seed) }
 ')!
-	result := os.exec([ownership_compiler, '-new-compiler', '-nocache', '-os', 'windows', '-gc',
+	result := os.exec([ownership_compiler, '-nocache', '-os', 'windows', '-gc',
 		'none', '-autofree', '-no-closures', '-o', c_source, source])
 	assert result.exit_code == 0, result.output
 	generated := os.read_file(c_source)!

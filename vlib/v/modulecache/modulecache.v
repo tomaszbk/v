@@ -627,7 +627,7 @@ fn source_signature_details_probed(source_files []string, build_pseudo_values st
 	mut names := env_names.keys()
 	names.sort()
 	for name in names {
-		value := pref.macos_v3_caller_env_value(name)
+		value := pref.caller_env_value(name)
 		validation << 'env=${name}\t${hash_text(value)}'
 		hash = hash_bytes(hash, [u8(0xfe)])
 		hash = hash_bytes(hash, name.bytes())
@@ -1010,7 +1010,7 @@ fn valid_cached_source_signature(content string, metadata string, build_pseudo_v
 		if line.starts_with('env=') {
 			parts := line['env='.len..].split('\t')
 			if parts.len != 2 || parts[0].len == 0
-				|| hash_text(pref.macos_v3_caller_env_value(parts[0])) != parts[1] {
+				|| hash_text(pref.caller_env_value(parts[0])) != parts[1] {
 				return none
 			}
 			continue

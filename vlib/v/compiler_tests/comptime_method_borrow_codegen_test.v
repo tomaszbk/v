@@ -17,7 +17,7 @@ fn test_reflected_method_calls_preserve_borrow_and_escape_information() {
 	source := os.join_path(root, 'main.v')
 	os.cp(os.join_path(@DIR, 'testdata', 'comptime_method_borrow.vv'), source)!
 	c_path := os.join_path(root, 'main.c')
-	generated := cmdexec.run_with_timeout(@VEXE, ['-new-compiler', '-enable-globals', '-gc', 'none',
+	generated := cmdexec.run_with_timeout(@VEXE, ['-enable-globals', '-gc', 'none',
 		'-o', c_path, source], 120_000)
 	assert generated.exit_code == 0, generated.output
 	c_source := os.read_file(c_path)!
@@ -29,7 +29,7 @@ fn test_reflected_method_calls_preserve_borrow_and_escape_information() {
 		body := reflected_borrow_function(c_source, name)
 		assert body.contains('memdup('), body
 	}
-	ran := cmdexec.run_with_timeout(@VEXE, ['-new-compiler', '-enable-globals', '-gc', 'none',
+	ran := cmdexec.run_with_timeout(@VEXE, ['-enable-globals', '-gc', 'none',
 		'run', source], 120_000)
 	assert ran.exit_code == 0, ran.output
 	assert ran.output.trim_space() == 'OK', ran.output

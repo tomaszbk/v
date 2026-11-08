@@ -7,7 +7,7 @@ fn test_test_self_discovers_host_architecture_files() {
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }
 	tool := os.join_path(root, 'vtest-self.exe')
-	build := cmdexec.run_with_timeout(@VEXE, ['-new-compiler', '-nocache', '-gc', 'none', '-o',
+	build := cmdexec.run_with_timeout(@VEXE, ['-nocache', '-gc', 'none', '-o',
 		tool, os.join_path(@VMODROOT, 'cmd', 'tools', 'vtest-self.v')], 180_000)
 	assert build.exit_code == 0, build.output
 	fixture_dir := os.join_path(root, 'parent.with.dots')
@@ -92,7 +92,7 @@ fn test_environment() {
 		}
 	}
 	os.setenv('VEXE', @VEXE, true)
-	os.setenv('VFLAGS', '-new-compiler -cc clang -d vtest_self_environment_define', true)
+	os.setenv('VFLAGS', '-cc clang -d vtest_self_environment_define', true)
 	result := cmdexec.run_with_timeout(tool, ['test-self', os.base(root)], 120_000)
 	assert result.exit_code == 0, result.output
 	assert result.output.contains('1 passed, 1 total'), result.output

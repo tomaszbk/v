@@ -22,7 +22,6 @@ fn test_generic_short_struct_and_alias_method_compile_without_fallback() {
 	v3_bin := generic_compat_tmp_path('compiler')
 	old_no_fallback := os.getenv_opt('V_MACOS_V3_NO_FALLBACK')
 	old_jobs := os.getenv_opt('VJOBS')
-	os.setenv('V_MACOS_V3_NO_FALLBACK', '1', true)
 	os.setenv('VJOBS', '1', true)
 	defer {
 		generic_compat_restore_env('V_MACOS_V3_NO_FALLBACK', old_no_fallback)

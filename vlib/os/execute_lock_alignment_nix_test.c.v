@@ -13,7 +13,7 @@ fn main() {
 }
 ')!
 	c_path := os.join_path(root, 'main.c')
-	generated := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', '-o', c_path,
+	generated := os.exec([@VEXE, '-no-retry-compilation', '-nocache', '-o', c_path,
 		source])
 	assert generated.exit_code == 0, generated.output
 	c_source := os.read_file(c_path)!
@@ -46,7 +46,7 @@ int main(void) {
 	assert compiled.exit_code == 0, compiled.output
 	run := os.exec([executable])
 	assert run.exit_code == 0, run.output
-	executed := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-cc', @CCOMPILER, 'run',
+	executed := os.exec([@VEXE, '-no-retry-compilation', '-cc', @CCOMPILER, 'run',
 		source])
 	assert executed.exit_code == 0, executed.output
 }

@@ -16,7 +16,7 @@ fn test_nofloat_integer_map_formatting_does_not_require_sse() {
 	input := os.join_path(root, 'main.v')
 	output := os.join_path(root, 'map_format')
 	os.write_file(input, "fn main() { println({'count': 1}) }\n") or { panic(err) }
-	result := os.exec([vinix_selector_vexe, '-new-compiler', '-no-retry-compilation', '-nocache',
+	result := os.exec([vinix_selector_vexe, '-no-retry-compilation', '-nocache',
 		'-no-closures', '-gc', 'none', '-nofloat', '-cc', 'gcc', '-cflags',
 		'-mno-sse -mno-sse2 -msoft-float', '-o', output, input])
 	assert result.exit_code == 0, result.output
@@ -35,7 +35,7 @@ fn test_v3_preserves_vinix_style_selectors_and_linker_symbol_casts() {
 	out := os.join_path(root, 'out.c')
 	input := os.join_path(vinix_selector_test_dir, 'main.v')
 	result :=
-		os.exec([vinix_selector_vexe, '-new-compiler', '-nocache', '-os', 'vinix',
+		os.exec([vinix_selector_vexe, '-nocache', '-os', 'vinix',
 			'-target-libc-headers', '-enable-globals', '-no-closures', '-o', '${out}', input])
 	assert result.exit_code == 0, result.output
 	code := os.read_file(out) or { panic(err) }
@@ -58,7 +58,7 @@ fn test_v3_preserves_vinix_kernel_codegen_edges() {
 	out := os.join_path(root, 'out.c')
 	input := os.join_path(vinix_codegen_edges_test_dir, 'main.v')
 	result :=
-		os.exec([vinix_selector_vexe, '-new-compiler', '-nocache', '-os', 'vinix', '-arch', 'arm64',
+		os.exec([vinix_selector_vexe, '-nocache', '-os', 'vinix', '-arch', 'arm64',
 			'-target-libc-headers', '-enable-globals', '-no-closures', '-nofloat', '-o', '${out}',
 			input])
 	assert result.exit_code == 0, result.output

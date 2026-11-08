@@ -1278,10 +1278,6 @@ fn build_tool_binary(vexe string, entry ToolCacheEntry) !string {
 	mut build_args := entry.build_args.clone()
 	build_args << ['-dump-files', dumped, '-o', staged, entry.source]
 	mut environment := os.environ()
-	// The build must either succeed with the current compiler, or fail loudly. Letting the
-	// child silently retry with the compatibility compiler would cache a binary that does
-	// not correspond to this V executable at all.
-	environment[v3_no_fallback_env] = '1'
 	// `build_args` already carries everything `VFLAGS` contributed to this invocation.
 	// Leaving the variable set would make the child prepend all of it a second time.
 	environment['VFLAGS'] = ''

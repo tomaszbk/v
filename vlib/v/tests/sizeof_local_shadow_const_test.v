@@ -35,7 +35,7 @@ fn main() {
 ')!
 	// Build an ordinary program so test-only constant lowering cannot hide its local bindings.
 	vexe := os.join_path(@VMODROOT, 'v' + $if windows { '.exe' } $else { '' })
-	build := cmdexec.run_with_timeout(vexe, ['-new-compiler', '-no-retry-compilation', '-nocache',
+	build := cmdexec.run_with_timeout(vexe, ['-no-retry-compilation', '-nocache',
 		'-gc', 'none', '-o', program, source], 120_000)
 	assert build.exit_code == 0, build.output
 	run := cmdexec.run_with_timeout(program, []string{}, 10_000)

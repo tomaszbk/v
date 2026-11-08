@@ -153,14 +153,10 @@ fn test_literal_output_keeps_linux_backtrace_array_iteration_runtime() {
 	os.unsetenv('VFLAGS')
 	os.unsetenv('VOSARGS')
 	os.setenv('V_C_ERROR_BUG_REPORT_DISABLED', '1', true)
-	vexe := if os.base(@VEXE) in ['v1_fallback', 'v1_fallback.exe'] {
-		os.join_path(os.dir(@VEXE), 'v' + $if windows { '.exe' } $else { '' })
-	} else {
-		@VEXE
-	}
+	vexe := @VEXE
 	source := os.join_path(root, 'hello.v')
 	os.write_file(source, "fn main() { message := 'Hello, World!'; println(message) }\n")!
-	flags := ['-new-compiler', '-no-retry-compilation', '-nocache', '-show-timings']
+	flags := ['-no-retry-compilation', '-nocache', '-show-timings']
 	for arch in ['amd64', 'arm64'] {
 		c_path := os.join_path(root, 'hello_${arch}.c')
 		mut c_args := flags.clone()
@@ -211,19 +207,14 @@ fn test_macos_literal_output_with_gc_has_no_compiler_diagnostics() {
 	}
 	os.unsetenv('VFLAGS')
 	os.unsetenv('VOSARGS')
-	os.setenv('V_MACOS_V3_NO_FALLBACK', '1', true)
 	os.setenv('V_C_ERROR_BUG_REPORT_DISABLED', '1', true)
-	vexe := if os.base(@VEXE) in ['v1_fallback', 'v1_fallback.exe'] {
-		os.join_path(os.dir(@VEXE), 'v')
-	} else {
-		@VEXE
-	}
+	vexe := @VEXE
 	for mode in ['', 'boehm_full', 'boehm_incr', 'boehm_full_opt', 'boehm_incr_opt', 'boehm_leak',
 		'none'] {
 		for index, snippet in [r"print('\n')", r"print('\r\n')"] {
 			source := os.join_path(root, 'literal_${mode}_${index}.v')
 			os.write_file(source, 'fn main() { ${snippet} }\n')!
-			mut args := ['-new-compiler', '-no-retry-compilation', '-nocache', '-cc', 'clang']
+			mut args := ['-no-retry-compilation', '-nocache', '-cc', 'clang']
 			if mode.len > 0 {
 				args << ['-gc', mode]
 			}
@@ -235,7 +226,7 @@ fn test_macos_literal_output_with_gc_has_no_compiler_diagnostics() {
 			assert result.output.bytes() == expected, result.output
 			if index == 0 {
 				c_path := os.join_path(root, 'literal_${mode}.c')
-				mut c_args := ['-new-compiler', '-no-retry-compilation', '-nocache', '-cc', 'clang']
+				mut c_args := ['-no-retry-compilation', '-nocache', '-cc', 'clang']
 				if mode.len > 0 {
 					c_args << ['-gc', mode]
 				}
@@ -259,7 +250,7 @@ fn test_macos_literal_output_with_gc_has_no_compiler_diagnostics() {
 }
 ')!
 		runtime_c := os.join_path(root, 'runtime_${mode}.c')
-		mut runtime_args := ['-new-compiler', '-no-retry-compilation', '-nocache', '-cc', 'clang']
+		mut runtime_args := ['-no-retry-compilation', '-nocache', '-cc', 'clang']
 		if mode.len > 0 {
 			runtime_args << ['-gc', mode]
 		}

@@ -22,7 +22,7 @@ fn main() {
 }
 ')!
 	for flags in ['', '-no-parallel -nocache'] {
-		result := os.exec([@VEXE, '-new-compiler', ...(os.split_args(flags) or { panic(err) }),
+		result := os.exec([@VEXE, ...(os.split_args(flags) or { panic(err) }),
 			'run', source])
 		assert result.exit_code == 0, result.output
 	}
@@ -44,7 +44,7 @@ fn main() {
 }
 ')!
 	for flags in ['', '-no-parallel -nocache'] {
-		result := os.exec([@VEXE, '-new-compiler', ...(os.split_args(flags) or { panic(err) }),
+		result := os.exec([@VEXE, ...(os.split_args(flags) or { panic(err) }),
 			'-check', source])
 		assert result.exit_code != 0, result.output
 		assert result.output.contains('cannot cast struct `C.Record` to `rune`'), result.output

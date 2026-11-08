@@ -10,7 +10,7 @@ fn test_fifo_accepts_darwin_mkfifo_binding() {
 	os.write_file(source, 'import os\nfn C.mkfifo(path &char, mode u16) i32\nfn main() { _ := os.args }\n')!
 	for target in ['macos', 'ios'] {
 		// Override an inherited MSVC selection; these are frontend-only Darwin checks.
-		result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-no-parallel', '-os',
+		result := os.exec([@VEXE, '-no-retry-compilation', '-no-parallel', '-os',
 			target, '-cc', 'clang', '-check', source])
 		assert result.exit_code == 0, '${target}: ${result.output}'
 	}

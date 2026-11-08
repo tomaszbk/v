@@ -905,13 +905,13 @@ fn main() {
 ")!
 	c99_output := os.join_path(root, 'compat_c99')
 	c99_compile := cmdexec.run(v3_bin, ['-nocache', '-no-memory-limit', '-prod', '-showcc',
-		'-macos-v3-compat-c99', '-o', c99_output, c99_source])
+		'-c99', '-o', c99_output, c99_source])
 	assert c99_compile.exit_code == 0, c99_compile.output
 	assert c99_compile.output.contains('-std=c99'), c99_compile.output
 	assert !c99_compile.output.contains('-std=gnu11'), c99_compile.output
 	c99_run := cmdexec.run(c99_output, [])
 	assert c99_run.exit_code == 0, c99_run.output
-	assert c99_run.output == '99\n', c99_run.output
+	assert c99_run.output == 'defined\n', c99_run.output
 
 	native_object := os.join_path(root, 'compat_c99.o')
 	native_object_compile := cmdexec.run('cc', ['-std=c99', '-c', c99_c_source, '-o', native_object])
@@ -1240,8 +1240,7 @@ fn test_driver_explicit_silent_define_is_distinct_from_internal_quiet_mode() {
 	os.write_file(source, "@[if silent ?]\nfn print_silent_attribute() {\n\tprintln('attribute silent')\n}\n\nfn main() {\n\t\$if silent ? {\n\t\tprintln('silent')\n\t} \$else {\n\t\tprintln('not silent')\n\t}\n\tprint_silent_attribute()\n}\n")!
 
 	for option, expected in {
-		'-silent':                  'silent\nattribute silent\n'
-		'-macos-v3-internal-quiet': 'not silent\n'
+		'-silent': 'silent\nattribute silent\n'
 	} {
 		output := os.join_path(root, option.trim_left('-'))
 		compile := cmdexec.run(v3_bin, [option, '-o', output, source])
@@ -1252,7 +1251,7 @@ fn test_driver_explicit_silent_define_is_distinct_from_internal_quiet_mode() {
 	}
 }
 
-fn test_driver_compiles_inline_assembly_without_compatibility() {
+fn test_driver_compiles_inline_assembly() {
 	$if amd64 || arm64 {
 		root := os.join_path(os.vtmp_dir(), 'v3_driver_inline_asm_fallback_${os.getpid()}')
 		os.rmdir_all(root) or {}
@@ -1269,34 +1268,13 @@ fn test_driver_compiles_inline_assembly_without_compatibility() {
 	}
 }
 ')!
-		fallback_file := os.join_path(root, 'fallback')
 		mut environment := os.environ()
-		// Keep the marker available to prove that supported assembly does not request
-		// a compatibility retry.
-		environment.delete('V_MACOS_V3_NO_FALLBACK')
-		environment['V_MACOS_V3_FALLBACK_FILE'] = fallback_file
 		output := os.join_path(root, 'inline_asm_program')
 		result := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel', '-o', output,
 			source], environment)
 		assert result.exit_code == 0, result.output
-		assert !os.exists(fallback_file)
 		run := cmdexec.run(output, [])
 		assert run.exit_code == 0, run.output
-		environment['V_MACOS_V3_FALLBACK_FILE'] = fallback_file
-		environment_source := os.join_path(root, 'fallback_environment.v')
-		os.write_file(environment_source, "import os
-
-const compile_fallback = \$env('V_MACOS_V3_FALLBACK_FILE')
-
-fn main() {
-	println(compile_fallback + '|' + os.getenv('V_MACOS_V3_FALLBACK_FILE'))
-}
-")!
-		environment_run := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel',
-			'-no-memory-limit', 'run', environment_source], environment)
-		assert environment_run.exit_code == 0, environment_run.output
-		assert environment_run.output == '|\n', environment_run.output
-		assert !os.exists(fallback_file)
 	}
 }
 
@@ -1329,7 +1307,7 @@ fn main() {
 	}
 }
 
-fn test_driver_compiles_chained_generic_calls_without_compatibility() {
+fn test_driver_compiles_chained_generic_calls() {
 	root := os.join_path(os.vtmp_dir(), 'v3_driver_language_fallback_${os.getpid()}')
 	os.rmdir_all(root) or {}
 	os.mkdir_all(root) or { panic(err) }
@@ -1362,17 +1340,11 @@ fn main() {
 	assert result.some && result.val == 5
 }
 ')!
-	fallback_file := os.join_path(root, 'fallback')
 	mut environment := os.environ()
-	// Keep the marker available to prove that the valid generic chain does not
-	// request a compatibility retry.
-	environment.delete('V_MACOS_V3_NO_FALLBACK')
-	environment['V_MACOS_V3_FALLBACK_FILE'] = fallback_file
 	output := os.join_path(root, 'generic_fn_call')
 	result := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel', '-nocache',
 		'-no-memory-limit', '-o', output, source], environment)
 	assert result.exit_code == 0, result.output
-	assert !os.exists(fallback_file)
 	run := cmdexec.run(output, [])
 	assert run.exit_code == 0, run.output
 
@@ -1384,43 +1356,6 @@ fn main() {
 	nonzero_run := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel', '-nocache',
 		'-no-memory-limit', 'run', nonzero_source], environment)
 	assert nonzero_run.exit_code == 23, nonzero_run.output
-	assert !os.exists(fallback_file)
-}
-
-fn test_driver_requests_macos_compatibility_for_c_compilation_errors() {
-	root := os.join_path(os.vtmp_dir(), 'v3_driver_c_error_fallback_${os.getpid()}')
-	os.rmdir_all(root) or {}
-	os.mkdir_all(root) or { panic(err) }
-	defer {
-		os.rmdir_all(root) or {}
-	}
-	v3_bin := build_driver_cli_v3(root)
-	source := os.join_path(root, 'missing_symbol.c.v')
-	os.write_file(source, 'fn C.v3_missing_symbol()
-
-fn main() {
-	C.v3_missing_symbol()
-}
-')!
-	fallback_file := os.join_path(root, 'fallback')
-	report_dir := os.join_path(root, 'c_error')
-	mut environment := os.environ()
-	// Exercises the fallback transport, so clear CI's job-level no-fallback guard.
-	environment.delete('V_MACOS_V3_NO_FALLBACK')
-	environment['V_MACOS_V3_FALLBACK_FILE'] = fallback_file
-	environment['V_MACOS_V3_C_ERROR_DIR'] = report_dir
-	result := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel', '-nocache',
-		'-no-memory-limit', source], environment)
-	assert result.exit_code != 0
-	assert result.output == '', result.output
-	assert os.read_file(fallback_file)! == 'c_compilation_error'
-	assert os.read_file(os.join_path(report_dir, 'compiler'))!.trim_space() != ''
-	assert os.read_file(os.join_path(report_dir, 'output'))!.to_lower().contains('v3_missing_symbol')
-	source_name := os.read_file(os.join_path(report_dir, 'source_name'))!.trim_space()
-	assert source_name == 'src.c'
-	assert os.is_file(os.join_path(report_dir, source_name))
-	v_sources := os.read_file(os.join_path(report_dir, 'v_sources'))!.split('\x00')
-	assert os.real_path(source) in v_sources
 }
 
 fn test_driver_cg_selects_debug_module_files() {
@@ -1553,75 +1488,6 @@ pub fn values() []string {
 	}
 }
 
-fn test_driver_preserves_macos_launcher_caller_environment() {
-	root := os.join_path(os.vtmp_dir(), 'v3_driver_caller_environment_${os.getpid()}')
-	os.rmdir_all(root) or {}
-	os.mkdir_all(root) or { panic(err) }
-	defer {
-		os.rmdir_all(root) or {}
-	}
-	v3_bin := build_driver_cli_v3(root)
-	source := os.join_path(root, 'caller_environment.v')
-	os.write_file(source, "import os
-
-const compile_vexe = \$env('VEXE')
-const compile_vchild = \$env('VCHILD')
-const compile_no_fallback = \$env('V_MACOS_V3_NO_FALLBACK')
-const compile_private = \$env('V_MACOS_V3_CALLER_VEXE')
-const compile_c_error_dir = \$env('V_MACOS_V3_C_ERROR_DIR')
-const compile_crun_identity = \$env('V3_CRUN_BUILD_IDENTITY')
-const compile_internal_restart = \$env('V3_INTERNAL_RESTART')
-
-fn env_value(name string) string {
-	return os.getenv_opt(name) or { '<unset>' }
-}
-
-fn main() {
-	println('compile:' + compile_vexe + '|' + compile_vchild)
-	println('no-fallback:' + compile_no_fallback + '|' + env_value('V_MACOS_V3_NO_FALLBACK'))
-	println('runtime:' + env_value('VEXE') + '|' + env_value('VCHILD'))
-	println('private:' + compile_private + '|' + env_value('V_MACOS_V3_CALLER_VEXE') + '|' +
-		env_value('V_MACOS_V3_CALLER_VCHILD'))
-	println('c-error-dir:' + compile_c_error_dir + '|' + env_value('V_MACOS_V3_C_ERROR_DIR'))
-	println('crun-private:' + compile_crun_identity + '|' + compile_internal_restart + '|' +
-		env_value('V3_CRUN_BUILD_IDENTITY') + '|' + env_value('V3_INTERNAL_RESTART'))
-}
-")!
-	cache_dir := os.join_path(root, 'cache')
-	mut unset_environment := os.environ()
-	unset_environment['VEXE'] = @VEXE
-	unset_environment['VCHILD'] = 'true'
-	unset_environment['V_MACOS_V3_CALLER_VEXE'] = ''
-	unset_environment['V_MACOS_V3_CALLER_VEXE_PRESENT'] = '0'
-	unset_environment['V_MACOS_V3_CALLER_VCHILD'] = ''
-	unset_environment['V_MACOS_V3_CALLER_VCHILD_PRESENT'] = '0'
-	unset_environment['V_MACOS_V3_NO_FALLBACK'] = '1'
-	unset_environment['V_MACOS_V3_CALLER_NO_FALLBACK'] = ''
-	unset_environment['V_MACOS_V3_CALLER_NO_FALLBACK_PRESENT'] = '0'
-	unset_environment['V_MACOS_V3_C_ERROR_DIR'] = os.join_path(root, 'private-c-error')
-	unset_environment['V3_CRUN_BUILD_IDENTITY'] = 'private-crun-identity'
-	unset_environment['V3_INTERNAL_RESTART'] = '1'
-	unset_environment['V3CACHE'] = cache_dir
-	unset_output := os.join_path(root, 'caller_unset')
-	unset_run := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel', '-no-memory-limit',
-		'-o', unset_output, 'run', source], unset_environment)
-	assert unset_run.exit_code == 0, unset_run.output
-	assert unset_run.output == 'compile:|\nno-fallback:|<unset>\nruntime:<unset>|<unset>\nprivate:|<unset>|<unset>\nc-error-dir:|<unset>\ncrun-private:||<unset>|<unset>\n', unset_run.output
-
-	mut set_environment := unset_environment.clone()
-	set_environment['V_MACOS_V3_CALLER_VEXE'] = 'caller-vexe'
-	set_environment['V_MACOS_V3_CALLER_VEXE_PRESENT'] = '1'
-	set_environment['V_MACOS_V3_CALLER_VCHILD'] = 'caller-vchild'
-	set_environment['V_MACOS_V3_CALLER_VCHILD_PRESENT'] = '1'
-	set_environment['V_MACOS_V3_CALLER_NO_FALLBACK'] = 'caller-no-fallback'
-	set_environment['V_MACOS_V3_CALLER_NO_FALLBACK_PRESENT'] = '1'
-	set_output := os.join_path(root, 'caller_set')
-	set_run := run_driver_with_environment(v3_bin, ['-silent', '-no-parallel', '-no-memory-limit',
-		'-o', set_output, 'run', source], set_environment)
-	assert set_run.exit_code == 0, set_run.output
-	assert set_run.output == 'compile:caller-vexe|caller-vchild\nno-fallback:caller-no-fallback|caller-no-fallback\nruntime:caller-vexe|caller-vchild\nprivate:|<unset>|<unset>\nc-error-dir:|<unset>\ncrun-private:||<unset>|<unset>\n', set_run.output
-}
-
 fn test_driver_resolves_boolean_d_and_documented_pseudos() {
 	root := os.join_path(os.vtmp_dir(), 'v3_driver_comptime_values_${os.getpid()}')
 	os.rmdir_all(root) or {}
@@ -1736,41 +1602,6 @@ pub fn answer() int {
 	run := cmdexec.run(output, [])
 	assert run.exit_code == 0, run.output
 	assert run.output == '${os.real_path(project)}\n0123456\n84\n', run.output
-}
-
-fn test_delegated_driver_preserves_invoking_vroot() {
-	root := os.join_path(os.vtmp_dir(), 'v3_driver_invoking_vroot_${os.getpid()}')
-	os.rmdir_all(root) or {}
-	os.mkdir_all(root) or { panic(err) }
-	defer {
-		os.rmdir_all(root) or {}
-	}
-	v3_bin := build_driver_cli_v3(root)
-	other_checkout := os.join_path(root, 'other_checkout')
-	os.mkdir_all(os.join_path(other_checkout, 'vlib', 'builtin')) or { panic(err) }
-	source := os.join_path(other_checkout, 'main.v')
-	os.write_file(source, 'module main
-
-fn main() {
-	println(@VEXEROOT)
-	println(@VROOT)
-	println(\$if @VROOT == @VEXEROOT { true } \$else { false })
-}
-')!
-	output := os.join_path(root, 'invoking_vroot')
-	mut environment := os.environ()
-	environment['VEXE'] = @VEXE
-	environment['V_MACOS_V3_CALLER_VEXE'] = ''
-	environment['V_MACOS_V3_CALLER_VEXE_PRESENT'] = '0'
-	environment['V_MACOS_V3_CALLER_VCHILD'] = ''
-	environment['V_MACOS_V3_CALLER_VCHILD_PRESENT'] = '0'
-	compile := run_driver_with_environment(v3_bin, ['-nocache', '-silent', '-no-parallel', '-o',
-		output, source], environment)
-	assert compile.exit_code == 0, compile.output
-	run := cmdexec.run(output, [])
-	assert run.exit_code == 0, run.output
-	invoking_root := os.real_path(os.dir(@VEXE))
-	assert run.output == '${invoking_root}\n${invoking_root}\ntrue\n', run.output
 }
 
 fn test_driver_run_preserves_stdin() {
@@ -2097,16 +1928,6 @@ println(os.args[1..].join('|'))
 	warm_cache_run := cmdexec.run(v3_bin, ['-silent', '-no-parallel', source, 'warm'])
 	assert warm_cache_run.exit_code == 0, warm_cache_run.output
 	assert warm_cache_run.output == 'false\ncached module\nwarm\n', warm_cache_run.output
-	compat_source := os.join_path(root, 'compat_script_binary.v')
-	os.write_file(compat_source, "fn main() {
-	println('compatibility binary')
-}
-")!
-	compat_build := cmdexec.run(@VEXE, ['-old-compiler', '-o', script_binary, compat_source])
-	assert compat_build.exit_code == 0, compat_build.output
-	compat_run := cmdexec.run(script_binary, [])
-	assert compat_run.exit_code == 0, compat_run.output
-	assert compat_run.output == 'compatibility binary\n', compat_run.output
 	rebound_v3_run := cmdexec.run(v3_bin, ['-silent', '-no-parallel', source, 'after-compatibility'])
 	assert rebound_v3_run.exit_code == 0, rebound_v3_run.output
 	assert rebound_v3_run.output == 'false\ncached module\nafter-compatibility\n', rebound_v3_run.output

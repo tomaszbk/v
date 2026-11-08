@@ -39,7 +39,7 @@ fn build_native_cache_program_twice(name string, source string, expected_output 
 	}
 	for attempt in ['cold', 'warm'] {
 		output := os.join_path(root, '${name}_${attempt}')
-		build := cmdexec.run_with_timeout(native_cache_vexe, ['-new-compiler', '-no-retry-compilation',
+		build := cmdexec.run_with_timeout(native_cache_vexe, ['-no-retry-compilation',
 			'-cc', 'cc', '-o', output, source_path], 600_000)
 		assert build.exit_code == 0, '${attempt} ${name} build:\n${build.output}'
 		if expected_output.len == 0 {

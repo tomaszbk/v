@@ -30,7 +30,7 @@ fn reflected[T](app &T) int {
 }
 fn main() { app := sample.App{}; println(reflected[sample.App](&app)) }
 ')!
-	private_result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', '-o',
+	private_result := os.exec([@VEXE, '-no-retry-compilation', '-nocache', '-o',
 		c_path, source_path])
 	assert private_result.exit_code != 0, private_result.output
 	assert private_result.output.contains('method `sample.App.secret` is private'), private_result.output
@@ -106,7 +106,7 @@ fn main() { mut app := sample.App{}; reflected[sample.App](mut app) }',
 		}
 		for invocation in invocations {
 			os.write_file(source_path, invocation + '\n')!
-			missing_mut := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache',
+			missing_mut := os.exec([@VEXE, '-no-retry-compilation', '-nocache',
 				'-o', c_path, source_path])
 			assert missing_mut.exit_code != 0, missing_mut.output
 			assert missing_mut.output.contains('is `mut`, so use'), missing_mut.output
@@ -147,7 +147,7 @@ fn main() {
  println("OK")
 }
 ')!
-	public_result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', 'run',
+	public_result := os.exec([@VEXE, '-no-retry-compilation', '-nocache', 'run',
 		source_path])
 	assert public_result.exit_code == 0, public_result.output
 	assert public_result.output.trim_space() == 'OK', public_result.output
@@ -201,7 +201,7 @@ fn main() {
 ',
 	] {
 		os.write_file(source_path, control_source)!
-		control := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', 'run',
+		control := os.exec([@VEXE, '-no-retry-compilation', '-nocache', 'run',
 			source_path])
 		assert control.exit_code == 0, control.output
 		assert control.output.contains('passed'), control.output

@@ -18,13 +18,13 @@ fn main() {
  assert empty_value is Empty
  assert (payload_value as Payload).value == 42
 }')!
-	generated_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-o', output, source])
+	generated_result := cmdexec.run(@VEXE, ['-nocache', '-o', output, source])
 	assert generated_result.exit_code == 0, generated_result.output
 	generated := os.read_file(output)!
 	assert generated.contains('Value main__empty_value;')
 	assert generated.contains('Value main__payload_value;')
 	assert !generated.contains('const Value main__empty_value = ')
 	assert !generated.contains('const Value main__payload_value = ')
-	run_result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', 'run', source])
+	run_result := cmdexec.run(@VEXE, ['-nocache', 'run', source])
 	assert run_result.exit_code == 0, run_result.output
 }

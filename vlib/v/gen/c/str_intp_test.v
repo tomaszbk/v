@@ -130,7 +130,7 @@ fn main() {
 }
 ')!
 	for mode in [([]string{}), ['-no-parallel']] {
-		mut args := ['-new-compiler', '-nocache', '-gc', 'none', '-cc', 'clang', '-no-retry-compilation',
+		mut args := ['-nocache', '-gc', 'none', '-cc', 'clang', '-no-retry-compilation',
 			'-o', binary]
 		args << mode
 		args << source
@@ -167,7 +167,7 @@ fn main() {
 		modes << ['-nocache', '-parallel-cc']
 	}
 	for mode in modes {
-		mut args := ['-new-compiler', '-gc', 'none', '-cc', 'clang', '-no-retry-compilation', '-showcc',
+		mut args := ['-gc', 'none', '-cc', 'clang', '-no-retry-compilation', '-showcc',
 			'-o', binary]
 		args << mode
 		args << source

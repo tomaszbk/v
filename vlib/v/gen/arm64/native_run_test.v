@@ -36,7 +36,7 @@ fn test_native_live_reload_program_compiles() {
 			os.rm(output) or {}
 		}
 		os.cp(os.join_path(@VEXEROOT, 'examples', 'hot_reload', 'message.v'), path) or { panic(err) }
-		result := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none',
+		result := exec_native(['env', 'VFLAGS=', @VEXE, '-gc', 'none',
 			'-nocache', '-b', 'arm64', '-os', 'macos', '-o', output, path])
 		assert result.exit_code == 0, result.output
 		assert os.exists(output), 'native live reload program must link'
@@ -56,10 +56,10 @@ fn test_native_hot_fn_extracts_self_contained_function() {
 		os.cp(os.join_path(@VEXEROOT, 'examples', 'hot_reload', 'native_counter.v'), path) or {
 			panic(err)
 		}
-		link := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none',
+		link := exec_native(['env', 'VFLAGS=', @VEXE, '-gc', 'none',
 			'-nocache', '-b', 'arm64', '-os', 'macos', '-o', linked, path])
 		assert link.exit_code == 0, link.output
-		extract := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none',
+		extract := exec_native(['env', 'VFLAGS=', @VEXE, '-gc', 'none',
 			'-nocache', '-b', 'arm64', '-os', 'macos', '-hot-fn', 'next_value', '-o', output, path])
 		assert extract.exit_code == 0, extract.output
 		assert os.file_size(output) > 0, 'extracted function must not be empty'
@@ -79,7 +79,7 @@ fn test_native_hot_fn_rejects_function_needing_fixups() {
 		}
 		// `print_message` calls other functions and uses string literals, so
 		// extraction must fail instead of emitting broken machine code.
-		extract := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none',
+		extract := exec_native(['env', 'VFLAGS=', @VEXE, '-gc', 'none',
 			'-nocache', '-b', 'arm64', '-os', 'macos', '-hot-fn', 'print_message', '-o', output,
 			path])
 		assert extract.exit_code != 0, extract.output
@@ -97,7 +97,7 @@ fn test_native_linux_output_is_an_object_and_executable_requests_fail() {
 			os.rm(executable) or {}
 		}
 		os.write_file(path, 'fn main() {}\n')!
-		command := ['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none', '-nocache',
+		command := ['env', 'VFLAGS=', @VEXE, '-gc', 'none', '-nocache',
 			'-b', 'arm64', '-os', 'linux']
 		mut object_args := command.clone()
 		object_args << ['-o', object, path]
@@ -132,7 +132,7 @@ fn main() {
     if args[2] == "fail" { exit(17) }
 }
 ')!
-		command := ['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none', '-nocache',
+		command := ['env', 'VFLAGS=', @VEXE, '-gc', 'none', '-nocache',
 			'-b', 'arm64']
 		for expected_exit in [0, 17] {
 			mut args := command.clone()
@@ -169,7 +169,7 @@ fn test_native_entrypoint() {
 }
 fn test_second() { println("second test executed") }
 ')!
-		command := ['env', 'VFLAGS=', 'VTEST_ONLY_FN=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc',
+		command := ['env', 'VFLAGS=', 'VTEST_ONLY_FN=', @VEXE, '-gc',
 			'none', '-nocache', '-b', 'arm64']
 		mut all_tests := command.clone()
 		all_tests << path
@@ -210,8 +210,7 @@ fn test_result() ! { println("result passed") }
 
 fn test_native_self_launcher_executes_its_helper() {
 	$if macos && arm64 {
-		result := exec_native(['env', 'VFLAGS=', 'VTOOLS_NO_CACHE=1', 'V_MACOS_V3_NO_FALLBACK=1',
-			'VSELF_SHOULD_FAIL=1', @VEXE, '-b', 'arm64', 'self', 'x2'])
+		result := exec_native(['env', 'VFLAGS=', 'VTOOLS_NO_CACHE=1', 'VSELF_SHOULD_FAIL=1', @VEXE, '-b', 'arm64', 'self', 'x2'])
 		assert result.exit_code != 0, result.output
 		assert result.output.contains('v self failed'), result.output
 	}
@@ -229,7 +228,7 @@ fn test_native_live_reload_installs_new_code_after_an_edit() {
 		}
 		source := 'module main\nfn C.puts(s &u8) int\nfn C.fflush(f voidptr) int\nfn C.usleep(us u32) int\nfn init() { C.puts(c"initialized") }\nfn helper(n int) int { return n + 3 }\n@[live]\nfn hot(n int) int { return n + 1 }\nstruct LiveHolder { bias int }\nstruct OtherHolder {}\n@[live]\nfn (h LiveHolder) value(n int) int { return n + 1 + h.bias }\nfn (h OtherHolder) value(n int) int { return 99 }\nfn main() { holder := LiveHolder{}; other := OtherHolder{}; mut saved := hot; mut captured := false; for { value := hot(7); if other.value(7) != 99 || holder.value(7) != value { C.puts(c"method mismatch"); C.fflush(unsafe { nil }); return }; if value == 8 { C.puts(c"before") } else if value == 9 { if !captured { saved = hot; captured = true }; C.puts(c"after") } else if value == 10 && saved(7) == 9 { C.puts(c"again") }; C.fflush(unsafe { nil }); C.usleep(100000) } }\n'
 		os.write_file(path, source)!
-		built := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none',
+		built := exec_native(['env', 'VFLAGS=', @VEXE, '-gc', 'none',
 			'-nocache', '-b', 'arm64', '-os', 'macos', '-o', output, path])
 		assert built.exit_code == 0, built.output
 		mut process := os.new_process('/bin/sh')
@@ -310,7 +309,7 @@ fn test_native_live_reload_watches_each_source_file() {
 		os.write_file(main_path, source)!
 		os.write_file(other_path, other_source)!
 		initial_mtime := os.file_last_mod_unix(main_path)
-		built := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc', 'none',
+		built := exec_native(['env', 'VFLAGS=', @VEXE, '-gc', 'none',
 			'-nocache', '-b', 'arm64', '-o', output, root])
 		assert built.exit_code == 0, built.output
 		mut process := os.new_process('/bin/sh')

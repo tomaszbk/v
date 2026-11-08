@@ -585,8 +585,8 @@ fn compile_with_pgo(vroot string, vexe string, args []string, out_binary string,
 	if no_parallel {
 		training_args << '-no-parallel'
 	}
-	// Exercise real V3 compilation, rather than an inherited cache or V1 fallback.
-	training_cmd := 'env -u VFLAGS -u VEXE -u LLVM_PROFILE_FILE V_MACOS_V3_NO_FALLBACK=1 ' +
+	// Exercise real V3 compilation, rather than an inherited cache.
+	training_cmd := 'env -u VFLAGS -u VEXE -u LLVM_PROFILE_FILE ' +
 		compose_v_cmd(pgo_binary, training_args, full_v_cli_source)
 	run_cmd(training_cmd) or {
 		eprintln('PGO step failed while generating the profiling data.')

@@ -62,30 +62,8 @@ const cache_bundle_import_file_name = '.v3_cache_bundle_imports.vh'
 // libc symbols (libc_impl, libc, exports) or the freestanding entry point, which a
 // libc-linked build must not carry.
 const syscalls_bare_file_names = ['bf.v', 'syscalls.v', 'linux_syscalls.v', 'linux_syscalls.i386.v']
-const macos_v3_fallback_file_env = 'V_MACOS_V3_FALLBACK_FILE'
-const macos_v3_no_fallback_env = 'V_MACOS_V3_NO_FALLBACK'
-const macos_v3_c_error_dir_env = 'V_MACOS_V3_C_ERROR_DIR'
-const macos_v3_source_manifest_env = 'V_MACOS_V3_SOURCE_MANIFEST'
 const macos_v3_vhash_env = 'V_MACOS_V3_VHASH'
 const macos_v3_vcurrent_hash_env = 'V_MACOS_V3_VCURRENT_HASH'
-const macos_v3_compat_c99_flag = '-macos-v3-compat-c99'
-const macos_v3_internal_quiet_flag = '-macos-v3-internal-quiet'
-// macos_v3_inline_asm_diagnostic_prefix starts every parser diagnostic for an inline assembly
-// block that the selected backend cannot lower. In a build the C backend can lower, a block for
-// another architecture reports a target mismatch instead and is not retried, because no compiler
-// can lower it either.
-const macos_v3_inline_asm_diagnostic_prefix = 'inline assembly is not supported by the'
-const macos_v3_inline_asm_fallback = 'inline_asm'
-const macos_v3_compiler_error_fallback = 'compiler_error'
-const macos_v3_c_error_fallback = 'c_compilation_error'
-const macos_v3_c_error_compiler_file = 'compiler'
-const macos_v3_c_error_output_file = 'output'
-const macos_v3_c_error_source_name_file = 'source_name'
-const macos_v3_c_error_v_sources_file = 'v_sources'
-const macos_v3_c_error_v_source_digests_file = 'v_source_digests'
-const v3_fallback_native_input_prefix = '@native-input:'
-const v3_fallback_native_manifest_key = '@native-input-manifest:v1'
-const v3_fallback_native_manifest_value = 'v3-native-input-manifest-v1'
 const bsd_selfhost_job_limit = 2
 const bsd_selfhost_parallel_cc_job_limit = 8
 const bsd_selfhost_parallel_cc_unit_count = 32
@@ -232,8 +210,8 @@ mut:
 	external_inputs_complete  bool
 	dependency_metadata       map[string]string
 	cached_source_digests     map[string]string
-	fallback_required_modules map[string]bool
-	fallback_warmup_modules   map[string]bool
+	required_modules map[string]bool
+	warmup_modules   map[string]bool
 	parsed_from_source        map[string]bool
 	source_body_modules       map[string]bool
 	native_bridge             bool
@@ -2329,7 +2307,7 @@ fn run_binary(bin_file string, args []string, remove_after_run bool) int {
 	run_path := executable_path_for_run(bin_file)
 	mut process := os.new_process(run_path)
 	process.set_args(args)
-	mut environment := pref.macos_v3_caller_environment()
+	mut environment := pref.caller_environment()
 	environment.delete(macos_v3_vhash_env)
 	environment.delete(macos_v3_vcurrent_hash_env)
 	environment.delete(v3_cache_recovery_env)
@@ -2456,7 +2434,6 @@ fn maybe_delegate_v3_to_vvmrc(input_file string, verbose bool) {
 		eprintln('v3: `.vvmrc` selected V `${requested_version}` from `${vvmrc_path}` => ${requested_exe}')
 	}
 	// The selected compiler builds the program and reports its own failures.
-	release_v3_fallback_marker()
 	mut process := os.new_process(requested_exe)
 	process.set_args(os.args[1..])
 	mut envs := os.environ()
@@ -8343,57 +8320,6 @@ fn v3_detect_host_libc() string {
 	return ''
 }
 
-fn stage_macos_v3_compiler_error_fallback(fallback_file string, stage string) bool {
-	if fallback_file == '' {
-		return false
-	}
-	// The first line remains the machine-readable fallback reason. The second
-	// carries only a controlled stage name, so a successful compatibility build
-	// can report where V3 failed even when no source excerpt is available.
-	os.write_file(fallback_file, '${macos_v3_compiler_error_fallback}\n${stage}') or {
-		return false
-	}
-	return true
-}
-
-fn clear_macos_v3_compiler_error_fallback(fallback_file string) {
-	if fallback_file != '' {
-		os.rm(fallback_file) or {}
-	}
-}
-
-fn macos_v3_fallback_payload_is_valid(payload string) bool {
-	reason := payload.all_before('\n')
-	return reason in [macos_v3_inline_asm_fallback, macos_v3_compiler_error_fallback,
-		macos_v3_c_error_fallback]
-}
-
-// has_v3_authoritative_error reports whether the checker produced a diagnostic
-// that only V3 knows about. The compatibility compiler has no such check, so
-// retrying with it would turn a real error into a clean build and hide the
-// diagnostic entirely. V3 keeps the final say for these, and `-old-compiler`
-// is still there for anyone who needs the old behaviour.
-fn has_v3_authoritative_error(errors []types.TypeError) bool {
-	return errors.any(it.kind == .duplicate_decl && it.msg.ends_with('` shadows a global variable'))
-}
-
-fn macos_v3_fallback_suppresses_diagnostics(fallback_file string) bool {
-	if fallback_file == '' || os.getenv(macos_v3_no_fallback_env) == '1' {
-		return false
-	}
-	payload := os.read_file(fallback_file) or { return false }
-	return macos_v3_fallback_payload_is_valid(payload)
-}
-
-fn request_macos_v3_compatibility_fallback(diagnostics []parser.Diagnostic, fallback_file string) bool {
-	if fallback_file == '' || os.getenv(macos_v3_no_fallback_env) == '1'
-		|| !diagnostics.any(it.message.starts_with(macos_v3_inline_asm_diagnostic_prefix)) {
-		return false
-	}
-	os.write_file(fallback_file, macos_v3_inline_asm_fallback) or { return false }
-	return true
-}
-
 fn v3_source_is_pure_v(path string) bool {
 	if !path.ends_with('.v') && !path.ends_with('.vv') && !path.ends_with('.vsh') {
 		return false
@@ -8524,93 +8450,11 @@ fn v3_impure_v_diagnostics(a &flat.FlatAst) []parser.Diagnostic {
 	return diagnostics
 }
 
-fn request_macos_v3_c_error_fallback(fallback_file string, report_dir string, ccompiler string, c_output string, c_source string, v_sources map[string]string) bool {
-	if fallback_file == '' || report_dir == '' || !os.is_file(c_source) {
-		return false
-	}
-	os.rmdir_all(report_dir) or {}
-	os.mkdir_all(report_dir) or { return false }
-	source_name := os.base(c_source)
-	report_source := os.join_path(report_dir, source_name)
-	os.cp(c_source, report_source) or {
-		os.rmdir_all(report_dir) or {}
-		return false
-	}
-	os.write_file(os.join_path(report_dir, macos_v3_c_error_compiler_file), ccompiler) or {
-		os.rmdir_all(report_dir) or {}
-		return false
-	}
-	os.write_file(os.join_path(report_dir, macos_v3_c_error_output_file), c_output) or {
-		os.rmdir_all(report_dir) or {}
-		return false
-	}
-	os.write_file(os.join_path(report_dir, macos_v3_c_error_source_name_file), source_name) or {
-		os.rmdir_all(report_dir) or {}
-		return false
-	}
-	if !write_macos_v3_fallback_source_digests(report_dir, v_sources) {
-		os.rmdir_all(report_dir) or {}
-		return false
-	}
-	os.write_file(fallback_file, macos_v3_c_error_fallback) or {
-		os.rmdir_all(report_dir) or {}
-		return false
-	}
-	return true
-}
-
-fn write_macos_v3_fallback_source_digests(report_dir string, v_sources map[string]string) bool {
-	mut v_source_paths := v_sources.keys()
-	v_source_paths.sort()
-	mut v_source_paths_text := strings.new_builder(v_source_paths.len * 64)
-	mut v_source_digests_text := strings.new_builder(v_source_paths.len * (sha256.size * 2 + 1))
-	for i, path in v_source_paths {
-		if i > 0 {
-			v_source_paths_text.write_u8(0)
-			v_source_digests_text.write_u8(0)
-		}
-		v_source_paths_text.write_string(path)
-		v_source_digests_text.write_string(v_sources[path])
-	}
-	os.write_file(os.join_path(report_dir, macos_v3_c_error_v_sources_file), v_source_paths_text.str()) or { return false }
-	os.write_file(os.join_path(report_dir, macos_v3_c_error_v_source_digests_file), v_source_digests_text.str()) or { return false }
-	return true
-}
-
-// stage_macos_v3_fallback_source_digests first snapshots every source V3 parsed. Once
-// native dependency resolution completes, the same files are refreshed with tagged
-// #include/#insert digests and a completeness marker. The stable retry reports only when
-// it confirms that complete input snapshot.
-fn stage_macos_v3_fallback_source_digests(report_dir string, v_sources map[string]string) bool {
-	if report_dir == '' || v_sources.len == 0 {
-		return false
-	}
-	os.mkdir_all(report_dir) or { return false }
-	return write_macos_v3_fallback_source_digests(report_dir, v_sources)
-}
-
-fn request_macos_v3_c_error_fallback_from_message(fallback_file string, report_dir string, ccompiler string, message string, c_sources []string, v_sources map[string]string) bool {
-	is_c_error := message.starts_with('failed to build C object ')
-		|| message.starts_with('failed to build cached module object ')
-		|| message.starts_with('failed to build cached program prefix:')
-		|| message.starts_with('failed to build cached development dylib:')
-	if !is_c_error {
-		return false
-	}
-	for c_source in c_sources {
-		if os.is_file(c_source) {
-			return request_macos_v3_c_error_fallback(fallback_file, report_dir, ccompiler, message, c_source, v_sources)
-		}
-	}
-	return false
-}
-
-// macos_v3_fallback_report_sources returns the V sources of the build by their real
-// path, with the SHA-256 of what was parsed of each. Without `with_digests`, the
-// parser took none (see parser.Parser.no_source_digests): the sources it parsed are
-// listed with an empty digest then, for the callers that only read the paths.
-fn macos_v3_fallback_report_sources(a &flat.FlatAst, vroot string, cached_source_digests map[string]string, ignored_source_paths map[string]bool, with_digests bool) map[string]string {
-	mut sources := map[string]string{}
+// v3_build_sources lists the V sources of the build by their real path, for the
+// callers that only read the paths: the files that were parsed and the sources of
+// cached modules.
+fn v3_build_sources(a &flat.FlatAst, vroot string, cached_source_digests map[string]string, ignored_source_paths map[string]bool) map[string]bool {
+	mut sources := map[string]bool{}
 	mut ambiguous := map[string]bool{}
 	builtin_root :=
 		os.real_path(os.join_path(vroot, 'vlib', 'builtin')).trim_right(os.path_separator)
@@ -8619,39 +8463,16 @@ fn macos_v3_fallback_report_sources(a &flat.FlatAst, vroot string, cached_source
 			|| file.name.ends_with('.vsh')) {
 			continue
 		}
-		if !with_digests {
-			// The same files as with digests: a diagnostics server's quick sum is none.
-			if !file.has_source_lines() || file.has_source_quick_sum() {
-				continue
-			}
-			path := a.real_source_path(file.name)
-			if ignored_source_paths[path]
-				|| v3_fallback_backend_specific_builtin_source(path, builtin_root) {
-				continue
-			}
-			sources[path] = ''
+		// A diagnostics server's quick sum marks a source that was not parsed for this build.
+		if !file.has_source_lines() || file.has_source_quick_sum() {
 			continue
 		}
-		if file.has_source_sha256() {
-			path := a.real_source_path(file.name)
-			if ignored_source_paths[path] {
-				continue
-			}
-			// V1 and V3 select different internal builtin support files. All other bundled
-			// vlib sources are shared inputs and remain covered by verification.
-			if v3_fallback_backend_specific_builtin_source(path, builtin_root) {
-				continue
-			}
-			source_digest := file.source_sha256()
-			digest := source_digest[..].hex()
-			if old_digest := sources[path] {
-				if old_digest != digest {
-					ambiguous[path] = true
-				}
-			} else {
-				sources[path] = digest
-			}
+		path := a.real_source_path(file.name)
+		if ignored_source_paths[path]
+			|| v3_backend_specific_builtin_source(path, builtin_root) {
+			continue
 		}
+		sources[path] = true
 	}
 	for source_path, digest in cached_source_digests {
 		path := a.real_source_path(source_path)
@@ -8662,16 +8483,10 @@ fn macos_v3_fallback_report_sources(a &flat.FlatAst, vroot string, cached_source
 			ambiguous[path] = true
 			continue
 		}
-		if v3_fallback_backend_specific_builtin_source(path, builtin_root) {
+		if v3_backend_specific_builtin_source(path, builtin_root) {
 			continue
 		}
-		if old_digest := sources[path] {
-			if with_digests && old_digest != digest {
-				ambiguous[path] = true
-			}
-		} else {
-			sources[path] = digest
-		}
+		sources[path] = true
 	}
 	for path, _ in ambiguous {
 		sources.delete(path)
@@ -8679,55 +8494,21 @@ fn macos_v3_fallback_report_sources(a &flat.FlatAst, vroot string, cached_source
 	return sources
 }
 
-// macos_v3_fallback_report_inputs adds the exact native files that V3's resolved
-// include/insert dependency tree can consume. Native keys are tagged so the report
-// source extractor never treats a header or C source as an uploadable V excerpt.
-fn macos_v3_fallback_report_inputs(v_sources map[string]string, state &V3ModuleCacheState) map[string]string {
-	mut inputs := v_sources.clone()
-	if !state.external_inputs_ready || !state.external_inputs_complete {
-		return inputs
-	}
-	mut native_paths := map[string]bool{}
-	for paths in state.module_external_inputs.values() {
-		for path in paths {
-			native_paths[os.real_path(path)] = true
-		}
-	}
-	for paths in state.module_native_roots.values() {
-		for path in paths {
-			native_paths[os.real_path(path)] = true
-		}
-	}
-	mut native_digests := map[string]string{}
-	for path in native_paths.keys() {
-		digest := state.external_input_digests[path] or { return inputs }
-		if !v3_sha256_hex_digest_is_valid(digest) {
-			return inputs
-		}
-		native_digests['${v3_fallback_native_input_prefix}${path}'] = digest
-	}
-	for key, digest in native_digests {
-		inputs[key] = digest
-	}
-	inputs[v3_fallback_native_manifest_key] = sha256.hexhash(v3_fallback_native_manifest_value)
-	return inputs
-}
-
-fn record_v3_fallback_module_use(mut cache_state V3ModuleCacheState, module_name string, is_warmup bool) {
+fn record_v3_module_use(mut cache_state V3ModuleCacheState, module_name string, is_warmup bool) {
 	if module_name == '' {
 		return
 	}
 	if is_warmup {
-		cache_state.fallback_warmup_modules[module_name] = true
+		cache_state.warmup_modules[module_name] = true
 	} else {
-		cache_state.fallback_required_modules[module_name] = true
+		cache_state.required_modules[module_name] = true
 	}
 }
 
-fn v3_fallback_ignored_warmup_source_paths(cache_state &V3ModuleCacheState) map[string]bool {
+fn v3_ignored_warmup_source_paths(cache_state &V3ModuleCacheState) map[string]bool {
 	mut ignored := map[string]bool{}
-	for module_name, _ in cache_state.fallback_warmup_modules {
-		if cache_state.fallback_required_modules[module_name] {
+	for module_name, _ in cache_state.warmup_modules {
+		if cache_state.required_modules[module_name] {
 			continue
 		}
 		for path in cache_state.module_sources[module_name] {
@@ -8751,7 +8532,7 @@ fn record_v3_cached_source_digests(mut cache_state V3ModuleCacheState, source_di
 	}
 }
 
-fn v3_fallback_backend_specific_builtin_source(path string, builtin_root string) bool {
+fn v3_backend_specific_builtin_source(path string, builtin_root string) bool {
 	return (path == builtin_root || path.starts_with(builtin_root + os.path_separator))
 		&& os.file_name(path) in ['map.v', 'map_d_v3_backend.v', 'ownership_interface_d_v3_backend.v',
 			'ownership_interface_notd_v3_backend.v', 'prealloc.c.v']
@@ -9133,8 +8914,7 @@ fn v3_module_cache_refresh_args(args []string, compiler string, module_search_pa
 			'-no-bounds-checking', '-nofloat', '-autofree', '-manualfree', '-prealloc', '-no-prealloc',
 			'--no-prealloc', '-no-preludes', '-silent', '-W', '-w', '-N', '-Wfatal-errors',
 			'-no-memory-limit', '--no-memory-limit', '-musl', '-glibc', '-ownership', '--ownership',
-			'-no-std', '--no-std', '-strict', '-cstrict', '-building-v', '-building_v',
-			macos_v3_compat_c99_flag] || (arg.starts_with('-d') && arg.len > 2) {
+			'-no-std', '--no-std', '-strict', '-cstrict', '-building-v', '-building_v'] || (arg.starts_with('-d') && arg.len > 2) {
 			flags << arg
 			if arg in ['-g', '-cg', '-cdebug'] {
 				c_flags << '-g'
@@ -9351,18 +9131,6 @@ pub fn run(args []string) {
 		run(tool_args)
 		return
 	}
-	mut macos_v3_fallback_file := os.getenv(macos_v3_fallback_file_env)
-	macos_v3_c_error_dir := os.getenv(macos_v3_c_error_dir_env)
-	// The manifest of the parsed sources (see stage_macos_v3_fallback_source_digests)
-	// takes a SHA-256 of each of them, which cost more than scanning them. The V
-	// launcher never reads it, so only a caller that asks for one gets it.
-	macos_v3_source_manifest := macos_v3_c_error_dir != ''
-		&& os.getenv(macos_v3_source_manifest_env) == '1'
-	// A delegated V3 process owns the fallback marker until it has successfully
-	// produced its output. Specialized failures overwrite it below. Successful
-	// run/test programs clear it before launch, so their exit status is never
-	// mistaken for a compiler failure by the macOS driver.
-	stage_macos_v3_compiler_error_fallback(macos_v3_fallback_file, 'command-line processing')
 
 	mut input_file := ''
 	mut stdin_input_index := -1
@@ -9446,7 +9214,6 @@ pub fn run(args []string) {
 	mut is_debug := false
 	mut is_c_debug := false
 	mut c99 := false
-	mut c99_explicit := false
 	mut thread_stack_size := 0
 	mut thread_stack_size_set := false
 	mut all_backends := false
@@ -9524,7 +9291,6 @@ pub fn run(args []string) {
 			} else {
 				args[i].all_after('=')
 			}
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			run_v_inline_source(args, i, consumed, source)
 			return
 		} else if args[i] in ['run', 'crun'] && input_file.len == 0 && !should_run {
@@ -9634,13 +9400,10 @@ pub fn run(args []string) {
 			// of the generics machinery) is pure overhead when building it.
 			building_v = true
 			i++
-		} else if args[i] in ['-c99', '--c99', macos_v3_compat_c99_flag] {
+		} else if args[i] in ['-c99', '--c99'] {
 			c99 = true
-			if args[i] != macos_v3_compat_c99_flag {
-				c99_explicit = true
-				if 'c99' !in user_defines {
-					user_defines << 'c99'
-				}
+			if 'c99' !in user_defines {
+				user_defines << 'c99'
 			}
 			i++
 		} else if args[i] in ['-no-std', '--no-std'] {
@@ -9660,11 +9423,6 @@ pub fn run(args []string) {
 			i++
 		} else if args[i] in ['-strict', '-cstrict'] {
 			is_strict = true
-			i++
-		} else if args[i] == '-new-compiler' {
-			// Accepted for symmetry with cmd/v's `-new-compiler`: V3 is already the
-			// compiler at this point, so selecting it again is a no-op. cmd/v strips
-			// this before forwarding; it is tolerated here for direct V3 invocations.
 			i++
 		} else if args[i] == '-ownership' || args[i] == '--ownership' {
 			// The ownership checker itself is compiled into v3 via `-d ownership`.
@@ -9871,9 +9629,6 @@ pub fn run(args []string) {
 			if 'silent' !in user_defines {
 				user_defines << 'silent'
 			}
-			i++
-		} else if args[i] == macos_v3_internal_quiet_flag {
-			silent = true
 			i++
 		} else if args[i] == '-showcc' {
 			show_cc = true
@@ -10094,7 +9849,6 @@ pub fn run(args []string) {
 		}
 	}
 	if backend == 'native' {
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		eprintln(pref.native_backend_replacement_message)
 		exit(1)
 	}
@@ -10122,9 +9876,6 @@ pub fn run(args []string) {
 		user_defines = user_defines.filter(it.all_before('=').trim_space() != 'no_bounds_checking')
 	}
 	if stdin_input_index >= 0 {
-		// The delegated compiler owns fallback reporting. Leaving the parent's
-		// staged marker armed would retry the original `run -` after stdin is spent.
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		run_v_source_from_stdin(args, stdin_input_index)
 	}
 	// `-ldflags` comes after the ambient `LDFLAGS`, so an explicitly passed option
@@ -10145,7 +9896,6 @@ pub fn run(args []string) {
 	}
 	v3_race_check_reserved_define(race, user_defines) or {
 		// A command-line error, not a V3 failure: no V1 compatibility retry.
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		eprintln(err.msg())
 		exit(1)
 	}
@@ -10190,12 +9940,6 @@ pub fn run(args []string) {
 		is_checker_fixture = true
 		no_cache = true
 	}
-	if is_checker_fixture {
-		// Fixture output is compared byte-for-byte. Let this V3 invocation print
-		// its diagnostic directly instead of replaying it with a launcher heading.
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
-		macos_v3_fallback_file = ''
-	}
 	mut current_no_parallel := no_parallel
 	if is_prof {
 		// Profile counters are assigned in function emission order and accumulated
@@ -10216,15 +9960,10 @@ pub fn run(args []string) {
 		current_no_parallel)
 
 	if input_file == '' {
-		// A malformed command line is the user's error, not a compiler error, so it
-		// must not stage the V1 compatibility retry: the fallback would repeat the
-		// same diagnostic after an unexplained "retrying with ..." line.
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		eprintln('no input file')
 		exit(1)
 	}
 	if input_file != '-' && !os.exists(input_file) {
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		if input_looks_like_a_command(input_file) {
 			eprintln('unknown command `${input_file}`')
 			eprintln('Run `v help` for usage.')
@@ -10300,7 +10039,6 @@ pub fn run(args []string) {
 			if !silent {
 				println('SKIP ${input_file}')
 			}
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			return
 		}
 		js_output := if output_file.len > 0 {
@@ -10312,7 +10050,6 @@ pub fn run(args []string) {
 			eprintln(err.msg())
 			exit(1)
 		}
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		if should_run {
 			mut node_args := [js_output]
 			node_args << run_args
@@ -10693,14 +10430,7 @@ pub fn run(args []string) {
 		target.default_thread_stack_size()
 	}
 	prefs.backend = backend
-	prefs.vroot = if pref.has_macos_v3_caller_environment() && prefs.vexe.len > 0 {
-		// The macOS dispatcher sets VEXE to the invoking compiler. Preserve that
-		// checkout instead of selecting another V checkout around the input. A
-		// compiler produced with `v self -o /other/path` still uses its baked root.
-		embedded_vroot(prefs.vroot, prefs.vexe, input_file)
-	} else {
-		resolve_vroot_for_input(prefs.vroot, input_file)
-	}
+	prefs.vroot = resolve_vroot_for_input(prefs.vroot, input_file)
 	bundled_tcc := os.join_path(prefs.vroot, 'thirdparty', 'tcc', 'tcc.exe')
 	host_os := os.user_os()
 	host_target := pref.host_target()
@@ -10773,7 +10503,6 @@ pub fn run(args []string) {
 		if !silent {
 			println('SKIP ${input_file}')
 		}
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		return
 	}
 	// Compiler flags and native inputs follow the implicit bundled or system TCC,
@@ -10957,7 +10686,6 @@ pub fn run(args []string) {
 		'target_libc_headers=${prefs.target_libc_headers}',
 		'thread_stack_size=${prefs.thread_stack_size}',
 		'module_search_paths=${prefs.module_search_paths.join(',')}',
-		'macos_v3_caller_environment=${pref.has_macos_v3_caller_environment()}',
 		'ownership=${ownership_mode}',
 		'translated=${translated_mode}',
 		'enable_globals=${enable_globals_compat}',
@@ -11017,7 +10745,6 @@ pub fn run(args []string) {
 				'cgen', 'cc'] {
 				b.step('${stage} (cached)')
 			}
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			b.print_report()
 			return
 		}
@@ -11029,7 +10756,6 @@ pub fn run(args []string) {
 	// the executable of the program for a build that changes nothing.
 	program_cache_enabled := !cache_with_tcc && persistent_program_cache
 	mut cache_no_parallel_cgen := current_no_parallel
-	stage_macos_v3_compiler_error_fallback(macos_v3_fallback_file, 'source parsing')
 	mut p := parser.Parser.new(prefs)
 	p.enable_import_diagnostics()
 	// A diagnostics server only asks of its sources whether they still hold what
@@ -11037,7 +10763,7 @@ pub fn run(args []string) {
 	if os.getenv('V_DIAGNOSTICS_SERVER') != '' {
 		p.quick_source_sums = true
 	}
-	p.no_source_digests = !macos_v3_source_manifest
+	p.no_source_digests = true
 	// The checker indexes the text of every parsed source. Hand it the text the
 	// parser read instead of letting it read each file a second time. A
 	// diagnostics server keeps its ASTs across requests, so it reads as before.
@@ -11067,9 +10793,9 @@ pub fn run(args []string) {
 	}
 	mut builtin_files := prefs.without_excluded(pref.get_v_files_from_dir_for_backend_target(builtin_dir,
 		builtin_defines, prefs.backend, prefs.target))
-	// `map.v` retains the regular-backend layout so the stable V1 fallback can
-	// compile tools against the current tree. V3 selects its pointer-sized map
-	// implementation through the internal backend define above.
+	// `map.v` keeps the regular-backend layout for the bootstrap compiler in `vc`.
+	// V3 selects its pointer-sized map implementation through the internal backend
+	// define above.
 	builtin_files = builtin_files.filter(os.file_name(it) != 'map.v')
 	// `-freestanding` builtin calls hooks (bare_print, __malloc, ...) and links no
 	// libc, so the implementations of those and the process entry point come from
@@ -11183,8 +10909,8 @@ pub fn run(args []string) {
 		external_input_digests:    map[string]string{}
 		dependency_metadata:       map[string]string{}
 		cached_source_digests:     map[string]string{}
-		fallback_required_modules: map[string]bool{}
-		fallback_warmup_modules:   map[string]bool{}
+		required_modules: map[string]bool{}
+		warmup_modules:   map[string]bool{}
 		parsed_from_source:        map[string]bool{}
 		source_body_modules:       map[string]bool{}
 		native_source_modules:     map[string]bool{}
@@ -11504,14 +11230,8 @@ pub fn run(args []string) {
 	if warn_impure_v {
 		p.diagnostics << v3_impure_v_diagnostics(a)
 	}
-	// Preserve the digest of every exact source buffer V3 parsed before any parser or
-	// later compiler error can request the compatibility compiler. The dispatcher owns
-	// this staging directory and forwards only content plus verification metadata.
-	mut fallback_report_sources := macos_v3_fallback_report_sources(a, prefs.vroot, cache_state.cached_source_digests,
-		v3_fallback_ignored_warmup_source_paths(cache_state), macos_v3_source_manifest)
-	if macos_v3_source_manifest {
-		_ = stage_macos_v3_fallback_source_digests(macos_v3_c_error_dir, fallback_report_sources)
-	}
+	build_sources := v3_build_sources(a, prefs.vroot, cache_state.cached_source_digests,
+		v3_ignored_warmup_source_paths(cache_state))
 	if print_v_files || print_watched_files || dump_files != '' {
 		mut watched := watched_v_source_paths(a, cache_state.module_sources)
 		if prefs.raw_vsh_file != '' {
@@ -11558,7 +11278,6 @@ pub fn run(args []string) {
 			for file in reported {
 				println(file)
 			}
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			return
 		}
 	}
@@ -11592,13 +11311,6 @@ pub fn run(args []string) {
 			|| it.severity == 'error:')
 		parser_has_errors := parser_has_native_errors
 			|| (effective_warns_are_errors && p.diagnostics.any(it.severity == 'warning:'))
-		if parser_has_native_errors
-			&& request_macos_v3_compatibility_fallback(p.diagnostics, macos_v3_fallback_file) {
-			exit(1)
-		}
-		if parser_has_errors && macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-			exit(1)
-		}
 		mut printed_parser_diagnostic := false
 		mut parser_diagnostics := compiler_errors.DiagnosticRun{}
 		if (!silent || !only_check_syntax)
@@ -11726,7 +11438,6 @@ pub fn run(args []string) {
 	if only_check_syntax {
 		b.step('parse')
 		b.print_report()
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		return
 	}
 	// Parallel transform is disabled for larger embedded imports when worker
@@ -11856,7 +11567,6 @@ pub fn run(args []string) {
 			}
 		}
 		if os.is_file(bin_file) && v3_crun_cache_matches(bin_file, crun_build_identity, input_file) {
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			run_result := run_binary(bin_file, run_args, remove_binary_after_run)
 			if run_result != 0 {
 				exit(run_result)
@@ -11978,7 +11688,6 @@ pub fn run(args []string) {
 							fatal_errors, false, message_limit, skip_notices)
 					}
 					b.step(if cache_with_tcc { 'tcc (cached)' } else { 'cc (cached)' })
-					clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 					if should_run {
 						run_result := run_binary(bin_file, run_args, remove_binary_after_run)
 						if run_result != 0 {
@@ -12132,7 +11841,7 @@ pub fn run(args []string) {
 			// A build that waits for another one to populate the cache finds it
 			// populated later: only a graph that is too large keeps the bypass.
 			if population == .bypass {
-				_ = write_v3_large_cold_cache_marker(large_cold_cache_marker, fallback_report_sources.keys())
+				_ = write_v3_large_cold_cache_marker(large_cold_cache_marker, build_sources.keys())
 			}
 			restart_v3_without_cache('')
 		}
@@ -12166,7 +11875,6 @@ pub fn run(args []string) {
 	// (like v2: check runs before transform). The transformer reads cached
 	// per-expression types for type-dependent lowering.
 	mut ck_stage_sw := time.new_stopwatch()
-	stage_macos_v3_compiler_error_fallback(macos_v3_fallback_file, 'semantic checking')
 	// A build that reads its modules from their interfaces takes the functions that
 	// nothing in it can name out of the AST, so that no stage has to look at them
 	// (see cached_declarations.v). The plans that the system compiler keeps of a
@@ -12287,10 +11995,8 @@ pub fn run(args []string) {
 			pre_tc.collect(a)
 		}
 		if has_conflicting_c_declaration_errors(pre_tc.errors) {
-			if !macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-				print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
-					check_only, message_limit, skip_notices)
-			}
+			print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
+				check_only, message_limit, skip_notices)
 			exit(1)
 		}
 		register_headerless_c_types(mut pre_tc)
@@ -12304,10 +12010,8 @@ pub fn run(args []string) {
 			cvsw.restart()
 		}
 		if pre_tc.check_interface_embedding_limits() {
-			if !macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-				print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
-					check_only, message_limit, skip_notices)
-			}
+			print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
+				check_only, message_limit, skip_notices)
 			exit(1)
 		}
 		if verbose {
@@ -12570,17 +12274,12 @@ pub fn run(args []string) {
 					_, _ = transform.monomorphize_with_used_checked_config(mut a, &pre_tc, fixture_used_fns, false)
 				}
 			}
-			if has_v3_authoritative_error(pre_tc.errors) {
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
-			}
 			if check_only && !is_checker_fixture && !is_repl {
 				// An editor shows these while the errors are being fixed.
 				pre_tc.diagnose_unused_private_declarations_with_errors()
 			}
-			if !macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-				print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
-					check_only, message_limit, skip_notices)
-			}
+			print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
+				check_only, message_limit, skip_notices)
 			pre_tc.notices.clear()
 		}
 		if pre_tc.errors.len > 0 {
@@ -12641,7 +12340,6 @@ pub fn run(args []string) {
 			if pre_tc.errors.len > 0 {
 				restart_v3_for_checker_errors_of_pruned_build(&cache_state.manager, pre_tc.errors,
 					&pruned_declarations, checker_notices_printed)
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 				print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
 					check_only, message_limit, skip_notices)
 				exit(1)
@@ -12668,7 +12366,6 @@ pub fn run(args []string) {
 				}
 			}
 			pre_tc.check_noalloc_contracts(true, noalloc_unsupported_modes)
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			if pre_tc.errors.len > 0 {
 				restart_v3_for_checker_errors_of_pruned_build(&cache_state.manager, pre_tc.errors,
 					&pruned_declarations, checker_notices_printed)
@@ -12972,16 +12669,9 @@ pub fn run(args []string) {
 			_ = prepare_v3_cache_external_inputs(mut cache_state, &native_inputs,
 				&native_closure)
 		}
-		if backend == 'c' && cache_state.external_inputs_ready {
-			fallback_report_sources = macos_v3_fallback_report_inputs(fallback_report_sources, &cache_state)
-			if macos_v3_source_manifest {
-				_ = stage_macos_v3_fallback_source_digests(macos_v3_c_error_dir, fallback_report_sources)
-			}
-		}
 		// Transform (match lowering, string/in lowering, etc.). Threaded transform is enabled
 		// by default for compatible builds, and `-no-parallel` disables both threaded transform
 		// and cgen.
-		stage_macos_v3_compiler_error_fallback(macos_v3_fallback_file, 'AST transformation')
 		mut transform_was_parallel := false
 		mut transform_errors := []string{}
 		transform_notices_start := pre_tc.notices.len
@@ -13398,9 +13088,6 @@ pub fn run(args []string) {
 			if pre_tc.errors.len > transform_errors_start {
 				// -W made them errors; as for the checker's, a fallback compiler
 				// that reports them itself leaves them to it.
-				if macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-					exit(1)
-				}
 				print_type_diagnostics(a, pre_tc.notices[transform_notices_start..], pre_tc.errors[transform_errors_start..],
 					is_checker_fixture, fatal_errors, check_only, message_limit, skip_notices)
 				exit(1)
@@ -13490,9 +13177,6 @@ pub fn run(args []string) {
 	if pre_tc.errors.len > 0 {
 		restart_v3_for_checker_errors_of_pruned_build(&cache_state.manager, pre_tc.errors,
 			&pruned_declarations, checker_notices_printed)
-		if macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-			exit(1)
-		}
 		print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
 			check_only, message_limit, skip_notices)
 		exit(1)
@@ -13501,7 +13185,6 @@ pub fn run(args []string) {
 	// Monomorphization only adds specialized generic instantiations to `used_fns`.
 	// Markused and Cgen already exclude unreachable generic templates, so builds
 	// with no reachable generic use need no generic cleanup pass at all.
-	stage_macos_v3_compiler_error_fallback(macos_v3_fallback_file, 'type specialization')
 	if cgen_cache_hit {
 		// The cached C plan and metadata are the only consumers of the specialized
 		// AST and checker state on this path.
@@ -13587,9 +13270,6 @@ pub fn run(args []string) {
 			pre_tc.notices.clear()
 		}
 		if pre_tc.notices.len > 0 || pre_tc.errors.len > 0 {
-			if has_v3_authoritative_error(pre_tc.errors) {
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
-			}
 			if cache_state.manager.enabled {
 				cached_checker_diagnostics << cache_v3_type_diagnostics(a, pre_tc.notices)
 			}
@@ -13599,18 +13279,14 @@ pub fn run(args []string) {
 				// Instance validation also sees numeric-field specialization errors.
 				// Join it first so the primary errors are printed without duplicates.
 				if program_instance_check.finish() == 1 {
-					clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 					exit(1)
 				}
 			}
 			if pre_tc.errors.len > 0
 				|| (!checker_notices_already_printed && pre_tc.errors.len == 0) {
-				if pre_tc.errors.len == 0
-					|| !macos_v3_fallback_suppresses_diagnostics(macos_v3_fallback_file) {
-					print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture,
-						fatal_errors, check_only, message_limit, skip_notices)
-					checker_notices_printed = true
-				}
+				print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture,
+					fatal_errors, check_only, message_limit, skip_notices)
+				checker_notices_printed = true
 			}
 			for notice in pre_tc.notices {
 				if skip_notices && notice.severity in ['', 'notice:'] {
@@ -13634,11 +13310,7 @@ pub fn run(args []string) {
 			// of such an instance too, and tells where it is, as a check does: an
 			// `[]u8` returned as an `[]u64` (see start_program_instance_check).
 			if program_instance_check.finish() == 1 {
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 				exit(1)
-			}
-			if monomorph_errors.any(it.contains('compile-time error:')) {
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			}
 			if compiler_errors.json_output() {
 				for message in monomorph_errors {
@@ -13696,7 +13368,6 @@ pub fn run(args []string) {
 		if pre_tc.errors.len > 0 {
 			restart_v3_for_checker_errors_of_pruned_build(&cache_state.manager, pre_tc.errors,
 				&pruned_declarations, checker_notices_printed)
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			print_type_diagnostics(a, pre_tc.notices, pre_tc.errors, is_checker_fixture, fatal_errors,
 				check_only, message_limit, skip_notices)
 			exit(1)
@@ -13714,7 +13385,6 @@ pub fn run(args []string) {
 		b.step('finalize')
 	}
 	mut cg_pre_sw := time.new_stopwatch()
-	stage_macos_v3_compiler_error_fallback(macos_v3_fallback_file, 'backend code generation')
 	if backend == 'wasm' {
 		if msg := unsupported_backend_error(a, &pre_tc, used_fns, backend) {
 			eprintln(msg)
@@ -13876,7 +13546,6 @@ pub fn run(args []string) {
 				exit(1)
 			}
 			b.step('link')
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			if should_run {
 				run_result := run_binary(bin_file, run_args, remove_binary_after_run)
 				if run_result != 0 {
@@ -13897,12 +13566,10 @@ pub fn run(args []string) {
 		}
 	} else if backend == 'arm64' {
 		if msg := unsupported_arm64_c_source_error(a) {
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			eprintln(msg)
 			exit(1)
 		}
 		if msg := unsupported_backend_error(a, &pre_tc, used_fns, backend) {
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			eprintln(msg)
 			exit(1)
 		}
@@ -13920,7 +13587,6 @@ pub fn run(args []string) {
 				}
 			})
 			if m.errors.len > 0 {
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 				for message in m.errors {
 					eprintln(message)
 				}
@@ -13972,7 +13638,6 @@ pub fn run(args []string) {
 				g.write_and_link(bin_file)
 			}
 			b.step('link')
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			if should_run {
 				run_result := run_binary(bin_file, run_args, remove_binary_after_run)
 				if run_result != 0 {
@@ -13997,7 +13662,6 @@ pub fn run(args []string) {
 			if cgen.uses_manual_stdlib_c_headers(a, &pre_tc, prefs, user_c_flags, is_o) {
 				// The message is the whole diagnosis. Clear the V3 failure marker first, or the
 				// parent process replays this compile and prints the message a second time.
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 				eprintln(msg)
 				exit(1)
 			}
@@ -14119,7 +13783,6 @@ pub fn run(args []string) {
 		// stops the build here, before C generation takes it to the C compiler
 		// (see start_program_instance_check).
 		if program_instance_check.finish() == 1 {
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			exit(1)
 		}
 		// A compiler switch does not add diagnostics to an invalid program. Wait
@@ -14176,7 +13839,7 @@ pub fn run(args []string) {
 			if is_livemain {
 				g.set_live_rebuild_options(v3_live_rebuild_options(args, c_compiler, prefs.module_search_paths))
 			}
-			g.set_compiler_vexe_env_setup(!pref.has_macos_v3_caller_environment())
+			g.set_compiler_vexe_env_setup(true)
 			g.set_target(prefs.target)
 			g.set_output_cross_c(prefs.output_cross_c)
 			g.set_compile_defines(prefs.user_defines)
@@ -14287,7 +13950,7 @@ pub fn run(args []string) {
 			if is_livemain {
 				g.set_live_rebuild_options(v3_live_rebuild_options(args, c_compiler, prefs.module_search_paths))
 			}
-			g.set_compiler_vexe_env_setup(!pref.has_macos_v3_caller_environment())
+			g.set_compiler_vexe_env_setup(true)
 			g.set_target(prefs.target)
 			g.set_output_cross_c(prefs.output_cross_c)
 			g.set_compile_defines(prefs.user_defines)
@@ -14490,7 +14153,7 @@ pub fn run(args []string) {
 		}
 		if !c_only && !is_o {
 			// Environment flags also reach the native helper compilations below.
-			v3_require_c_link_libraries([environment_c_flags], macos_v3_fallback_file, cc_dir, effective_c_compiler == 'msvc')
+			v3_require_c_link_libraries([environment_c_flags], cc_dir, effective_c_compiler == 'msvc')
 		}
 		if !c_only || (dump_c_flags.len > 0 && generate_c_project.len == 0) {
 			object_optimization_flags := v3_shared_object_compile_flags(v3_prod_c_object_optimization_flags(is_prod,
@@ -14547,16 +14210,6 @@ pub fn run(args []string) {
 						})
 					return
 				}
-				if use_implicit_tcc_semantics {
-					clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
-				} else if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-					published_c_source,
-					cache_plan_file,
-					cc_src,
-				], fallback_report_sources) {
-					cleanup_c_build_dir(cc_dir)
-					exit(1)
-				}
 				eprintln(message)
 				cleanup_c_build_dir(cc_dir)
 				exit(1)
@@ -14596,12 +14249,11 @@ pub fn run(args []string) {
 		}
 		if !c_only && !is_o {
 			if missing_gc := v3_missing_bundled_gc_library(resolved_c_flags, prefs.vroot) {
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 				eprintln(v3_missing_gc_library_message(missing_gc))
 				cleanup_c_build_dir(cc_dir)
 				exit(1)
 			}
-			v3_require_c_link_libraries([resolved_c_flags, link_ld_flags], macos_v3_fallback_file, cc_dir, effective_c_compiler == 'msvc')
+			v3_require_c_link_libraries([resolved_c_flags, link_ld_flags], cc_dir, effective_c_compiler == 'msvc')
 		}
 		flag_plan_sdk_root := if effective_tcc && prefs.normalized_target_os() == 'macos' {
 			macos_sdk_root_cache.get()
@@ -14768,7 +14420,6 @@ pub fn run(args []string) {
 				retained_transform_scope = unsafe { nil }
 				retained_transform_prepare_scope = unsafe { nil }
 			}
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			return
 		}
 		// Nothing below reads the transformed AST or its checker payloads: the C
@@ -14920,14 +14571,6 @@ pub fn run(args []string) {
 						compile_signature = object_compile_signature + prefix_suffix
 						prepared_cache = prepare_v3_incremental_cached_body(cache_plan_file, incremental_prefix_path, incremental_tcc_declarations_path, cached_prefix, object_flags_signature + prefix_suffix, interface_impl_signature, a, mut cache_state) or {
 							message := err.msg()
-							if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-								cache_plan_file,
-								published_c_source,
-								cc_src,
-							], fallback_report_sources) {
-								cleanup_c_build_dir(cc_dir)
-								exit(1)
-							}
 							eprintln(message)
 							cleanup_c_build_dir(cc_dir)
 							exit(1)
@@ -14961,14 +14604,6 @@ pub fn run(args []string) {
 						compile_signature = object_compile_signature + prefix_suffix
 						prepared_cache = prepare_v3_cached_generic_body(generated_source, cached_prefix, cached_declarations, cached_body, object_flags_signature + prefix_suffix, interface_impl_signature, a, mut cache_state) or {
 							message := err.msg()
-							if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-								cache_plan_file,
-								published_c_source,
-								cc_src,
-							], fallback_report_sources) {
-								cleanup_c_build_dir(cc_dir)
-								exit(1)
-							}
 							eprintln(message)
 							cleanup_c_build_dir(cc_dir)
 							exit(1)
@@ -14989,14 +14624,6 @@ pub fn run(args []string) {
 							trace_v3_cache_fallback('the bundled TinyCC could not build a module object: ${message.all_before('\n')}')
 							cleanup_c_build_dir(cc_dir)
 							restart_v3_without_cache(cc_dir)
-						}
-						if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-							cache_plan_file,
-							published_c_source,
-							cc_src,
-						], fallback_report_sources) {
-							cleanup_c_build_dir(cc_dir)
-							exit(1)
 						}
 						eprintln(message)
 						cleanup_c_build_dir(cc_dir)
@@ -15149,14 +14776,6 @@ pub fn run(args []string) {
 					restart_v3_without_restored_incremental_program(incremental_cache_restored, &cache_state.manager,
 						v3_cgen_cache_input(a, cache_state, user_files, cache_c_flags,
 							prefs.vroot).source_files, cc_dir, 'program prefix')
-					if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-						published_c_source,
-						cache_plan_file,
-						cc_src,
-					], fallback_report_sources) {
-						cleanup_c_build_dir(cc_dir)
-						exit(1)
-					}
 					eprintln(message)
 					cleanup_c_build_dir(cc_dir)
 					exit(1)
@@ -15166,14 +14785,6 @@ pub fn run(args []string) {
 					if tcc_dylib && show_c_output && retry_compilation { eprintln(message) }
 					if (!tcc_dylib || retry_compilation) && v3_recover_from_cache_failure(message, cc_dir) {
 						return
-					}
-					if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-						published_c_source,
-						cache_plan_file,
-						cc_src,
-					], fallback_report_sources) {
-						cleanup_c_build_dir(cc_dir)
-						exit(1)
 					}
 					eprintln(message)
 					cleanup_c_build_dir(cc_dir)
@@ -15228,14 +14839,6 @@ pub fn run(args []string) {
 				restart_v3_without_restored_incremental_program(incremental_cache_restored, &cache_state.manager,
 					v3_cgen_cache_input(a, cache_state, user_files, cache_c_flags,
 						prefs.vroot).source_files, cc_dir, 'program main')
-				if request_macos_v3_c_error_fallback_from_message(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, message, [
-					published_c_source,
-					cache_plan_file,
-					cc_src,
-				], fallback_report_sources) {
-					cleanup_c_build_dir(cc_dir)
-					exit(1)
-				}
 				eprintln(message)
 				cleanup_c_build_dir(cc_dir)
 				exit(1)
@@ -15504,7 +15107,6 @@ pub fn run(args []string) {
 			} else {
 				eprintln('C compilation error: implicit tcc could not be used for this build')
 			}
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 			cleanup_c_build_dir(cc_dir)
 			exit(1)
 		}
@@ -15649,11 +15251,7 @@ pub fn run(args []string) {
 				&& result.output == v3_parallel_cc_monolithic_message {
 				cleanup_c_build_dir(cc_dir)
 				mut regeneration_args := ['-d', v3_parallel_cc_monolithic_define]
-				for arg in args {
-					if arg != macos_v3_compat_c99_flag {
-						regeneration_args << arg
-					}
-				}
+				regeneration_args << args
 				$if windows {
 					exit_with_child_build(os.executable(), regeneration_args)
 				}
@@ -15693,7 +15291,6 @@ pub fn run(args []string) {
 					cleanup_c_build_dir(cc_dir)
 					// The retry is another process on every platform.
 					release_v3_cache_population_lock()
-					release_v3_fallback_marker()
 					retry_result := cmdexec.run(os.executable(), retry_args)
 					if retry_result.output.len > 0 {
 						print(retry_result.output)
@@ -15702,10 +15299,6 @@ pub fn run(args []string) {
 						exit(retry_result.exit_code)
 					}
 					return
-				}
-				if request_macos_v3_c_error_fallback(macos_v3_fallback_file, macos_v3_c_error_dir, c_compiler, result.output, os.join_path_single(cc_dir, fallback_source), fallback_report_sources) {
-					cleanup_c_build_dir(cc_dir)
-					exit(1)
 				}
 				if missing_library := v3_missing_c_library_name(result.output) {
 					eprintln('builder error:
@@ -15816,7 +15409,6 @@ Please install the corresponding development package/libraries and make sure the
 		} else {
 			'cc'
 		})
-		clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 		// The C compiler is done. What was set up for `cl` must not reach the program that runs next.
 		msvc_restore_environment(msvc_saved_environment)
 		if should_run {
@@ -15836,7 +15428,6 @@ Please install the corresponding development package/libraries and make sure the
 			b.step('test')
 		}
 	}
-	clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
 
 	worker_stats := a.worker_stats()
 	b.metric('worker phase callbacks', i64(worker_stats.tasks_run), 'tasks')
@@ -15931,10 +15522,9 @@ fn checker_fixture_missing_header(a &flat.FlatAst, user_files []string, c_compil
 	return none
 }
 
-fn v3_require_c_link_libraries(flag_groups [][]string, fallback_file string, build_dir string, msvc bool) {
+fn v3_require_c_link_libraries(flag_groups [][]string, build_dir string, msvc bool) {
 	for flags in flag_groups {
 		if missing_library := v3_missing_c_link_library(flags, msvc) {
-			clear_macos_v3_compiler_error_fallback(fallback_file)
 			eprintln('builder error:\n==================\nC library file `${missing_library}` was not found.\nBuild or restore this native library before compiling the V program.')
 			cleanup_c_build_dir(build_dir)
 			exit(1)
@@ -16459,11 +16049,7 @@ fn v3_retry_compilation_args(args []string, c_compiler_arg_index int, fallback s
 	}
 	mut public_args := []string{cap: retry_args.len + 1}
 	public_args << '-no-retry-compilation'
-	for arg in retry_args {
-		if arg != macos_v3_compat_c99_flag {
-			public_args << arg
-		}
-	}
+	public_args << retry_args
 	return public_args
 }
 
@@ -16522,7 +16108,6 @@ fn v3_regenerate_after_implicit_tcc(args []string, c_compiler_arg_index int, cc_
 	flush_stderr()
 	$if windows {
 		release_v3_cache_population_lock()
-		release_v3_fallback_marker()
 		retry_result := cmdexec.run(os.executable(), retry_args)
 		if retry_result.output.len > 0 {
 			print(retry_result.output)
@@ -17950,17 +17535,7 @@ fn restart_v3_with_args(extra_args []string, build_dir string) {
 // child's pid and reports the child's failures itself.
 fn exit_with_child_build(executable string, args []string) {
 	release_v3_cache_population_lock()
-	release_v3_fallback_marker()
 	exit(os.system_args([executable, ...args]))
-}
-
-// release_v3_fallback_marker removes the fallback marker that this process staged,
-// before a child build that reports its own failures takes over. Left in place, it
-// tells this process's launcher at exit that the build failed in V3, and the
-// launcher compiles the whole build again to replay diagnostics, even when the
-// child succeeded.
-fn release_v3_fallback_marker() {
-	clear_macos_v3_compiler_error_fallback(os.getenv(macos_v3_fallback_file_env))
 }
 
 fn c_source_references_identifiers(source string, identifiers map[string]bool) bool {
@@ -19507,17 +19082,6 @@ fn resolve_vroot_for_input(initial string, input_file string) string {
 		return initial
 	}
 	return initial
-}
-
-fn embedded_vroot(initial string, vexe string, input_file string) string {
-	vexe_root := os.real_path(os.dir(vexe))
-	if is_valid_vroot(vexe_root) {
-		return vexe_root
-	}
-	if is_valid_vroot(initial) {
-		return initial
-	}
-	return resolve_vroot_for_input(initial, input_file)
 }
 
 fn nearest_vroot_for_path(path string) ?string {
@@ -24074,14 +23638,14 @@ fn resolve_imports(mut a flat.FlatAst, mut p parser.Parser, prefs &pref.Preferen
 				if module_identity.len > 0 {
 					set_node_value_canonical(mut a, node_idx, module_identity)
 				}
-				record_v3_fallback_module_use(mut cache_state, module_identity, is_bundle_warmup_import)
+				record_v3_module_use(mut cache_state, module_identity, is_bundle_warmup_import)
 				record_cache_module_dependency(mut cache_state, cur_module, module_identity)
 				retain_cache_source_module(mut cache_state, module_identity)
 				node_idx++
 				continue
 			}
 			if mod_name in parsed_modules {
-				record_v3_fallback_module_use(mut cache_state, mod_name, is_bundle_warmup_import)
+				record_v3_module_use(mut cache_state, mod_name, is_bundle_warmup_import)
 				record_cache_module_dependency(mut cache_state, cur_module, mod_name)
 				retain_cache_source_module(mut cache_state, mod_name)
 				node_idx++
@@ -24150,7 +23714,7 @@ fn resolve_imports(mut a flat.FlatAst, mut p parser.Parser, prefs &pref.Preferen
 				set_node_value_canonical(mut a, node_idx, module_identity)
 			}
 			cache_module := if module_identity.len > 0 { module_identity } else { mod_name }
-			record_v3_fallback_module_use(mut cache_state, cache_module, is_bundle_warmup_import)
+			record_v3_module_use(mut cache_state, cache_module, is_bundle_warmup_import)
 			record_cache_module_dependency(mut cache_state, cur_module, cache_module)
 			module_resolved := mod_dir_exists && mod_files.len > 0
 			if module_resolved {
@@ -24191,7 +23755,6 @@ fn resolve_imports(mut a flat.FlatAst, mut p parser.Parser, prefs &pref.Preferen
 						// diagnostic below names it exactly. Do not hand the build to the
 						// V1 compatibility compiler, which would repeat it against its own
 						// source tree.
-						clear_macos_v3_compiler_error_fallback(os.getenv(macos_v3_fallback_file_env))
 						if compiler_errors.json_output() {
 							eprintln(compiler_errors.json_error('error:', message, []string{}, a,
 								flat.NodeId(node_idx), a.nodes[node_idx].pos))

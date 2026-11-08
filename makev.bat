@@ -775,7 +775,6 @@ if !ERRORLEVEL! EQU 0 exit /b 1
 exit /b 0
 
 :move_updated_to_v
-REM The V1 compatibility compiler is installed on demand by `make v1`.
 REM Compiling cmd/v again would only produce another copy of the new driver.
 if not exist "%V_UPDATED%" exit /b 1
 call :smoke_test_updated

@@ -156,7 +156,7 @@ int main(void) {
 }
 ')!
 			object := os.join_path(dir, 'lib.o')
-			compile := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-gc', 'none',
+			compile := os.exec([@VEXE, '-no-retry-compilation', '-gc', 'none',
 				'-cc', cc, '-o', object, os.join_path(dir, 'lib.v')])
 			assert compile.exit_code == 0, '${compiler}, export_last=${export_last}: ${compile.output}'
 			host := os.join_path(dir, 'host')

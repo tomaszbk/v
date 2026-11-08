@@ -31,14 +31,9 @@ fn test_cached_module_objects_keep_native_header_layout_contexts_apart() {
 		}
 	}
 	os.setenv('VJOBS', '1', true)
-	os.setenv('V_MACOS_V3_NO_FALLBACK', '1', true)
 	os.setenv('V3_CACHE_DISABLE_INCREMENTAL', '1', true)
 	os.setenv('V3_CACHE_DISABLE_PROGRAM_EXECUTABLE', '1', true)
-	vexe := if os.base(@VEXE) in ['v1_fallback', 'v1_fallback.exe'] {
-		os.join_path(@VEXEROOT, 'v')
-	} else {
-		@VEXE
-	}
+	vexe := @VEXE
 	root := os.join_path(os.vtmp_dir(), 'native_header_context_${os.getpid()}_${time.now().unix_nano()}')
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }

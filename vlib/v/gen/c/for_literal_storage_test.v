@@ -17,7 +17,7 @@ fn sum_pair(first int, second int) int {
 }
 fn main() { assert sum_pair(12, 30) == 42 }'
 	os.write_file(path, source)!
-	result := os.exec([@VEXE, '-new-compiler', '-o', output, path])
+	result := os.exec([@VEXE, '-o', output, path])
 	assert result.exit_code == 0, result.output
 	generated := os.read_file(output)!
 	body := generated.all_after('__attribute__((noinline)) i64 sum_pair(')

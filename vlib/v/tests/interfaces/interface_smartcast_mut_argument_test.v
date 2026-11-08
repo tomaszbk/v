@@ -83,7 +83,7 @@ fn main() {
 	if mut item is ${pattern} { replace(mut item) }
 }
 ')!
-		result := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', '-check',
+		result := os.exec([@VEXE, '-no-retry-compilation', '-nocache', '-check',
 			source])
 		assert result.exit_code != 0, result.output
 		assert result.output.contains('cannot use'), result.output

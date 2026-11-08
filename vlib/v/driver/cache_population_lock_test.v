@@ -44,19 +44,10 @@ fn run_population_lock_helper() {
 			if acquire_v3_cache_population_lock(dir) != .acquired {
 				exit(31)
 			}
-			marker := os.join_path(dir, 'fallback-marker')
-			os.setenv(macos_v3_fallback_file_env, marker, true)
-			if !stage_macos_v3_compiler_error_fallback(marker, 'child handoff test')
-				|| !os.is_file(marker) {
-				exit(32)
-			}
 			os.setenv(population_helper_mode_env, 'handoff-child', true)
 			exit_with_child_build(os.executable(), []string{})
 		}
 		'handoff-child' {
-			if os.exists(os.join_path(dir, 'fallback-marker')) {
-				exit(33)
-			}
 			if acquire_v3_cache_population_lock(dir) != .acquired {
 				exit(34)
 			}

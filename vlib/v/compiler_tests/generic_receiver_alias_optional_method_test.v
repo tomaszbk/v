@@ -42,7 +42,6 @@ fn test_optional_method_on_generic_receiver_keeps_alias_specialization() {
 	// The C error otherwise sends the build to the v1 fallback, which compiles
 	// the program fine and hides the regression behind a successful build.
 	saved_no_fallback := os.getenv_opt('V_MACOS_V3_NO_FALLBACK')
-	os.setenv('V_MACOS_V3_NO_FALLBACK', '1', true)
 	defer {
 		if saved := saved_no_fallback {
 			os.setenv('V_MACOS_V3_NO_FALLBACK', saved, true)

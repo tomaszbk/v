@@ -127,14 +127,14 @@ fn test_cpp_runtime_copy_order_names_and_thread_local_storage() {
 	}
 	modes << ['-prealloc']
 	for flags in modes {
-		mut args := ['-new-compiler', '-no-retry-compilation', '-gc', 'none', '-cc', cpp]
+		mut args := ['-no-retry-compilation', '-gc', 'none', '-cc', cpp]
 		args << flags
 		args << ['run', source]
 		result := cmdexec.run(@VEXE, args)
 		assert result.exit_code == 0, '${args}: ${result.output}'
 	}
 	if cc := os.find_abs_path_of_executable('gcc') {
-		result := cmdexec.run(@VEXE, ['-new-compiler', '-no-retry-compilation', '-gc', 'none',
+		result := cmdexec.run(@VEXE, ['-no-retry-compilation', '-gc', 'none',
 			'-cc', cc, 'run', source])
 		assert result.exit_code == 0, result.output
 	}
@@ -150,7 +150,7 @@ fn test_cpp_keyword_escaping_preserves_explicit_c_export_name() {
 fn exported_value() int { return 41 }
 fn main() { assert exported_value() == 41 }
 ")!
-	result := cmdexec.run(@VEXE, ['-new-compiler', '-no-retry-compilation', '-gc', 'none', '-cc',
+	result := cmdexec.run(@VEXE, ['-no-retry-compilation', '-gc', 'none', '-cc',
 		'gcc', '-o', c_path, source])
 	assert result.exit_code == 0, result.output
 	generated := os.read_file(c_path)!
@@ -169,12 +169,12 @@ fn test_cpp_nested_sum_initializers_preserve_values() {
 	source := os.join_path(root, 'main.v')
 	os.cp(os.join_path(@VMODROOT, 'vlib/v/gen/c/testdata/cpp_nested_sum_runtime.vv'), source)!
 	for standard in cpp_test_standards() {
-		result := cmdexec.run(@VEXE, ['-new-compiler', '-no-retry-compilation', '-gc', 'none',
+		result := cmdexec.run(@VEXE, ['-no-retry-compilation', '-gc', 'none',
 			'-cc', cpp, '-no-std', '-cflags', '-std=${standard}', 'run', source])
 		assert result.exit_code == 0, result.output
 	}
 	if cc := os.find_abs_path_of_executable('gcc') {
-		result := cmdexec.run(@VEXE, ['-new-compiler', '-no-retry-compilation', '-gc', 'none',
+		result := cmdexec.run(@VEXE, ['-no-retry-compilation', '-gc', 'none',
 			'-cc', cc, 'run', source])
 		assert result.exit_code == 0, result.output
 	}

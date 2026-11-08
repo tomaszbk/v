@@ -622,7 +622,7 @@ fn test_target_libc_headers_own_generated_errno_declarations() ! {
 	// no Linux toolchain is needed, even when the host is Windows or macOS.
 	for freestanding in [false, true] {
 		for target_headers in [false, true] {
-			mut args := [@VEXE, '-new-compiler', '-no-retry-compilation', '-gc', 'none', '-nocache',
+			mut args := [@VEXE, '-no-retry-compilation', '-gc', 'none', '-nocache',
 				'-os', 'linux', '-arch', 'amd64']
 			if freestanding {
 				args << '-freestanding'
@@ -674,7 +674,7 @@ fn main() {
 	println("errno ok")
 }
 ')!
-	built := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-nocache', '-freestanding',
+	built := os.exec([@VEXE, '-no-retry-compilation', '-nocache', '-freestanding',
 		'-gc', 'none', '-cstrict', '-cc', cc, '-o', executable, source])
 	assert built.exit_code == 0, built.output
 	ran := os.exec([executable])

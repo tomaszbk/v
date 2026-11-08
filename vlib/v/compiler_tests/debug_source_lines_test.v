@@ -16,7 +16,7 @@ fn main() {
 	path := os.real_path(source).replace('\\', '/').replace('"', '\\"')
 	for flags in ['-g', '-g -no-parallel', '-cg', ''] {
 		output := os.join_path(root, 'main.c')
-		result := os.exec([@VEXE, '-new-compiler', ...(os.split_args(flags) or { panic(err) }),
+		result := os.exec([@VEXE, ...(os.split_args(flags) or { panic(err) }),
 			'-o', output, source])
 		assert result.exit_code == 0, result.output
 		generated := os.read_file(output)!
@@ -40,7 +40,7 @@ fn test_c_debug_build_keeps_the_source_named_by_debug_information() {
 	$if windows {
 		executable += '.exe'
 	}
-	result := os.exec([@VEXE, '-new-compiler', '-cg', '-gc', 'none', '-nocache', '-o', executable,
+	result := os.exec([@VEXE, '-cg', '-gc', 'none', '-nocache', '-o', executable,
 		source])
 	assert result.exit_code == 0, result.output
 	// The driver names the retained directory after the final executable file.
@@ -76,7 +76,7 @@ fn main() {
 ')!
 	for flags in ['-g', '-cg'] {
 		executable := os.join_path(root, 'program_${flags.all_after('-')}')
-		build := os.exec([@VEXE, '-new-compiler', ...(os.split_args(flags) or { panic(err) }),
+		build := os.exec([@VEXE, ...(os.split_args(flags) or { panic(err) }),
 			'-gc', 'none', '-nocache', '-cc', '${clang}', '-o', executable, source])
 		assert build.exit_code == 0, build.output
 		bundle := executable + '.dSYM'

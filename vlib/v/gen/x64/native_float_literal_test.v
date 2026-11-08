@@ -191,7 +191,7 @@ fn test_native_float_formatting_matches_c_rounding_and_shortest_decimal_expansio
 			'c':   c_output
 			'x64': native_output
 		} {
-			compiled := exec_native(['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-gc',
+			compiled := exec_native(['env', 'VFLAGS=', @VEXE, '-gc',
 				'none', '-nocache', '-cc', 'cc', '-b', backend, '-o', output, path])
 			assert compiled.exit_code == 0, compiled.output
 		}
@@ -242,8 +242,7 @@ fn main() {
 }
 ')!
 		for production in [false, true] {
-			mut args := ['env', 'VFLAGS=', 'V_MACOS_V3_NO_FALLBACK=1', @VEXE, '-new-compiler',
-				'-no-retry-compilation', '-cc', 'cc', '-gc', 'none', '-nocache', '-b', 'x64', '-o',
+			mut args := ['env', 'VFLAGS=', @VEXE, '-no-retry-compilation', '-cc', 'cc', '-gc', 'none', '-nocache', '-b', 'x64', '-o',
 				output, path]
 			if production { args.insert(5, '-prod') }
 			compiled := exec_native(args)

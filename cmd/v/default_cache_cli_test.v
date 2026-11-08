@@ -3,14 +3,12 @@ module main
 import os
 import v.cmdexec
 
-fn test_removed_usecache_flag_is_rejected_before_tool_or_compatibility_dispatch() {
-	for args in [['-usecache', 'examples/hello_world.v'], ['-usecache', 'help', 'build-c'],
-		['-old-compiler', '-usecache', 'help']] {
+fn test_removed_usecache_flag_is_rejected_before_tool_dispatch() {
+	for args in [['-usecache', 'examples/hello_world.v'], ['-usecache', 'help', 'build-c']] {
 		result := cmdexec.run(@VEXE, args)
 		assert result.exit_code != 0, result.output
 		assert result.output.contains('unknown option `-usecache`'), result.output
 		assert result.output.contains('caching is enabled by default'), result.output
-		assert !result.output.contains('requires the compatibility compiler'), result.output
 	}
 }
 

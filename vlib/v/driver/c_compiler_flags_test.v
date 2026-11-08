@@ -24,9 +24,6 @@ fn test_refresh_records_entry_only_for_project_interface_scopes() {
 }
 
 fn v3_driver_test_executable() string {
-	if os.base(@VEXE) in ['v1_fallback', 'v1_fallback.exe'] {
-		return os.join_path(os.dir(@VEXE), 'v' + $if windows { '.exe' } $else { '' })
-	}
 	return @VEXE
 }
 
@@ -349,7 +346,7 @@ fn test_v3_no_std_command_keeps_the_user_standard_only() {
 			os.setenv('VFLAGS', value, true)
 		}
 	}
-	build := cmdexec.run(v3_driver_test_executable(), ['-new-compiler', '-nocache', '-cc', 'c++',
+	build := cmdexec.run(v3_driver_test_executable(), ['-nocache', '-cc', 'c++',
 		'-no-std', '-cflags', '-std=c++11', '-dump-c-flags', '-', '-o', output, source])
 	assert build.exit_code == 0, build.output
 	assert '-std=c++11' in build.output.split_into_lines(), build.output
@@ -374,7 +371,7 @@ fn test_v3_tcc_linux_output_declares_backtrace() {
 			os.setenv('VFLAGS', value, true)
 		}
 	}
-	build := cmdexec.run(v3_driver_test_executable(), ['-new-compiler', '-nocache', '-cc', 'tcc',
+	build := cmdexec.run(v3_driver_test_executable(), ['-nocache', '-cc', 'tcc',
 		'-os', 'linux', '-arch', 'amd64', '-o', output, source])
 	assert build.exit_code == 0, build.output
 	c_source := os.read_file(output)!
@@ -428,7 +425,7 @@ fn test_macos_linux_cross_compile_selects_postgres_sysroot_headers() {
 	}
 	// C output exercises conditional headers without requiring a cross toolchain or libpq.
 	for target_os in ['macos', 'linux'] {
-		build := cmdexec.run(v3_driver_test_executable(), ['-new-compiler', '-nocache', '-cc',
+		build := cmdexec.run(v3_driver_test_executable(), ['-nocache', '-cc',
 			'clang', '-os', target_os, '-o', output, source])
 		assert build.exit_code == 0, build.output
 		c_source := os.read_file(output)!
@@ -1326,7 +1323,7 @@ fn test_v3_bundled_tcc_native_object_build_is_cwd_independent() {
 	output := os.join_path(root, 'main' + $if windows { '.exe' } $else { '' })
 	os.write_file(c_source, '#include <stddef.h>\nsize_t v3_tcc_native_object_probe(void) { return sizeof(size_t); }\n')!
 	os.write_file(v_source, '#flag ${c_object}\n\nfn C.v3_tcc_native_object_probe() uint\n\nfn main() {\n\tassert C.v3_tcc_native_object_probe() > 0\n}\n')!
-	build := cmdexec.run_in(v3_driver_test_executable(), ['-new-compiler', '-nocache',
+	build := cmdexec.run_in(v3_driver_test_executable(), ['-nocache',
 		'-no-retry-compilation', '-cc', 'tcc', '-o', output, v_source], root)
 	assert build.exit_code == 0, build.output
 }
@@ -1359,7 +1356,7 @@ fn test_v3_implicit_tcc_cpp_native_object_uses_platform_headers() {
 			os.setenv('VFLAGS', value, true)
 		}
 	}
-	no_retry := cmdexec.run_in(v3_driver_test_executable(), ['-new-compiler', '-nocache',
+	no_retry := cmdexec.run_in(v3_driver_test_executable(), ['-nocache',
 		'-no-retry-compilation', '-o', output, v_source], root)
 	assert !no_retry.output.contains('failed to build C object'), no_retry.output
 	if no_retry.exit_code != 0 {
@@ -1373,7 +1370,7 @@ fn test_v3_implicit_tcc_cpp_native_object_uses_platform_headers() {
 		assert !no_retry.output.contains('regenerating it with'), no_retry.output
 	}
 	// The normal implicit-TinyCC policy must still compile and run the native helper.
-	build := cmdexec.run_in(v3_driver_test_executable(), ['-new-compiler', '-nocache', '-o', output,
+	build := cmdexec.run_in(v3_driver_test_executable(), ['-nocache', '-o', output,
 		v_source], root)
 	assert !build.output.contains('failed to build C object'), build.output
 	assert build.exit_code == 0, build.output
@@ -1692,7 +1689,7 @@ fn test_v3_windows_auto_gui_build_uses_windows_subsystem() {
 	source := os.join_path(root, 'main.v')
 	output := os.join_path(root, 'main.exe')
 	os.write_file(source, '#flag windows -lgdi32\n\nfn main() {}\n')!
-	build := cmdexec.run(v3_driver_test_executable(), ['-new-compiler', '-nocache', '-showcc',
+	build := cmdexec.run(v3_driver_test_executable(), ['-nocache', '-showcc',
 		'-o', output, source])
 	assert build.exit_code == 0, build.output
 	assert build.output.contains('-mwindows'), build.output
@@ -2226,7 +2223,7 @@ fn test_v3_tcc_flags_dump_matches_monolithic_command() {
 	for source_text in sources {
 		os.write_file(source, source_text)!
 		for strict in [false, true] {
-			mut args := ['-new-compiler', '-no-retry-compilation', '-nocache', '-cc', 'tcc', '-gc',
+			mut args := ['-no-retry-compilation', '-nocache', '-cc', 'tcc', '-gc',
 				'none']
 			if strict {
 				args << '-cstrict'
@@ -2312,7 +2309,7 @@ fn test_v3_production_object_links_with_independent_c_main() {
 	main_c := os.join_path(root, 'main.c')
 	exe := os.join_path(root, 'main')
 	os.write_file(source, "module object_probe\n\n@[export: 'v3_object_probe']\n@[markused]\nfn add(a i32, b i32) i32 { return a + b }\n")!
-	compiled := cmdexec.run(v3_driver_test_executable(), ['-new-compiler', '-prod', '-cc', clang,
+	compiled := cmdexec.run(v3_driver_test_executable(), ['-prod', '-cc', clang,
 		'-gc', 'none', '-o', object, source])
 	assert compiled.exit_code == 0, compiled.output
 	data := os.read_bytes(object)!

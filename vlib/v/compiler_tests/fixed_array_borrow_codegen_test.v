@@ -58,7 +58,7 @@ fn main() {
  println("OK")
 }
 ')!
-	generated := os.exec([@VEXE, '-new-compiler', '-gc', 'none', '-o', c_path, source_path])
+	generated := os.exec([@VEXE, '-gc', 'none', '-o', c_path, source_path])
 	assert generated.exit_code == 0, generated.output
 	source := os.read_file(c_path)!
 	for name in ['params_by_mut', 'params_by_ref', 'params_by_unsafe_ref', 'params_by_method'] {
@@ -70,10 +70,10 @@ fn main() {
 		body := fixed_array_borrow_body(source, name)
 		assert body.contains('memdup('), body
 	}
-	run := os.exec([@VEXE, '-new-compiler', '-gc', 'none', 'run', source_path])
+	run := os.exec([@VEXE, '-gc', 'none', 'run', source_path])
 	assert run.exit_code == 0, run.output
 	assert run.output.trim_space() == 'OK', run.output
-	warnings := os.exec([@VEXE, '-new-compiler', '-warn-about-allocs', '-o', c_path, source_path])
+	warnings := os.exec([@VEXE, '-warn-about-allocs', '-o', c_path, source_path])
 	assert warnings.exit_code == 0, warnings.output
 	assert warnings.output.contains('local moved to the heap: its fixed array storage may escape'), warnings.output
 }
@@ -131,7 +131,7 @@ fn main() {
  println("OK")
 }
 ')!
-	generated := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	generated := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', '-o', c_path, source_path])
 	assert generated.exit_code == 0, generated.output
 	source := os.read_file(c_path)!
@@ -144,7 +144,7 @@ fn main() {
 	$if windows {
 		binary_path += '.exe'
 	}
-	compiled := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-cc',
+	compiled := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-cc',
 		'clang', '-gc', 'none', '-o', binary_path, source_path])
 	assert compiled.exit_code == 0, compiled.output
 	run := os.exec([binary_path])
@@ -201,7 +201,7 @@ fn main() {
  println("OK")
 }
 ')!
-	generated := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	generated := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', '-o', c_path, source_path])
 	assert generated.exit_code == 0, generated.output
 	source := os.read_file(c_path)!
@@ -212,7 +212,7 @@ fn main() {
 		body := fixed_array_borrow_body(source, name)
 		assert body.contains('memdup('), body
 	}
-	run := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	run := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', 'run', source_path])
 	assert run.exit_code == 0, run.output
 	assert run.output.trim_space() == 'OK', run.output
@@ -239,14 +239,14 @@ fn main() {
  println("OK")
 }
 ')!
-	generated := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-gc', 'none', '-o',
+	generated := os.exec([@VEXE, '-no-retry-compilation', '-gc', 'none', '-o',
 		c_path, source_path])
 	assert generated.exit_code == 0, generated.output
 	source := os.read_file(c_path)!
 	// specialized during monomorphization, before the callee's body is transformed
 	assert !fixed_array_borrow_body(source, 'generic_borrowed_T_v_int').contains('memdup(')
 	assert fixed_array_borrow_body(source, 'generic_retained_T_v_int').contains('memdup(')
-	run := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-gc', 'none', 'run', source_path])
+	run := os.exec([@VEXE, '-no-retry-compilation', '-gc', 'none', 'run', source_path])
 	assert run.exit_code == 0, run.output
 	assert run.output.trim_space() == 'OK', run.output
 }
@@ -289,7 +289,7 @@ fn main() {
  println("OK")
 }
 ')!
-	generated := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	generated := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', '-o', c_path, source_path])
 	assert generated.exit_code == 0, generated.output
 	source := os.read_file(c_path)!
@@ -300,7 +300,7 @@ fn main() {
 		body := fixed_array_borrow_body(source, name)
 		assert body.contains('memdup('), body
 	}
-	run := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	run := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', 'run', source_path])
 	assert run.exit_code == 0, run.output
 	assert run.output.trim_space() == 'OK', run.output
@@ -326,7 +326,7 @@ fn main() {
  println("OK")
 }
 ')!
-	generated := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	generated := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', '-o', c_path, source_path])
 	assert generated.exit_code == 0, generated.output
 	source := os.read_file(c_path)!
@@ -335,7 +335,7 @@ fn main() {
 		body := fixed_array_borrow_body(source, name)
 		assert body.contains('memdup('), body
 	}
-	run := os.exec([@VEXE, '-new-compiler', '-no-retry-compilation', '-enable-globals', '-gc',
+	run := os.exec([@VEXE, '-no-retry-compilation', '-enable-globals', '-gc',
 		'none', 'run', source_path])
 	assert run.exit_code == 0, run.output
 	assert run.output.trim_space() == 'OK', run.output

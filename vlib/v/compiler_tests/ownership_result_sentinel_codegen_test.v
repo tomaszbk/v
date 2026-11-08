@@ -17,7 +17,7 @@ fn test_ownership_generated_result_cleanup_roots_ierror_sentinels() {
 	os.write_file(source,
 		"struct Node {\n\tvalue ?string\n\tchildren []Node\n}\n\nfn main() {\n\tnode := Node{\n\t\tvalue: 'kept'\n\t\tchildren: []Node{}\n\t}\n\tassert node.value or { '' } == 'kept'\n\tprintln('ok')\n}\n")!
 	out :=
-		os.exec([v3_bin, '-ownership', '-d', 'ownership', '-no-parallel', '-macos-v3-compat-c99',
+		os.exec([v3_bin, '-ownership', '-d', 'ownership', '-no-parallel',
 			'run', source])
 	assert out.exit_code == 0, out.output
 	assert out.output.trim_space() == 'ok', out.output

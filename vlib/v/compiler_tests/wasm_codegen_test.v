@@ -11,7 +11,7 @@ fn testsuite_begin() {
 		eprintln('> skipping v3 wasm backend tests; set V3_TEST_WASM=1 to run')
 		exit(0)
 	}
-	build := os.exec([vexe, '-new-compiler', '-no-retry-compilation', '-cc', 'clang', '-gc', 'none',
+	build := os.exec([vexe, '-no-retry-compilation', '-cc', 'clang', '-gc', 'none',
 		'-compile-backend', 'wasm', '-o', wasm_compiler, v3_src])
 	assert build.exit_code == 0, build.output
 }

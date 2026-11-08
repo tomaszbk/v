@@ -133,7 +133,7 @@ fn main() {
 '
 	os.write_file(main_path, source) or { panic(err) }
 	out_path := os.join_path(root, 'out.c')
-	result := os.exec([@VEXE, '-new-compiler', '-gc', 'none', '-nocache', '-warn-about-allocs',
+	result := os.exec([@VEXE, '-gc', 'none', '-nocache', '-warn-about-allocs',
 		'-o', out_path, main_path])
 	assert result.exit_code == 0, result.output
 	moved := 'allocation (local moved to the heap: '

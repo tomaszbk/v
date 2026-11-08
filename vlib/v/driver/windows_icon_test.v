@@ -69,7 +69,7 @@ fn test_windows_icon_cli_builds_with_all_aliases() {
 	for idx, flag in ['-icon', '--icon', '-seticon', '--seticon'] {
 		output := os.join_path(root, 'icon_${idx}.exe')
 		icon := if idx % 2 == 0 { ico } else { png }
-		mut args := ['-new-compiler', '-nocache', '-os', 'windows']
+		mut args := ['-nocache', '-os', 'windows']
 		args << if idx % 2 == 0 { '-g' } else { '-cg' }
 		if compiler != '' {
 			args << ['-cc', compiler]
@@ -102,7 +102,7 @@ fn test_windows_icon_failed_update_does_not_publish_executable() {
 			if existing {
 				os.write_file(output, 'previous output')!
 			}
-			result := cmdexec.run(@VEXE, ['-new-compiler', '-nocache', '-os', 'windows', '-icon',
+			result := cmdexec.run(@VEXE, ['-nocache', '-os', 'windows', '-icon',
 				icon, '-o', output, source])
 			assert result.exit_code != 0
 			assert result.output.contains('invalid icon file'), result.output
