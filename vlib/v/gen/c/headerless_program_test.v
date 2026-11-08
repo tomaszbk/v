@@ -286,14 +286,14 @@ fn test_linux_generated_self_c_compiles_for_bootstrap_targets() {
 		'arm64-apple-macos13', 'x86_64-apple-macos12', 'x86_64-unknown-freebsd14',
 		'x86_64-unknown-openbsd7', 'x86_64-unknown-netbsd10', 'x86_64-unknown-dragonfly6'] {
 		checked := os.exec([clang, '-target', target, '-std=c99', '-fsyntax-only', '-Wno-everything',
-			'-Werror=implicit-function-declaration', '-DCUSTOM_DEFINE_v1_fallback', c_file])
+			'-Werror=implicit-function-declaration', c_file])
 		assert checked.exit_code == 0, '${target}: ${checked.output}'
 	}
 	for target in ['armv7-unknown-linux-gnueabihf', 'i686-unknown-linux-gnu', 'x86_64-unknown-linux-gnu'] {
 		checked := os.exec([clang, '-target', target, '-std=c99', '-fsyntax-only', '-Wno-everything',
 			'-Werror=implicit-function-declaration', '-Werror=incompatible-pointer-types',
 			'-Wno-error=incompatible-pointer-types-discards-qualifiers', '-Werror=int-conversion',
-			'-D${headerless_libc_macro}=1', '-DCUSTOM_DEFINE_v1_fallback', c_file])
+			'-D${headerless_libc_macro}=1', c_file])
 		assert checked.exit_code == 0, '${target}: ${checked.output}'
 	}
 }

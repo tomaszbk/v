@@ -6,9 +6,6 @@ TMPDIR ?= /tmp
 VROOT  ?= .
 VC     ?= ./vc
 VEXE   ?= ./v
-# Portable VC snapshots do not embed the default compiler. Keep their v1 executable on the full
-# compatibility compiler path even when the generated C is built on a V3 host.
-VC_BOOTSTRAP_DEFINE := -DCUSTOM_DEFINE_v1_fallback
 VCREPO ?= https://github.com/vlang/vc
 TCCREPO ?= https://github.com/vlang/tccbin
 LEGACYREPO ?= https://github.com/macports/macports-legacy-support
@@ -184,10 +181,6 @@ ifneq ($(BOOTSTRAP_VC_UNSAFE_OPTFLAGS),)
 endif
 endif
 endif
-# A vc snapshot may use the lean compiler dispatcher when its generated C is built
-# on a Unix-like host. Keep the temporary v1 on the full compatibility path so
-# it can create v2 before either the compiler driver or v1_fallback exists.
-BOOTSTRAP_VC_CC_CFLAGS += -DCUSTOM_DEFINE_v1_fallback
 BOOTSTRAP_VC_EXTRA_SOURCES :=
 # Portable vc snapshots generated before the OpenBSD entropy and semaphore guards
 # still reference two libc symbols that OpenBSD does not provide. Supply the small
@@ -253,7 +246,7 @@ BOOTSTRAP_VFLAGS := $(BOOTSTRAP_CCOMPILER_VFLAG) $(if $(strip $(BOOTSTRAP_CFLAGS
 all: latest_vc latest_tcc latest_legacy
 ifdef WIN32
 	powershell -NoProfile -ExecutionPolicy Bypass -File "$(VROOT)/cmd/tools/vc_compat_uint.ps1" -Source "$(VC)/$(VCFILE)" -Destination "$(VC)/v_win_compat.c"
-	$(CC) $(CPPFLAGS) $(BOOTSTRAP_VC_CC_CFLAGS) $(VC_BOOTSTRAP_DEFINE) -std=c99 -municode -w -o v1$(EXE_EXT) "$(VC)/v_win_compat.c" $(LDFLAGS) -lws2_32 -lbcrypt || cmd/tools/cc_compilation_failed_windows.sh
+	$(CC) $(CPPFLAGS) $(BOOTSTRAP_VC_CC_CFLAGS) -std=c99 -municode -w -o v1$(EXE_EXT) "$(VC)/v_win_compat.c" $(LDFLAGS) -lws2_32 -lbcrypt || cmd/tools/cc_compilation_failed_windows.sh
 	$(RM) "$(VC)/v_win_compat.c"
 	./v1$(EXE_EXT) -no-parallel -o v2$(EXE_EXT) $(BOOTSTRAP_GC_VFLAG) $(VFLAGS) $(BOOTSTRAP_VC_VFLAGS) cmd/v
 	./v2$(EXE_EXT) -o $(VEXE)$(EXE_EXT) $(BOOTSTRAP_GC_VFLAG) $(VFLAGS) $(BOOTSTRAP_VFLAGS) cmd/v
@@ -267,7 +260,7 @@ ifdef LEGACY
 	$(eval override LDFLAGS+=-L$(realpath $(LEGACYLIBS))/lib -lMacportsLegacySupport)
 endif
 # Stream compatibility fixes for stale snapshots to the compiler, keeping one v.c.
-	sh "$(VROOT)/cmd/tools/vc_compat.sh" "$(VC)/$(VCFILE)" $(CC) $(CPPFLAGS) $(BOOTSTRAP_VC_CC_CFLAGS) $(VC_BOOTSTRAP_DEFINE) -std=c99 -w -o v1$(EXE_EXT) -- $(BOOTSTRAP_VC_EXTRA_SOURCES) -lm -lpthread $(BOOTSTRAP_LDFLAGS) || sh cmd/tools/cc_compilation_failed_non_windows.sh
+	sh "$(VROOT)/cmd/tools/vc_compat.sh" "$(VC)/$(VCFILE)" $(CC) $(CPPFLAGS) $(BOOTSTRAP_VC_CC_CFLAGS) -std=c99 -w -o v1$(EXE_EXT) -- $(BOOTSTRAP_VC_EXTRA_SOURCES) -lm -lpthread $(BOOTSTRAP_LDFLAGS) || sh cmd/tools/cc_compilation_failed_non_windows.sh
 ifdef NETBSD
 	paxctl +m v1$(EXE_EXT)
 endif

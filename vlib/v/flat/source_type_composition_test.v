@@ -66,35 +66,6 @@ fn test_source_type_composition_inferred_expression_keeps_numeric_node_id() {
 	}
 }
 
-fn test_source_type_composition_fastc_thread_handle_preserves_codec() {
-	inputs := ['', 'void', 'void ', 'int', 'pkg.Type', '&[]u8', 'a_b', 'a_5fb', 'é']
-	expected := ['__vf_thread_void', '__vf_thread_void', '__vf_thread_kvoid_20', '__vf_thread_kint',
-		'__vf_thread_kpkg_2eType', '__vf_thread_k_26_5b_5du8', '__vf_thread_ka_5fb',
-		'__vf_thread_ka_5f5fb', '__vf_thread_k_c3_a9']
-	for i, raw in inputs {
-		for _ in 0 .. 2 {
-			assert source_type_composition_one(.fastc_thread_handle, source_type_id(raw)) == source_type_id(expected[i])
-		}
-	}
-	assert source_type_composition_one(.fastc_thread_handle, source_type_id([u8(0), 255].bytestr())) == source_type_id('__vf_thread_k_00_ff')
-}
-
-fn test_source_type_composition_fastc_component_preserves_raw_codec() {
-	inputs := ['', 'int', 'pkg.Type', '*', '_ptr', 'a*b c.d', 'fn (pkg.T*)', '\t T\n', 'é.*']
-	expected := ['', 'int', 'pkg__Type', '_ptr', '_ptr', 'a_ptrb_c__d', 'fn_(pkg__T_ptr)', '\t_T\n',
-		'é___ptr']
-	for i, raw in inputs {
-		id := source_type_id(raw)
-		for _ in 0 .. 2 {
-			assert source_type_composition_one(.fastc_composite_part, id) == source_type_id(expected[i])
-		}
-	}
-	zero := [u8(0)].bytestr()
-	last := [u8(255)].bytestr()
-	raw := zero + ' *.' + last
-	assert source_type_composition_one(.fastc_composite_part, source_type_id(raw)) == source_type_id(zero + '__ptr__' + last)
-}
-
 fn test_source_type_composition_lazy_name_queries_keep_numeric_keys() {
 	id := source_type_id('ptrmain.A__B')
 	for _ in 0 .. 2 {

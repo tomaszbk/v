@@ -38,30 +38,9 @@ class BootstrapConfigurationTests(unittest.TestCase):
         for name in ("success", "error"):
             self.assertIn('call :try_delete "%vc_dir%\\v_win_compat.c"', routine(name))
 
-    def test_all_portable_bootstraps_select_v1(self):
-        self.assertIn(
-            "set VC_BOOTSTRAP_DEFINE=-DCUSTOM_DEFINE_v1_fallback\n", SOURCE
-        )
-        for compiler in ("tcc", "clang", "gcc"):
-            with self.subTest(compiler=compiler):
-                commands = [
-                    line for line in routine("build_bootstrap_with_" + compiler).splitlines()
-                    if line.lstrip().startswith('"!' + compiler + '_exe!" ')
-                    and '"%V_C_FILE%"' in line
-                ]
-                self.assertEqual(len(commands), 1)
-                self.assertIn("%VC_BOOTSTRAP_DEFINE%", commands[0])
-
-    def test_msvc_bootstrap_selects_v1(self):
-        # MSVC's cl.exe is invoked directly (there is no "!msvc_exe!" variable
-        # the way the other three bootstraps have), so this needs its own
-        # assertion rather than joining the compiler loop above.
-        commands = [
-            line for line in routine("build_bootstrap_with_msvc").splitlines()
-            if line.lstrip().startswith("cl ") and '"%V_C_FILE%"' in line
-        ]
-        self.assertEqual(len(commands), 1)
-        self.assertIn("%VC_BOOTSTRAP_DEFINE%", commands[0])
+    def test_bootstraps_compile_the_snapshot_without_a_v1_define(self):
+        self.assertNotIn("VC_BOOTSTRAP_DEFINE", SOURCE)
+        self.assertNotIn("CUSTOM_DEFINE_v1_fallback", SOURCE)
 
     def test_all_bootstraps_link_the_external_windows_helpers(self):
         native = next(
@@ -134,7 +113,6 @@ class BootstrapConfigurationTests(unittest.TestCase):
         self.assertNotIn('--target=', compile_c)
         self.assertNotIn('--target=', SOURCE)
         self.assertIn('-fwrapv', compile_c)
-        self.assertNotIn("%VC_BOOTSTRAP_DEFINE%", compile_c)
 
     def test_clang_uses_its_installed_target_and_msvc_driver_when_needed(self):
         bootstrap = routine("build_bootstrap_with_clang")
@@ -187,7 +165,6 @@ class BootstrapConfigurationTests(unittest.TestCase):
                 link = next(line for line in body.splitlines() if line.lstrip().startswith(prefix))
                 self.assertIn('"%V_STAGE_C%"', link)
                 self.assertIn('"%V_STAGE%"', link)
-                self.assertNotIn("%VC_BOOTSTRAP_DEFINE%", link)
                 self.assertIn('set stage_error=!ERRORLEVEL!\ncall :try_delete "%V_STAGE_C%"', body)
                 self.assertIn("exit /b !stage_error!", body)
 

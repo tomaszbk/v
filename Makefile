@@ -4,10 +4,6 @@ VFLAGS ?=
 CFLAGS ?=
 LDFLAGS ?=
 
-# Portable VC snapshots do not embed V3. Keep their v1 executable on the full
-# compatibility compiler path even when the generated C is built on a V3 host.
-VC_BOOTSTRAP_DEFINE = -DCUSTOM_DEFINE_v1_fallback
-
 all: download_vc v
 
 .PHONY: all check download_vc install v
@@ -119,7 +115,7 @@ v:
 			esac; \
 			;; \
 	esac; \
-	sh cmd/tools/vc_compat.sh vc/v.c $(CC) $$bootstrap_ccflags $(VC_BOOTSTRAP_DEFINE) -std=gnu11 -w -o v1 -- -lm -lpthread $$ldflags || sh cmd/tools/cc_compilation_failed_non_windows.sh; \
+	sh cmd/tools/vc_compat.sh vc/v.c $(CC) $$bootstrap_ccflags -std=gnu11 -w -o v1 -- -lm -lpthread $$ldflags || sh cmd/tools/cc_compilation_failed_non_windows.sh; \
 	set -- ./v1 -no-parallel -o v2 $$bootstrap_gcflags $(VFLAGS); \
 	if [ -n "$$bootstrap_ccompiler" ]; then \
 		set -- "$$@" -cc "$$bootstrap_ccompiler"; \

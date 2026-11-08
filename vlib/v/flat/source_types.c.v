@@ -235,7 +235,6 @@ fn source_type_spelling_flags(text string) (SourceTypeShape, SourceTypeQuery) {
 			if text.starts_with('thread') { query.set(.thread_prefix) }
 		}
 		`_` {
-			if text.starts_with('__vf_thread_') { query.set(.c_thread_prefix) }
 		}
 		`J` {
 			if text.starts_with('JS.') { query.set(.js_prefix) }

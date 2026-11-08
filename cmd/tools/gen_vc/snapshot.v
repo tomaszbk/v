@@ -6,9 +6,8 @@ import os
 const snapshot_min_lines = 5000
 
 // snapshot_files maps each file of a vlang/vc snapshot to the flags that generate it from cmd/v.
-// `-cross` makes `$if cross ?` (and the `?`-guarded v1_fallback/musl branches that key off it)
-// resolve statically instead of compiling out empty, which lets GNUmakefile recompile the snapshot
-// with -DCUSTOM_DEFINE_v1_fallback to build v1.
+// `-cross` makes `$if cross ?` (and the `?`-guarded musl branches that key off it) resolve
+// statically instead of compiling out empty.
 const snapshot_files = {
 	'v.c':     ['-cross']
 	'v_win.c': ['-cross', '-os', 'windows', '-cc', 'msvc']

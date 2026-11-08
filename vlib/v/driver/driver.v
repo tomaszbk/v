@@ -10589,8 +10589,6 @@ pub fn run(args []string) {
 	prefs.target_libc_headers = target_libc_headers
 	prefs.force_bounds_checking = force_bounds_checking
 	prefs.enable_globals = enable_globals_compat
-	// Older bootstrap compilers still require the stdlib's compatibility headers.
-	record_user_define(mut user_defines, mut compile_values, 'v3_c_extern_declarations')
 	mut headerless_snapshot := false
 	if cmd_v_build && output_cross_c && backend == 'c' && !no_builtin && !is_o
 		&& !target_libc_headers

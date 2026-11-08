@@ -32,7 +32,7 @@ fn test_source_type_plain_flags_keep_raw_builtin_and_provisional_names() {
 fn test_source_type_plain_flags_preserve_combined_query_markers() {
 	markers := ['generic', 'nongeneric', 'unknown', 'notunknown', 'typeof', '_T_', 'Arc_', 'struct',
 		'thread', '_Ctx', 'Option', '__v_option', 'Result', 'Array_', 'FixedArray_', 'Map_',
-		'AnonStruct_', 'AnonUnion_', '__vf_thread_']
+		'AnonStruct_', 'AnonUnion_']
 	for marker in markers {
 		for prefix in ['', 'pkg.', '...', 'C.', 'JS.', 'main.'] {
 			for suffix in ['', '.T', '.A', '_Ctx', '.thread', '.struct'] {

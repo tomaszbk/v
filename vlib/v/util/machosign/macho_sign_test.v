@@ -27,7 +27,7 @@ fn test_sign_adhoc_matches_codesign() {
 	if !os.is_file(tcc) {
 		return
 	}
-	test_dir := os.join_path(os.temp_dir(), 'fastc_macho_sign_${os.getpid()}')
+	test_dir := os.join_path(os.temp_dir(), 'macho_sign_${os.getpid()}')
 	os.mkdir_all(test_dir) or { panic(err) }
 	defer {
 		os.rmdir_all(test_dir) or {}
@@ -96,11 +96,11 @@ fn test_sign_adhoc_records_the_host_sdk() {
 		return
 	}
 	tcc := os.join_path(@VEXEROOT, 'thirdparty', 'tcc', 'tcc.exe')
-	host_version := fastc_host_macos_version()
+	host_version := host_macos_version()
 	if !os.is_file(tcc) || host_version == 0 {
 		return
 	}
-	test_dir := os.join_path(os.temp_dir(), 'fastc_macho_sdk_${os.getpid()}')
+	test_dir := os.join_path(os.temp_dir(), 'macho_sdk_${os.getpid()}')
 	os.mkdir_all(test_dir) or { panic(err) }
 	defer {
 		os.rmdir_all(test_dir) or {}
@@ -152,7 +152,7 @@ fn test_sign_adhoc_fixes_tinycc_arm64_stack_offsets() {
 	if !os.is_file(tcc) {
 		return
 	}
-	test_dir := os.join_path(os.temp_dir(), 'fastc_macho_spoff_${os.getpid()}')
+	test_dir := os.join_path(os.temp_dir(), 'macho_spoff_${os.getpid()}')
 	os.mkdir_all(test_dir) or { panic(err) }
 	defer {
 		os.rmdir_all(test_dir) or {}

@@ -38,18 +38,18 @@ fn test_portable_signer_uses_the_available_hash_and_file_implementations() ! {
 			selected := os.exec([cc, '-E', '-P', '-D__APPLE__',
 				'-U__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__', conditions])
 			assert selected.exit_code == 0, selected.output
-			assert !selected.output.contains('fastc_hash_code_pages_native(')
-			assert !selected.output.contains('fastc_sign_macho_adhoc_mapped(')
-			assert selected.output.contains('machosign__fastc_hash_code_pages(')
-			assert selected.output.contains('machosign__fastc_sign_macho_adhoc_buffered(')
+			assert !selected.output.contains('hash_code_pages_native(')
+			assert !selected.output.contains('sign_macho_adhoc_mapped(')
+			assert selected.output.contains('machosign__hash_code_pages(')
+			assert selected.output.contains('machosign__sign_macho_adhoc_buffered(')
 			// Generating on a Darwin target must not retain native definitions
 			// that would then make the snapshot require Darwin APIs elsewhere.
-			assert !code.contains('void machosign__fastc_hash_code_pages_native(')
-			assert !code.contains('__v_result machosign__fastc_sign_macho_adhoc_mapped(')
+			assert !code.contains('void machosign__hash_code_pages_native(')
+			assert !code.contains('__v_result machosign__sign_macho_adhoc_mapped(')
 		} else {
 			// Native macOS builds retain mapped signing and the system digest.
-			assert code.contains('machosign__fastc_hash_code_pages_native(')
-			assert code.contains('machosign__fastc_sign_macho_adhoc_mapped(')
+			assert code.contains('machosign__hash_code_pages_native(')
+			assert code.contains('machosign__sign_macho_adhoc_mapped(')
 			assert code.contains('CC_SHA256(')
 		}
 	}

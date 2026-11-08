@@ -32,8 +32,6 @@ pub enum SourceTypeComposition {
 	named_parameter
 	concat
 	inferred_expression
-	fastc_thread_handle
-	fastc_composite_part
 	legacy_mut_chars
 	last_double_underscore_prefix
 	last_double_underscore_suffix
@@ -71,8 +69,6 @@ __global g_source_type_compositions [source_type_composition_slots]voidptr
 // qualified spellings take a module and name. Shared and atomic are unary.
 // Concatenation accepts any number of parts, including an empty tuple.
 // inferred_expression takes raw expression-node bits instead of a spelling ID.
-// fastc_thread_handle encodes one source spelling into its FastC thread handle name.
-// fastc_composite_part applies FastC component escaping only when that spelling is requested.
 // legacy_mut_chars removes leading raw bytes from the character set `m`, `u`, `t`, and ASCII space.
 // last_double_underscore_prefix and last_double_underscore_suffix query the final raw delimiter.
 // doubleunderscore_dotted replaces every raw double underscore with a dot.
@@ -300,32 +296,6 @@ fn source_type_composition_text(kind SourceTypeComposition, parts []u32) string 
 			return if text.starts_with('ptr') && text.len > 3 { text[3..] } else { '' }
 		}
 		.main_removed { return source_type_name(parts[0]).replace('main.', '') }
-		.fastc_composite_part {
-			text := source_type_name(parts[0])
-			return if text.contains(' ') || text.contains('*') || text.contains('.') {
-				text.replace(' ', '_').replace('*', '_ptr').replace('.', '__')
-			} else {
-				text
-			}
-		}
-		.fastc_thread_handle {
-			value_type := source_type_name(parts[0])
-			if value_type in ['', 'void'] { return '__vf_thread_void' }
-			hex_digits := '0123456789abcdef'
-			mut text := strings.new_builder(value_type.len + 16)
-			text.write_string('__vf_thread_k')
-			for value in value_type {
-				if (value >= `a` && value <= `z`) || (value >= `A` && value <= `Z`)
-					|| (value >= `0` && value <= `9`) {
-					text.write_u8(value)
-				} else {
-					text.write_u8(`_`)
-					text.write_u8(hex_digits[value >> 4])
-					text.write_u8(hex_digits[value & 0x0f])
-				}
-			}
-			return text.str()
-		}
 		.concat {
 			mut text := strings.new_builder(32 + parts.len * 8)
 			for part in parts {

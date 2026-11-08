@@ -450,7 +450,6 @@ fn test_source_type_syntax_cached_encoding_and_array_views() {
 		u32(0),
 		u32(0),
 	]
-	assert source_type_syntax(source_type_id('__vf_thread_kT')).thread_value_payload() == source_type_id('T')
 	assert source_type_syntax(source_type_id('_A__B___C_')).flattened_receiver_parts() == [
 		u32(0),
 		source_type_id('A__B__'),
@@ -609,14 +608,6 @@ fn test_source_type_shape_shared_parameter_candidate_exact_first_byte() {
 }
 
 fn test_source_type_syntax_fixed_array_codec_metadata() {
-	encoded := source_type_syntax(source_type_id('FixedArray_EXPRHEX307846_FASTC_ARRAY_OF_u8'))
-	assert encoded.fastc_fixed_array_length_valid()
-	assert encoded.fastc_fixed_array_length() == source_type_id('0xF')
-	assert source_type_syntax(source_type_id('FixedArray_EXPRHEXf_FASTC_ARRAY_OF_u8')).fastc_fixed_array_length() == source_type_id([u8(15)].bytestr())
-	assert !source_type_syntax(source_type_id('FixedArray_EXPRHEXg_FASTC_ARRAY_OF_u8')).fastc_fixed_array_length_valid()
-	empty := source_type_syntax(source_type_id('FixedArray_EXPRHEX_FASTC_ARRAY_OF_u8'))
-	assert empty.fastc_fixed_array_length_valid()
-	assert empty.fastc_fixed_array_length() == 0
 	assert source_type_syntax(source_type_id('T[U]junk[V]')).receiver_app_inner() == source_type_id('U]junk[V')
 	assert source_type_syntax(source_type_id('T[U[V]')).first_bracket_source_inner() == source_type_id('U[V')
 	assert source_type_syntax(source_type_id('SystemError')).system_error_suffix()
@@ -673,8 +664,6 @@ fn test_source_type_syntax_offsets_and_remaining_query_views() {
 	assert syntax.symbols() == [source_type_id('OtherThing'), source_type_id('Thing'),
 		source_type_id('Thing'), source_type_id('pkg.T'), source_type_id('T')]
 	assert syntax.symbols_first_offsets() == [u32(0), 5, 5, 23, 5]
-	assert source_type_composition_one(.fastc_composite_part, source_type_id('fn (T)')) == source_type_id('fn_(T)')
-	assert source_type_composition_one(.fastc_composite_part, source_type_id('&pkg.T*')) == source_type_id('&pkg__T_ptr')
 	assert source_type_syntax(source_type_id('T?')).contains_question()
 	assert source_type_syntax(source_type_id('[]chan T')).channel_fragment()
 	assert source_type_syntax(source_type_id('void (*)()')).c_function_pointer_hole()
@@ -700,25 +689,6 @@ fn test_source_type_syntax_integer_conversion_preserves_raw_int() {
 		assert syntax.integer_value() == raw.int()
 		assert source_type_syntax(id) == syntax
 		assert source_type_syntax(id).integer_value() == raw.int()
-	}
-}
-
-fn test_source_type_syntax_fastc_thread_value_codec() {
-	inputs := ['__vf_thread_void', '__vf_thread_k', '__vf_thread_kint', '__vf_thread_kpkg_2eType',
-		'__vf_thread_k_26_5b_5du8', '__vf_thread_ka_5fb', '__vf_thread_k_c3_a9', '__vf_thread_k_00_ff',
-		'__vf_thread_ké', '__vf_thread_kZ']
-	expected := ['', '', 'int', 'pkg.Type', '&[]u8', 'a_b', 'é', [u8(0), 255].bytestr(), 'é',
-		'Z']
-	for i, raw in inputs {
-		for _ in 0 .. 2 {
-			syntax := source_type_syntax(source_type_id(raw))
-			assert syntax.thread_value_type_valid()
-			assert syntax.thread_value_type() == source_type_id(expected[i])
-		}
-	}
-	for raw in ['', 'void', '__vf_thread_other', '__vf_thread_k_', '__vf_thread_k_0', '__vf_thread_k_0F',
-		'__vf_thread_k_F0', '__vf_thread_k_gg'] {
-		assert !source_type_syntax(source_type_id(raw)).thread_value_type_valid()
 	}
 }
 
@@ -808,7 +778,6 @@ fn test_source_type_syntax_qualified_name_fast_path_preserves_views() {
 			raw.all_before_last('.')
 		})
 		assert syntax.vls_generic_words() == source_type_syntax_vls_generic_words(raw)
-		assert source_type_composition_one(.fastc_composite_part, id) == source_type_id(raw.replace('.', '__'))
 		assert syntax.typ_suffix() == raw.ends_with('.typ')
 		assert syntax.typ_suffix_base() == if raw.ends_with('.typ') {
 			syntax.qualifier()
@@ -1785,8 +1754,6 @@ fn assert_source_type_syntax_scalar_views(syntax &SourceTypeSyntax, parsed Sourc
 	assert syntax.plain_alias_target() == parsed.plain_alias_target
 	assert syntax.c_array_payload() == parsed.c_array_payload
 	assert syntax.c_fixed_array_payload() == parsed.c_fixed_array_payload
-	assert syntax.fastc_array_marker() == parsed.fastc_array_marker
-	assert syntax.fastc_array_marker_payload() == parsed.fastc_array_marker_payload
 	assert syntax.c_map_payload() == parsed.c_map_payload
 	assert syntax.c_ptr_name_base() == parsed.c_ptr_name_base
 	assert syntax.c_tagged_type() == parsed.c_tagged_type
@@ -1807,10 +1774,6 @@ fn assert_source_type_syntax_scalar_views(syntax &SourceTypeSyntax, parsed Sourc
 	assert syntax.c_pointer_depth() == parsed.c_pointer_depth
 	assert syntax.c_pointer_count() == parsed.c_pointer_count
 	assert syntax.c_pointer_raw_base() == parsed.c_pointer_raw_base
-	assert syntax.thread_value_prefix() == parsed.thread_value_prefix
-	assert syntax.thread_value_payload() == parsed.thread_value_payload
-	assert syntax.thread_value_type_valid() == parsed.thread_value_type_valid
-	assert syntax.thread_value_type() == parsed.thread_value_type
 	assert syntax.contains_closing_bracket() == parsed.contains_closing_bracket
 	assert syntax.atomic_val_fragment() == parsed.atomic_val_fragment
 	assert syntax.expr_prefix() == parsed.expr_prefix
@@ -1854,8 +1817,6 @@ fn assert_source_type_syntax_scalar_views(syntax &SourceTypeSyntax, parsed Sourc
 	assert syntax.incremental_generic_application() == parsed.incremental_generic_application
 	assert syntax.system_error_suffix() == parsed.system_error_suffix
 	assert syntax.receiver_app_inner() == parsed.receiver_app_inner
-	assert syntax.fastc_fixed_array_length_valid() == parsed.fastc_fixed_array_length_valid
-	assert syntax.fastc_fixed_array_length() == parsed.fastc_fixed_array_length
 	assert syntax.contains_capital() == parsed.contains_capital
 	assert syntax.first_bracket_source_inner() == parsed.first_bracket_source_inner
 	assert syntax.c_function_pointer_hole() == parsed.c_function_pointer_hole
@@ -1959,17 +1920,12 @@ fn test_source_type_syntax_sparse_scalars_and_flags_cross_word_boundaries() {
 	assert copied.wrapper_base() == syntax.wrapper_base()
 	assert copied.qualified_modifiers() == syntax.qualified_modifiers()
 
-	thread_id := source_type_id('__vf_thread_kT]')
-	thread_syntax := source_type_syntax(thread_id)
-	assert thread_syntax.thread_value_prefix()
-	assert thread_syntax.thread_value_type_valid()
-	assert thread_syntax.contains_closing_bracket()
-	assert thread_syntax.thread_value_type() == source_type_id('T]')
-	// The three flags straddle bit 63 and bit 64.
-	assert thread_syntax.bool_flags[0] & (u64(3) << 62) == u64(3) << 62
-	assert thread_syntax.bool_flags[1] & 1 != 0
-	assert_source_type_syntax_scalar_views(thread_syntax, source_type_syntax_parse(thread_id,
-		'__vf_thread_kT]'))
+	bracket_id := source_type_id('T]')
+	bracket_syntax := source_type_syntax(bracket_id)
+	assert bracket_syntax.contains_closing_bracket()
+	// The first flag of the second word.
+	assert bracket_syntax.bool_flags[1] & 1 != 0
+	assert_source_type_syntax_scalar_views(bracket_syntax, source_type_syntax_parse(bracket_id, 'T]'))
 }
 
 fn test_source_type_syntax_sparse_signed_integer_queries_preserve_bits() {
@@ -2324,15 +2280,7 @@ fn test_source_type_syntax_borrowed_name_payload_boundaries() {
 		assert source_type_syntax(source_type_id('FixedArray_' + payload)).c_fixed_array_payload() == source_type_id(payload)
 		assert source_type_syntax(source_type_id('Map_' + payload)).c_map_payload() == source_type_id(payload)
 		assert source_type_syntax(source_type_id(payload + '_ptr')).c_ptr_name_base() == source_type_id(payload)
-		assert source_type_syntax(source_type_id('__vf_thread_k' + payload)).thread_value_payload() == source_type_id(payload)
 	}
-	for pair in [['_FASTC_ARRAY_OF_', ''], ['Fresh_FASTC_ARRAY_OF_u8', 'u8'],
-		['Fresh_FASTC_ARRAY_OF_u8_FASTC_ARRAY_OF_u16', 'u8_FASTC_ARRAY_OF_u16']] {
-		syntax := source_type_syntax(source_type_id(pair[0]))
-		assert syntax.fastc_array_marker()
-		assert syntax.fastc_array_marker_payload() == source_type_id(pair[1])
-	}
-	assert !source_type_syntax(source_type_id('Fresh_FASTC_ARRAY_OF')).fastc_array_marker()
 	assert source_type_syntax(source_type_id('__expr_')).expr_id() == 0
 	assert source_type_syntax(source_type_id('__expr_7')).expr_id() == 7
 }
@@ -2376,21 +2324,6 @@ fn test_source_type_syntax_borrowed_backend_ranges_keep_exact_bytes() {
 		element, length, valid := source_type_syntax_c_fixed_typedef(raw)
 		assert !valid
 		assert element == 0
-		assert length == 0
-	}
-	for pair in [['FixedArray_12_FASTC_ARRAY_OF_u8', '12'], ['FixedArray__FASTC_ARRAY_OF_u8', ''],
-		['FixedArray_FASTC_ARRAY_OF_u8', 'FASTC_ARRAY_OF_u8'],
-		['FixedArray_12_FASTC_ARRAY_OF__FASTC_ARRAY_OF_u8', '12'],
-		['FixedArray_ 12 _FASTC_ARRAY_OF_u8', ' 12 '], ['FixedArray_EXPRHEX_FASTC_ARRAY_OF_u8',
-			''], ['FixedArray_EXPRHEX30_FASTC_ARRAY_OF_u8', '0']] {
-		valid, length := source_type_syntax_fastc_fixed_length(pair[0])
-		assert valid
-		assert length == source_type_id(pair[1])
-	}
-	for raw in ['FixedArray_12', ' FixedArray_12_FASTC_ARRAY_OF_u8',
-		'FixedArray_EXPRHEXg_FASTC_ARRAY_OF_u8'] {
-		valid, length := source_type_syntax_fastc_fixed_length(raw)
-		assert !valid
 		assert length == 0
 	}
 }

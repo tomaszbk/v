@@ -571,12 +571,6 @@ pub fn (syntax &SourceTypeSyntax) c_fixed_array_payload() u32 {
 	return u32(syntax.scalar(66))
 }
 
-// fastc_array_marker_payload returns the cached fastc array marker payload query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) fastc_array_marker_payload() u32 {
-	return u32(syntax.scalar(67))
-}
-
 // c_map_payload returns the cached c map payload query.
 @[inline]
 pub fn (syntax &SourceTypeSyntax) c_map_payload() u32 {
@@ -653,18 +647,6 @@ pub fn (syntax &SourceTypeSyntax) c_pointer_count() int {
 @[inline]
 pub fn (syntax &SourceTypeSyntax) c_pointer_raw_base() u32 {
 	return u32(syntax.scalar(80))
-}
-
-// thread_value_payload returns the cached thread value payload query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) thread_value_payload() u32 {
-	return u32(syntax.scalar(81))
-}
-
-// thread_value_type returns the cached thread value type query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) thread_value_type() u32 {
-	return u32(syntax.scalar(82))
 }
 
 // expr_id returns the cached expr id query.
@@ -749,12 +731,6 @@ pub fn (syntax &SourceTypeSyntax) main_at_base() u32 {
 @[inline]
 pub fn (syntax &SourceTypeSyntax) receiver_app_inner() u32 {
 	return u32(syntax.scalar(96))
-}
-
-// fastc_fixed_array_length returns the cached fastc fixed array length query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) fastc_fixed_array_length() u32 {
-	return u32(syntax.scalar(97))
 }
 
 // first_bracket_source_inner returns the cached first bracket source inner query.
@@ -1135,12 +1111,6 @@ pub fn (syntax &SourceTypeSyntax) plain_alias_target() bool {
 	return syntax.bool_flags[0] & (u64(1) << 53) != 0
 }
 
-// fastc_array_marker returns the cached fastc array marker query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) fastc_array_marker() bool {
-	return syntax.bool_flags[0] & (u64(1) << 54) != 0
-}
-
 // backward_bracket_closed returns the cached backward bracket closed query.
 @[inline]
 pub fn (syntax &SourceTypeSyntax) backward_bracket_closed() bool {
@@ -1181,18 +1151,6 @@ pub fn (syntax &SourceTypeSyntax) backward_bracket_after_prefix_dims() bool {
 @[inline]
 pub fn (syntax &SourceTypeSyntax) option_result_void_prefix() bool {
 	return syntax.bool_flags[0] & (u64(1) << 61) != 0
-}
-
-// thread_value_prefix returns the cached thread value prefix query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) thread_value_prefix() bool {
-	return syntax.bool_flags[0] & (u64(1) << 62) != 0
-}
-
-// thread_value_type_valid returns the cached thread value type valid query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) thread_value_type_valid() bool {
-	return syntax.bool_flags[0] & (u64(1) << 63) != 0
 }
 
 // contains_closing_bracket returns the cached contains closing bracket query.
@@ -1367,12 +1325,6 @@ pub fn (syntax &SourceTypeSyntax) incremental_generic_application() bool {
 @[inline]
 pub fn (syntax &SourceTypeSyntax) system_error_suffix() bool {
 	return syntax.bool_flags[1] & (u64(1) << 28) != 0
-}
-
-// fastc_fixed_array_length_valid returns the cached fastc fixed array length valid query.
-@[inline]
-pub fn (syntax &SourceTypeSyntax) fastc_fixed_array_length_valid() bool {
-	return syntax.bool_flags[1] & (u64(1) << 29) != 0
 }
 
 // contains_capital returns the cached contains capital query.
@@ -2116,8 +2068,6 @@ struct SourceTypeSyntaxParsed {
 	plain_alias_target                 bool
 	c_array_payload                    u32
 	c_fixed_array_payload              u32
-	fastc_array_marker                 bool
-	fastc_array_marker_payload         u32
 	c_map_payload                      u32
 	c_ptr_name_base                    u32
 	c_tagged_type                      u32
@@ -2142,10 +2092,6 @@ struct SourceTypeSyntaxParsed {
 	c_pointer_count                    int
 	c_pointer_raw_base                 u32
 	voidptr_parts                      []u32 = source_type_syntax_empty_ids()
-	thread_value_prefix                bool
-	thread_value_payload               u32
-	thread_value_type_valid            bool
-	thread_value_type                  u32
 	contains_closing_bracket           bool
 	atomic_val_fragment                bool
 	inferred_parts                     []u32 = source_type_syntax_empty_ids()
@@ -2205,8 +2151,6 @@ struct SourceTypeSyntaxParsed {
 	incremental_generic_application   bool
 	system_error_suffix               bool
 	receiver_app_inner                u32
-	fastc_fixed_array_length_valid    bool
-	fastc_fixed_array_length          u32
 	markused_application_heads        []u32 = source_type_syntax_empty_ids()
 	contains_capital                  bool
 	markused_generic_components       []u32 = source_type_syntax_empty_ids()
@@ -3087,15 +3031,11 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 		values[12] = u32(parsed.c_fixed_typedef_length)
 		values[13] = u32(parsed.c_array_payload)
 		values[14] = u32(parsed.c_fixed_array_payload)
-		values[15] = u32(parsed.fastc_array_marker_payload)
 		values[16] = u32(parsed.c_map_payload)
 		values[17] = u32(parsed.c_ptr_name_base)
 		values[18] = u32(parsed.c_tagged_type)
-		values[19] = u32(parsed.thread_value_payload)
-		values[20] = u32(parsed.thread_value_type)
 		values[21] = u32(parsed.parallel_preseed_short)
 		values[22] = u32(parsed.field_owner_module)
-		values[23] = u32(parsed.fastc_fixed_array_length)
 		values[24] = u32(parsed.typ_suffix_base)
 		values[25] = u32(parsed.top_level_dot_prefix)
 		values[26] = u32(parsed.top_level_dot_suffix)
@@ -3168,7 +3108,6 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 		values[64] = u32(parsed.qualified_modifiers)
 		values[65] = u32(parsed.c_array_payload)
 		values[66] = u32(parsed.c_fixed_array_payload)
-		values[67] = u32(parsed.fastc_array_marker_payload)
 		values[68] = u32(parsed.c_map_payload)
 		values[69] = u32(parsed.c_ptr_name_base)
 		values[70] = u32(parsed.c_tagged_type)
@@ -3178,8 +3117,6 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 		values[75] = u32(parsed.prefix_dimension_tail)
 		values[76] = u32(parsed.backward_bracket_inner)
 		values[80] = u32(parsed.c_pointer_raw_base)
-		values[81] = u32(parsed.thread_value_payload)
-		values[82] = u32(parsed.thread_value_type)
 		values[84] = u32(parsed.parameter_name)
 		values[85] = u32(parsed.receiver_collection_id)
 		values[86] = u32(parsed.ampersand_trimmed)
@@ -3191,7 +3128,6 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 		values[92] = u32(parsed.function_space_result)
 		values[95] = u32(parsed.main_at_base)
 		values[96] = u32(parsed.receiver_app_inner)
-		values[97] = u32(parsed.fastc_fixed_array_length)
 		values[98] = u32(parsed.first_bracket_source_inner)
 		values[99] = u32(parsed.typ_suffix_base)
 		values[100] = u32(parsed.checker_parse_function_result)
@@ -3304,7 +3240,6 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 	if parsed.paren_prefix { bool_flags[0] |= u64(1) << 51 }
 	if parsed.fixed_length { bool_flags[0] |= u64(1) << 52 }
 	if parsed.plain_alias_target { bool_flags[0] |= u64(1) << 53 }
-	if parsed.fastc_array_marker { bool_flags[0] |= u64(1) << 54 }
 	if parsed.backward_bracket_closed { bool_flags[0] |= u64(1) << 55 }
 	if parsed.opening_paren { bool_flags[0] |= u64(1) << 56 }
 	if parsed.receiver_app_valid { bool_flags[0] |= u64(1) << 57 }
@@ -3312,8 +3247,6 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 	if parsed.prefix_dimensions_closed { bool_flags[0] |= u64(1) << 59 }
 	if parsed.backward_bracket_after_prefix_dims { bool_flags[0] |= u64(1) << 60 }
 	if parsed.option_result_void_prefix { bool_flags[0] |= u64(1) << 61 }
-	if parsed.thread_value_prefix { bool_flags[0] |= u64(1) << 62 }
-	if parsed.thread_value_type_valid { bool_flags[0] |= u64(1) << 63 }
 	if parsed.contains_closing_bracket { bool_flags[1] |= u64(1) << 0 }
 	if parsed.atomic_val_fragment { bool_flags[1] |= u64(1) << 1 }
 	if parsed.expr_prefix { bool_flags[1] |= u64(1) << 2 }
@@ -3343,7 +3276,6 @@ fn source_type_syntax_miss(id u32) &SourceTypeSyntax {
 	if parsed.internal_symbol_prefix { bool_flags[1] |= u64(1) << 26 }
 	if parsed.incremental_generic_application { bool_flags[1] |= u64(1) << 27 }
 	if parsed.system_error_suffix { bool_flags[1] |= u64(1) << 28 }
-	if parsed.fastc_fixed_array_length_valid { bool_flags[1] |= u64(1) << 29 }
 	if parsed.contains_capital { bool_flags[1] |= u64(1) << 30 }
 	if parsed.c_function_pointer_hole { bool_flags[1] |= u64(1) << 31 }
 	if parsed.channel_fragment { bool_flags[1] |= u64(1) << 32 }
@@ -3925,47 +3857,10 @@ fn source_type_syntax_incremental_generic_application(raw string) bool {
 	return false
 }
 
-fn source_type_syntax_thread_value(raw string) (bool, u32) {
-	if raw == '__vf_thread_void' { return true, 0 }
-	prefix := '__vf_thread_k'
-	if !raw.starts_with(prefix) { return false, 0 }
-	mut decoded := []u8{cap: raw.len - prefix.len}
-	mut i := prefix.len
-	for i < raw.len {
-		if raw[i] != `_` {
-			decoded << raw[i]
-			i++
-			continue
-		}
-		if i + 2 >= raw.len { return false, 0 }
-		high := source_type_syntax_lower_hex(raw[i + 1])
-		low := source_type_syntax_lower_hex(raw[i + 2])
-		if high < 0 || low < 0 { return false, 0 }
-		decoded << u8((high << 4) | low)
-		i += 3
-	}
-	return true, source_type_id(decoded.bytestr())
-}
-
 fn source_type_syntax_lower_hex(value u8) int {
 	if value >= `0` && value <= `9` { return int(value - `0`) }
 	if value >= `a` && value <= `f` { return int(value - `a` + 10) }
 	return -1
-}
-
-fn source_type_syntax_fastc_fixed_length(raw string) (bool, u32) {
-	if !raw.starts_with('FixedArray_') || !raw.contains('_FASTC_ARRAY_OF_') { return false, 0 }
-	payload := unsafe { raw.substr_unsafe('FixedArray_'.len, raw.len) }
-	marker := payload.index_('_FASTC_ARRAY_OF_')
-	// A marker can overlap the prefix's final underscore and be absent from payload.
-	part := unsafe { payload.substr_unsafe(0, if marker < 0 { payload.len } else { marker }) }
-	if part.starts_with('EXPRHEX') {
-		decoded := hex.decode(unsafe { part.substr_unsafe('EXPRHEX'.len, part.len) }) or {
-			return false, 0
-		}
-		return true, source_type_id(decoded.bytestr())
-	}
-	return true, source_type_id(part)
 }
 
 fn source_type_syntax_reflection_parts(raw string) []u32 {
@@ -4198,7 +4093,6 @@ fn source_type_syntax_parse_scoped(id u32, raw string, scoped bool) (SourceTypeS
 			named_variant_name = source_type_syntax_child_id(id, raw, name)
 		}
 	}
-	thread_value_type_valid, thread_value_type := source_type_syntax_thread_value(raw)
 	kind, base, args, has_result := source_type_syntax_components(clean)
 	written_applications, written_application_offsets := source_type_syntax_written_applications(raw)
 	mut pointer_text := clean
@@ -4309,7 +4203,6 @@ fn source_type_syntax_parse_scoped(id u32, raw string, scoped bool) (SourceTypeS
 	if raw.len == 0 || raw.contains('typeof(__expr_') {
 		inferred_parts, inferred_annotations, inferred_expr_ids = source_type_syntax_inferred(raw)
 	}
-	fastc_fixed_array_length_valid, fastc_fixed_array_length := source_type_syntax_fastc_fixed_length(raw)
 	parallel_preseed_fn, parallel_preseed_short := source_type_syntax_parallel_preseed(raw)
 	mut plain_comma_parts := identity_ids
 	if raw.len == 0 || has_comma {
@@ -4748,12 +4641,6 @@ fn source_type_syntax_parse_scoped(id u32, raw string, scoped bool) (SourceTypeS
 		} else {
 			u32(0)
 		}
-		fastc_array_marker:                 raw.contains('_FASTC_ARRAY_OF_')
-		fastc_array_marker_payload:         if raw.contains('_FASTC_ARRAY_OF_') {
-			source_type_syntax_child_id(id, raw, raw.all_after('_FASTC_ARRAY_OF_'))
-		} else {
-			u32(0)
-		}
 		c_map_payload:                      if raw.starts_with('Map_') {
 			source_type_syntax_child_range_id(id, raw, 'Map_'.len, raw.len)
 		} else {
@@ -4810,14 +4697,6 @@ fn source_type_syntax_parse_scoped(id u32, raw string, scoped bool) (SourceTypeS
 		c_pointer_count:                    raw.count('*')
 		c_pointer_raw_base:                 source_type_syntax_child_range_id(id, raw, 0, c_pointer_end)
 		voidptr_parts:                      voidptr_parts
-		thread_value_type_valid:            thread_value_type_valid
-		thread_value_type:                  thread_value_type
-		thread_value_prefix:                raw.starts_with('__vf_thread_k')
-		thread_value_payload:               if raw.starts_with('__vf_thread_k') {
-			source_type_syntax_child_range_id(id, raw, '__vf_thread_k'.len, raw.len)
-		} else {
-			u32(0)
-		}
 		contains_closing_bracket:           raw.contains(']')
 		atomic_val_fragment:                raw.contains('AtomicVal')
 		inferred_parts:                     inferred_parts
@@ -4928,8 +4807,6 @@ fn source_type_syntax_parse_scoped(id u32, raw string, scoped bool) (SourceTypeS
 		} else {
 			u32(0)
 		}
-		fastc_fixed_array_length_valid:     fastc_fixed_array_length_valid
-		fastc_fixed_array_length:           fastc_fixed_array_length
 		markused_application_heads:         source_type_syntax_application_heads(raw, true)
 		contains_capital:                   source_type_syntax_contains_capital(raw)
 		markused_generic_components:        source_type_syntax_markused_components(raw)
@@ -5025,7 +4902,6 @@ fn source_type_syntax_name(id u32, raw string, first_dot int, last_dot int) Sour
 	mut open_generic_receiver_marker := false
 	mut mangled_generic_marker := false
 	cgen_decl_unusable, cgen_decl_authority := source_type_syntax_cgen_declaration(raw)
-	thread_value_type_valid, thread_value_type := source_type_syntax_thread_value(raw)
 	mut last_underscore := -1
 	mut qualifier_count := u32(0)
 	mut field_owner_c := -1
@@ -5087,8 +4963,6 @@ fn source_type_syntax_name(id u32, raw string, first_dot int, last_dot int) Sour
 	fn_prefix := raw.starts_with('fn')
 	encoded_fixed_length, encoded_fixed_base := source_type_syntax_encoded_fixed(raw)
 	c_fixed_typedef_element, c_fixed_typedef_length, c_fixed_typedef_valid := source_type_syntax_c_fixed_typedef(raw)
-	fastc_fixed_array_length_valid, fastc_fixed_array_length := source_type_syntax_fastc_fixed_length(raw)
-	fastc_array_marker := raw.index_('_FASTC_ARRAY_OF_')
 	return SourceTypeSyntaxParsed{
 		name_packing:                   true
 		kind:                           .name
@@ -5155,13 +5029,6 @@ fn source_type_syntax_name(id u32, raw string, first_dot int, last_dot int) Sour
 		} else {
 			u32(0)
 		}
-		fastc_array_marker:             fastc_array_marker >= 0
-		fastc_array_marker_payload:     if fastc_array_marker >= 0 {
-			source_type_syntax_child_range_id(id, raw,
-				fastc_array_marker + '_FASTC_ARRAY_OF_'.len, raw.len)
-		} else {
-			u32(0)
-		}
 		c_map_payload:                  if raw.starts_with('Map_') {
 			source_type_syntax_child_range_id(id, raw, 'Map_'.len, raw.len)
 		} else {
@@ -5190,14 +5057,6 @@ fn source_type_syntax_name(id u32, raw string, first_dot int, last_dot int) Sour
 			source_type_syntax_plain_parts(raw, 'voidptr')
 		} else {
 			identity_ids
-		}
-		thread_value_type_valid:        thread_value_type_valid
-		thread_value_type:              thread_value_type
-		thread_value_prefix:            raw.starts_with('__vf_thread_k')
-		thread_value_payload:           if raw.starts_with('__vf_thread_k') {
-			source_type_syntax_child_range_id(id, raw, '__vf_thread_k'.len, raw.len)
-		} else {
-			u32(0)
 		}
 		atomic_val_fragment:            raw.contains('AtomicVal')
 		inferred_parts:                 identity_ids
@@ -5268,8 +5127,6 @@ fn source_type_syntax_name(id u32, raw string, first_dot int, last_dot int) Sour
 		top_level_dot_suffix:           if qualified { first_dot_suffix } else { u32(0) }
 		union_parts:                    identity_ids
 		system_error_suffix:            raw.ends_with('SystemError')
-		fastc_fixed_array_length_valid: fastc_fixed_array_length_valid
-		fastc_fixed_array_length:       fastc_fixed_array_length
 		contains_capital:               contains_capital
 		markused_generic_components:    if contains_capital {
 			if raw[0].is_letter() || raw[0] == `_` {

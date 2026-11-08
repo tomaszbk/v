@@ -101,7 +101,7 @@ try {
     # transient compiler under Windows 11's emulation, then explicitly target
     # ARM64 when generating the native stage. Only ARM64 executables are shipped.
     Set-MsvcTarget $install 'x64' $work
-    Invoke-Checked cl ($common + @('-DCUSTOM_DEFINE_v1_fallback', "/Fe$bootstrap", $snapshot) + $bootstrapNative + $libraries)
+    Invoke-Checked cl ($common + @("/Fe$bootstrap", $snapshot) + $bootstrapNative + $libraries)
     Assert-ExecutableMachine $bootstrap 0x8664
     Set-MsvcTarget $install 'arm64' $work
     $stageC = Join-Path $work 'v_stage.c'

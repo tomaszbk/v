@@ -28,7 +28,6 @@ pub enum SourceTypeQuery {
 	c_pointer_infix
 	map_arc_key
 	inferred_witness
-	c_thread_prefix
 	js_prefix
 	pointer_option_ref
 	shared_array
@@ -95,7 +94,6 @@ fn source_type_spelling_query(text string, shape SourceTypeShape) SourceTypeQuer
 	if text.contains('*') { query.set(.c_pointer_infix) }
 	if text.contains('Arc[') || text.contains('Arc_') { query.set(.map_arc_key) }
 	if text.contains('typeof(__expr_') { query.set(.inferred_witness) }
-	if text.starts_with('__vf_thread_') { query.set(.c_thread_prefix) }
 	if text.starts_with('JS.') { query.set(.js_prefix) }
 	if text.starts_with('&?&') { query.set(.pointer_option_ref) }
 	if text.starts_with('[]shared ') { query.set(.shared_array) }

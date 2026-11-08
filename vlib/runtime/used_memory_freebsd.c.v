@@ -1,9 +1,5 @@
 module runtime
 
-$if tinyc && !v3_c_extern_declarations ? {
-	#include <sys/resource.h>
-}
-
 struct C.rusage {
 	ru_maxrss int
 	ru_idrss  int

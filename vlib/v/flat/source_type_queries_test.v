@@ -147,11 +147,6 @@ fn source_type_query_cases() []SourceTypeQueryCase {
 			negative: ['typeof (__expr_1)', 'typeof(x)', 'typeof(__exp_1)']
 		},
 		SourceTypeQueryCase{
-			flag:     .c_thread_prefix
-			positive: ['__vf_thread_', '__vf_thread_int']
-			negative: [' __vf_thread_int', 'thread int', 'pkg.__vf_thread_int']
-		},
-		SourceTypeQueryCase{
 			flag:     .js_prefix
 			positive: ['JS.Foo', 'JS.']
 			negative: [' JS.Foo', 'js.Foo', 'pkg.JS.Foo']
