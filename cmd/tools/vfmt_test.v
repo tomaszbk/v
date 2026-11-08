@@ -61,7 +61,7 @@ fn test_fmt_preferences_respect_vflags() {
 			assert !res.output.contains("x := c'abc'"), '${backend_flag} ${backend}: ${res.output}'
 		}
 	}
-	for backend in ['native', 'go', 'arm64', 'eval'] {
+	for backend in ['native', 'go', 'arm64'] {
 		os.unsetenv('VFLAGS')
 		res := os.exec([vexe, '-b', '${backend}', 'fmt', source_path])
 		assert res.exit_code == 0, '${backend}: ${res.output}'
@@ -94,7 +94,7 @@ fn test_fmt_joined_backend_options() {
 		}
 	}
 	for flag in ['-b', '-backend'] {
-		for backend in ['js', 'js_browser', 'wasm', 'arm64', 'eval'] {
+		for backend in ['js', 'js_browser', 'wasm', 'arm64'] {
 			option := '${flag}=${backend}'
 			for placement in ['prefix', 'suffix', 'environment'] {
 				os.unsetenv('VFLAGS')
@@ -148,7 +148,7 @@ fn test_fmt_accepts_semantic_duplicate_operator_and_recursive_alias() {
 }
 
 fn test_fmt_preserves_assembly_compatibility() {
-	for options in ['', '-b=wasm', '-b=arm64', '-b=eval'] {
+	for options in ['', '-b=wasm', '-b=arm64'] {
 		for assembly in ['asm arm64 intel { nop }', 'asm amd64 raw { "nop" }', 'asm goto arm64 { nop }'] {
 			source := 'fn main() { ${assembly} }\n'
 			res, formatted := run_vfmt_write('assembly_compatibility', source, options)

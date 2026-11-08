@@ -34,10 +34,6 @@ import v.vmod
 
 // vfmt off
 
-$if !skip_eval ? {
-	import v.eval
-}
-
 $if !skip_arm64 ? {
 	import v.gen.arm64
 }
@@ -4464,7 +4460,7 @@ fn v3_crun_build_identity(state &V3ModuleCacheState, prefs &pref.Preferences, us
 }
 
 fn cli_usage() string {
-	return 'usage: v3 [run|crun|test] <file.v|directory> [options]\n' + '  -o <output>                  output binary or C file\n' + '  -b <c|arm64|x64|wasm|eval> backend\n' + '  -os <name> -arch <name>      target platform\n' + '  -cc <compiler>               C compiler executable\n' + '  -cflags <flags>              extra C compiler options\n' + '  -ldflags <flags>             extra options appended to the link command\n' + '  -syscalls                    libc-linked build with os on raw syscalls (C backend)\n' + '  -thread-stack-size <bytes>   spawned-thread stack size\n' + '  -hot-fn <name>              extract raw machine code for one function (hot reload, arm64)\n' + '  -prod -c99 -shared -strict   C build modes\n' + '  -v                           verbose stage profiling\n' + '  -show-timings                compiler stage timings without verbose traces\n' + '  -show-instructions           -show-timings plus retired CPU instructions per stage (macOS)\n' + '  -silent                      suppress benchmark output\n' + '  -showcc                      print C compiler commands\n' + '  -trace-calls                 trace function entries to stderr\n' + '  -trace-fns <patterns>        restrict tracing to functions or modules\n' + '  -race                        detect data races at runtime (ThreadSanitizer)\n' + '  -profile [file]              write V1-compatible function profile data\n' + '  -profile-fns <names>         profile only named functions and their callees\n' + '  -profile-no-inline           omit @[inline] functions from the profile\n' + '  -no-memory-limit             disable the 10176 MiB user-build memory safety limit\n' + '  -memory-limit <size>         set a custom user-build memory safety limit\n                               to specify unit append K|M|G (or k|m|g) (default: M)\n' + '  -d <name>                    compile-time define'
+	return 'usage: v3 [run|crun|test] <file.v|directory> [options]\n' + '  -o <output>                  output binary or C file\n' + '  -b <c|arm64|x64|wasm>      backend\n' + '  -os <name> -arch <name>      target platform\n' + '  -cc <compiler>               C compiler executable\n' + '  -cflags <flags>              extra C compiler options\n' + '  -ldflags <flags>             extra options appended to the link command\n' + '  -syscalls                    libc-linked build with os on raw syscalls (C backend)\n' + '  -thread-stack-size <bytes>   spawned-thread stack size\n' + '  -hot-fn <name>              extract raw machine code for one function (hot reload, arm64)\n' + '  -prod -c99 -shared -strict   C build modes\n' + '  -v                           verbose stage profiling\n' + '  -show-timings                compiler stage timings without verbose traces\n' + '  -show-instructions           -show-timings plus retired CPU instructions per stage (macOS)\n' + '  -silent                      suppress benchmark output\n' + '  -showcc                      print C compiler commands\n' + '  -trace-calls                 trace function entries to stderr\n' + '  -trace-fns <patterns>        restrict tracing to functions or modules\n' + '  -race                        detect data races at runtime (ThreadSanitizer)\n' + '  -profile [file]              write V1-compatible function profile data\n' + '  -profile-fns <names>         profile only named functions and their callees\n' + '  -profile-no-inline           omit @[inline] functions from the profile\n' + '  -no-memory-limit             disable the 10176 MiB user-build memory safety limit\n' + '  -memory-limit <size>         set a custom user-build memory safety limit\n                               to specify unit append K|M|G (or k|m|g) (default: M)\n' + '  -d <name>                    compile-time define'
 }
 
 fn normalize_backend_name(name string) string {
@@ -10181,9 +10177,9 @@ pub fn run(args []string) {
 	if ownership_mode {
 		record_user_define(mut user_defines, mut compile_values, 'ownership')
 	}
-	if backend !in ['c', 'arm64', 'x64', 'wasm', 'eval']
+	if backend !in ['c', 'arm64', 'x64', 'wasm']
 		&& !(backend == 'js' && is_checker_fixture) {
-		eprintln('unknown backend `${backend}`; expected c, arm64, x64, wasm, or eval')
+		eprintln('unknown backend `${backend}`; expected c, arm64, x64 or wasm')
 		exit(1)
 	}
 	if hot_fn != '' && backend != 'arm64' {
@@ -10197,7 +10193,7 @@ pub fn run(args []string) {
 	for requested in compile_backends {
 		for name in requested.split(',') {
 			if name.trim_space() !in ['c', 'arm64', 'aarch64', 'x64', 'amd64', 'x86_64',
-				'x86-64', 'wasm', 'wasm32', 'eval'] {
+				'x86-64', 'wasm', 'wasm32'] {
 				eprintln('unknown compile backend `${name.trim_space()}`')
 				exit(1)
 			}
@@ -10421,7 +10417,6 @@ pub fn run(args []string) {
 	mut include_arm64 := all_backends
 	mut include_x64 := all_backends
 	mut include_wasm := all_backends
-	mut include_eval := all_backends
 	for cb in compile_backends {
 		for name in cb.split(',') {
 			match name.trim_space() {
@@ -10434,10 +10429,6 @@ pub fn run(args []string) {
 				'wasm', 'wasm32' {
 					include_wasm = true
 				}
-				'eval' {
-					include_eval = true
-				}
-
 				// 'c' is always built.
 				else {}
 			}
@@ -10452,9 +10443,6 @@ pub fn run(args []string) {
 		}
 		'wasm' {
 			include_wasm = true
-		}
-		'eval' {
-			include_eval = true
 		}
 		else {}
 	}
@@ -10474,9 +10462,6 @@ pub fn run(args []string) {
 	if 'skip_arm64' in user_defines && 'skip_x64' in user_defines
 		&& 'skip_wasm' in user_defines && 'skip_ssa' !in user_defines {
 		user_defines << 'skip_ssa'
-	}
-	if !include_eval {
-		user_defines << 'skip_eval'
 	}
 	mut b := bench.new()
 	driver_sw := time.new_stopwatch()
@@ -12504,22 +12489,6 @@ pub fn run(args []string) {
 		b.metric('type parse cache misses', type_cache_stats.parse_misses, 'lookups')
 		b.metric('C type cache hits', type_cache_stats.c_hits, 'lookups')
 		b.metric('C type cache misses', type_cache_stats.c_misses, 'lookups')
-		if backend == 'eval' {
-			$if !skip_eval ? {
-				mut runner := eval.new(prefs)
-				runner.run_files(a) or {
-					eprintln('error: ${err.msg()}')
-					exit(1)
-				}
-				b.step('eval')
-				b.print_report()
-				return
-			} $else {
-				eprintln('eval support is not compiled into this executable')
-				eprintln('Rebuild with `v -compile-backend eval self` or `-all-backends`.')
-				exit(1)
-			}
-		}
 		mut mu_stage_sw := time.new_stopwatch()
 		_ = pre_tc.ierror_impl_names()
 		// Self-host markused is dominated by serial reachability/index work. Build
@@ -20483,9 +20452,6 @@ fn skipped_backend_modules(prefs &pref.Preferences) map[string]bool {
 	if 'skip_ssa' in prefs.user_defines {
 		skipped['v.ssa'] = true
 		skipped['v.ssa.optimize'] = true
-	}
-	if 'skip_eval' in prefs.user_defines {
-		skipped['v.eval'] = true
 	}
 	return skipped
 }

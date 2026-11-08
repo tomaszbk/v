@@ -411,7 +411,7 @@ fn main() {
 	assert specialized[string]() == 1
 }
 '
-	for backend in ['arm64', 'eval', 'wasm'] {
+	for backend in ['arm64', 'wasm'] {
 		diagnostics := parse_parser_regression_backend_diagnostics('deferred_res_${backend}',
 			source, backend)
 		assert !diagnostics.any(it.message.contains('is not supported by the V3 ${backend} backend')), '${diagnostics}'

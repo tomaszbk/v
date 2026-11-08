@@ -166,17 +166,6 @@ Run a V program and return its exit code and output.
 {"target": "src/main.v", "args": ["--verbose"]}
 ```
 
-### `v_eval`
-
-Evaluate a short V snippet in process and return its captured output. Good for
-checking an expression or a stdlib call without writing a file. It is the V
-interpreter, so only the subset the interpreter supports is available; for anything
-substantial, write a file and use `v_run`.
-
-```json
-{"code": "println(6 * 7)"}
-```
-
 ## Environment
 
 ### `v_skills`

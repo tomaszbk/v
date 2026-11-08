@@ -91,7 +91,7 @@ cannot write by accident.
 
 ## When the tools cannot answer
 
-`v_run`, `v_test_run`, `v_doctor` and `v_eval` start the compiler. They are
+`v_run`, `v_test_run` and `v_doctor` start the compiler. They are
 slower than the in-process tools and unavailable when the compiler cannot be
 started. A tool that could not start the compiler says so explicitly — it reports
 `started: false` with an error rather than an exit code, so a sandbox that cannot

@@ -7768,7 +7768,7 @@ The tools fall into groups:
 - Project: `v_project_info`, `v_modules`, `v_files`.
 - Code: `v_ast`, `v_symbols`, `v_symbol_at`, `v_references`, `v_stdlib_doc`.
 - Checking: `v_check`, `v_test_run`, `v_doctor`, `v_veb_routes`, `v_skills`.
-- Running: `v_run`, `v_eval`.
+- Running: `v_run`.
 - Editing: `v_edit_replace`, `v_rename_symbol`, `v_format`.
 
 The editing tools default to reporting a plan rather than writing:

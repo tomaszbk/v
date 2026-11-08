@@ -42,11 +42,6 @@ const optional_backends = [
 		dir:    'ssa/optimize'
 		symbol: 'optimize__optimize('
 	},
-	OptionalBackend{
-		name:   'eval'
-		dir:    'eval'
-		symbol: 'eval__new('
-	},
 ]
 
 struct CompilerC {
@@ -133,8 +128,8 @@ fn test_cmd_v_defaults_to_c_only() {
 }
 
 fn test_cmd_v_skip_wasm_also_prunes_ssa() {
-	build := compiler_to_c('cmd_v_skip_wasm', ['-compile-backend', 'eval', '-d', 'skip_wasm'], cmd_v_src)
-	assert_backends(build, 'cmd/v -d skip_wasm', ['eval'])
+	build := compiler_to_c('cmd_v_skip_wasm', ['-compile-backend', 'x64', '-d', 'skip_wasm'], cmd_v_src)
+	assert_backends(build, 'cmd/v -d skip_wasm', ['x64', 'ssa', 'ssa.optimize'])
 }
 
 fn test_cmd_v_all_backends_keeps_every_backend() {

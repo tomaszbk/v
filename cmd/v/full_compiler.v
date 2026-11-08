@@ -20,11 +20,6 @@ fn full_compiler_is_required(args []string) bool {
 				return true
 			}
 		}
-		'eval' {
-			$if skip_eval ? {
-				return true
-			}
-		}
 		else {}
 	}
 	return false

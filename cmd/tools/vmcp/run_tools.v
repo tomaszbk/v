@@ -71,36 +71,6 @@ fn run_arguments(flags []string, target string, program_args []string) []string 
 	return argv
 }
 
-// spec_eval declares `v_eval`.
-fn spec_eval() ToolSpec {
-	return read_only_spec('v_eval',
-		'Evaluate a short V snippet and return its captured output. Useful for
-checking an expression or a stdlib call without writing a file. The snippet runs
-in this interpreter, so only the subset of V it supports is available; for
-anything substantial, write a file and use `v_run`.',
-		one_string('code', 'The V snippet to evaluate.'), tool_eval)
-}
-
-// tool_eval answers `v_eval`.
-fn tool_eval(ws &Workspace, arguments string) string {
-	code := decode_args(arguments).required_str('code') or { return error_json(err.msg()) }
-	mut w := astjson.Writer{}
-	w.begin_object()
-	w.key('code')
-	w.string(code)
-	mut result := eval_text(ws, code)
-	w.key('ok')
-	w.boolean(result.ok)
-	w.key('stdout')
-	w.string(result.stdout)
-	if result.err != '' {
-		w.key('error')
-		w.string(result.err)
-	}
-	w.end_object()
-	return w.str()
-}
-
 // run_json runs the compiler and renders what it produced.
 fn run_json(ws &Workspace, target string, compiler_args []string, max_diagnostics int) string {
 	run := run_compiler(ws, compiler_args)

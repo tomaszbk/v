@@ -298,7 +298,7 @@ fn test_self_build_defaults_to_c_backend() {
 			'-o', '/tmp/vself_c_backend_default_test'])
 		assert result.exit_code == 0, result.output
 		assert !result.output.contains('-compile-backend'), result.output
-		for backend in ['arm64', 'x64', 'wasm', 'eval', 'ssa'] {
+		for backend in ['arm64', 'x64', 'wasm', 'ssa'] {
 			assert result.output.contains('-d skip_${backend}'), result.output
 		}
 		assert_vself_preserves_full_cli(result.output)

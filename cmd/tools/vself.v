@@ -206,12 +206,9 @@ fn self_build_backend_skips(args []string) []string {
 		'arm64': ['arm64', 'aarch64']
 		'x64':   ['x64', 'amd64', 'x86_64', 'x86-64']
 		'wasm':  ['wasm', 'wasm32']
-		'eval':  ['eval']
 	} {
 		if aliases.any(it in included) {
-			if backend in ['arm64', 'x64', 'wasm'] {
-				needs_ssa = true
-			}
+			needs_ssa = true
 			continue
 		}
 		skips << ['-d', 'skip_${backend}']

@@ -126,7 +126,7 @@ fn test_every_tool_is_named_and_described() {
 	// gap in the catalogue; a tool here that this list omits is a silent addition.
 	for expected in ['v_project_info', 'v_modules', 'v_files', 'v_ast', 'v_symbols', 'v_symbol_at',
 		'v_references', 'v_stdlib_doc', 'v_check', 'v_test_run', 'v_doctor', 'v_veb_routes', 'v_skills',
-		'v_run', 'v_eval', 'v_edit_replace', 'v_rename_symbol', 'v_format'] {
+		'v_run', 'v_edit_replace', 'v_rename_symbol', 'v_format'] {
 		assert expected in names, '${expected} is missing from the catalogue'
 	}
 }
@@ -164,8 +164,7 @@ fn test_read_only_keeps_only_the_safe_tools() {
 		assert name !in kept, '${name} is a writing tool'
 	}
 	// Every read-only tool survives.
-	for name in ['v_project_info', 'v_symbols', 'v_ast', 'v_references', 'v_check', 'v_skills',
-		'v_eval'] {
+	for name in ['v_project_info', 'v_symbols', 'v_ast', 'v_references', 'v_check', 'v_skills'] {
 		assert name in kept, '${name} should be available in read-only mode'
 	}
 }
@@ -708,23 +707,6 @@ fn test_skills_lists_the_catalog_and_the_install_state() {
 	assert answer.contains('"in_global"'), answer
 }
 
-fn test_eval_runs_a_snippet() {
-	answer := call_tool('v_eval', '{"code":"println(6 * 7)"}')
-	assert answer.contains('"ok":\ttrue') || answer.contains('"ok": true'), answer
-	assert answer.contains('42'), answer
-}
-
-fn test_eval_requires_code() {
-	answer := call_tool('v_eval', '{}')
-	assert answer.contains('"error"'), answer
-}
-
-fn test_eval_reports_a_failing_snippet() {
-	answer := call_tool('v_eval', '{"code":"this is not V"}')
-	assert answer.contains('"ok":\tfalse') || answer.contains('"ok": false'), answer
-	assert answer.contains('"error"'), answer
-}
-
 fn test_format_reports_without_writing() {
 	ws := probe_workspace()
 	path := probe_path('messy.v')
@@ -1211,7 +1193,7 @@ fn test_tools_list_wire_schemas_are_valid_in_both_modes() {
 				properties := raw_tool.as_map()
 				assert 'title' !in properties, 'tools/list must omit the redundant title for ${properties['name']!.str()}'
 			}
-			expected := if read_only { 15 } else { 18 }
+			expected := if read_only { 14 } else { 17 }
 			assert response.result.tools.len == expected, line
 			for tool in response.result.tools {
 				schema_type := tool.input_schema['type'] or { panic('missing schema type for ${tool.name}') }

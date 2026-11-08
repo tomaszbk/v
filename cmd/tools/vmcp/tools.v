@@ -57,7 +57,6 @@ pub fn tool_specs() []ToolSpec {
 	specs << spec_skills()
 	// Running code.
 	specs << spec_run()
-	specs << spec_eval()
 	// Changing files. These are skipped in `--read-only` mode.
 	specs << spec_edit_replace()
 	specs << spec_rename_symbol()

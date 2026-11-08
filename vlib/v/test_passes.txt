@@ -2742,7 +2742,6 @@ vlib/v/token/token_test.v
 vlib/v/util/util_test.v
 vlib/v/vmod/encoder_test.v
 vlib/v/vmod/parser_test.v
-vlib/v/eval/eval_test.v
 vlib/v/gen/c/names_test.v
 vlib/v/markused/custom_str_test.v
 vlib/v/ssa/builder_test.v
