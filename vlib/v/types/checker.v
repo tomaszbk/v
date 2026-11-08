@@ -1643,8 +1643,11 @@ mut:
 	symbols                    &SymbolInterner = unsafe { nil }
 	// parsed_nodes_len is the number of nodes of the tree that the node indexes
 	// were built for (see build_node_indexes). Lexical narrowing walks the
-	// parents of these nodes only.
+	// parents of these nodes only, in parsed_parents: a copy of flat.FlatAst.parents
+	// for them that later rewrites of the tree leave unchanged, as types2's
+	// Info maps record the checked tree once (go/types2/api.go).
 	parsed_nodes_len          int
+	parsed_parents            []flat.NodeId
 	preflight_node_ids        []i32
 	preflight_index_nodes_len int = -1
 	value_used_nodes          []bool
@@ -2077,6 +2080,7 @@ fn (tc &TypeChecker) fork_program_view(ast &flat.FlatAst, direct_dependencies_by
 		top_level_idx_nodes_len:               tc.top_level_idx_nodes_len
 		synthetic_top_level_type_ids:          tc.synthetic_top_level_type_ids
 		parsed_nodes_len:                      tc.parsed_nodes_len
+		parsed_parents:                        tc.parsed_parents
 		value_used_nodes:                      tc.value_used_nodes
 		node_indexes_trusted:                  tc.node_indexes_trusted
 		preflight_node_ids:                    tc.preflight_node_ids
@@ -2661,6 +2665,7 @@ fn (mut tc TypeChecker) init_node_indexes(a &flat.FlatAst) {
 	tree.reset_parents()
 	tree.index_parents()
 	tc.parsed_nodes_len = a.nodes.len
+	tc.parsed_parents = a.parents.clone()
 	tc.value_used_nodes = []bool{len: a.nodes.len}
 	tc.fn_check_costs = if tc.building_v_fast { []i32{len: a.nodes.len} } else { []i32{} }
 	tc.declaration_attributes = map[int][]string{}
