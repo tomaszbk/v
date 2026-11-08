@@ -34,26 +34,26 @@ fn test_compiler_input_path_skips_options_and_commands() {
 
 fn test_backend_option_given_reads_every_spelling() {
 	assert backend_option_given(['-b', 'c', 'main.v'])
-	assert backend_option_given(['-backend', 'fastc', 'main.v'])
+	assert backend_option_given(['-backend', 'wasm', 'main.v'])
 	assert backend_option_given(['-b=c', 'main.v'])
-	assert !backend_option_given(['-compile-backend', 'fastc', 'main.v'])
+	assert !backend_option_given(['-compile-backend', 'wasm', 'main.v'])
 	assert !backend_option_given(['-o', '-b', 'main.v'])
 	assert !backend_option_given(['main.v'])
 }
 
 fn test_project_backend_is_the_default_for_the_project() {
-	root := project_backend_fixture('fastc', "Module {\n\tname: 'app'\n\tbackend: 'fastc'\n}\n")
+	root := project_backend_fixture('wasm', "Module {\n\tname: 'app'\n\tbackend: 'wasm'\n}\n")
 	main_file := os.join_path(root, 'main.v')
 	test_dir := os.join_path(root, 'sub')
-	assert with_project_backend([root]) == ['-b', 'fastc', root]
-	assert with_project_backend(['-g', 'run', main_file, 'x']) == ['-b', 'fastc', '-g', 'run',
+	assert with_project_backend([root]) == ['-b', 'wasm', root]
+	assert with_project_backend(['-g', 'run', main_file, 'x']) == ['-b', 'wasm', '-g', 'run',
 		main_file, 'x']
-	assert with_project_backend(['test', test_dir]) == ['-b', 'fastc', 'test', test_dir]
-	assert with_project_backend([os.join_path(test_dir, 'a_test.v')])[..2] == ['-b', 'fastc']
+	assert with_project_backend(['test', test_dir]) == ['-b', 'wasm', 'test', test_dir]
+	assert with_project_backend([os.join_path(test_dir, 'a_test.v')])[..2] == ['-b', 'wasm']
 	// The command line wins over v.mod.
 	assert with_project_backend(['-b', 'c', root]) == ['-b', 'c', root]
 	// Arguments of the program that `run` starts are not compiler options.
-	assert with_project_backend(['run', main_file, '-b', 'c']) == ['-b', 'fastc', 'run', main_file,
+	assert with_project_backend(['run', main_file, '-b', 'c']) == ['-b', 'wasm', 'run', main_file,
 		'-b', 'c']
 	// Inline source and stdin have no project.
 	assert with_project_backend(['-e', 'println(1)']) == ['-e', 'println(1)']
@@ -61,7 +61,7 @@ fn test_project_backend_is_the_default_for_the_project() {
 }
 
 fn test_generated_sources_belong_to_no_project() {
-	root := project_backend_fixture('generated', "Module {\n\tname: 'app'\n\tbackend: 'fastc'\n}\n")
+	root := project_backend_fixture('generated', "Module {\n\tname: 'app'\n\tbackend: 'wasm'\n}\n")
 	inline := os.join_path(root, '.v3_inline_1_abc.vsh')
 	stdin := os.join_path(root, '.v3_stdin_1_abc.v')
 	os.write_file(inline, 'println(1)\n')!
@@ -71,18 +71,18 @@ fn test_generated_sources_belong_to_no_project() {
 	// Only the compiler's own names are exempt.
 	other := os.join_path(root, 'v3_inline_1_abc.vsh')
 	os.write_file(other, 'println(1)\n')!
-	assert with_project_backend(['run', other]) == ['-b', 'fastc', 'run', other]
+	assert with_project_backend(['run', other]) == ['-b', 'wasm', 'run', other]
 }
 
 fn test_test_targets_are_run_with_their_own_project_backends() {
 	c_project := project_backend_fixture('runs_c', "Module {\n\tname: 'app'\n\tbackend: 'c'\n}\n")
-	fastc_project := project_backend_fixture('runs_fastc', "Module {\n\tname: 'app'\n\tbackend: 'fastc'\n}\n")
+	wasm_project := project_backend_fixture('runs_wasm', "Module {\n\tname: 'app'\n\tbackend: 'wasm'\n}\n")
 	plain := project_backend_fixture('runs_plain', '')
 	c_test := os.join_path(c_project, 'sub', 'a_test.v')
-	assert project_test_runs(['-g', 'test', c_project, '-run-only', 'test_a', fastc_project, plain,
+	assert project_test_runs(['-g', 'test', c_project, '-run-only', 'test_a', wasm_project, plain,
 		c_test], 1) == [
 		['-b', 'c', '-g', 'test', '-run-only', 'test_a', c_project, c_test],
-		['-b', 'fastc', '-g', 'test', '-run-only', 'test_a', fastc_project],
+		['-b', 'wasm', '-g', 'test', '-run-only', 'test_a', wasm_project],
 		['-g', 'test', '-run-only', 'test_a', plain],
 	]
 	// Targets of one backend keep the command line as it is.
@@ -91,8 +91,8 @@ fn test_test_targets_are_run_with_their_own_project_backends() {
 	]
 	assert project_test_runs(['test', plain], 0) == [['test', plain]]
 	// An explicit backend applies to every target.
-	assert project_test_runs(['-b', 'c', 'test', fastc_project, plain], 2) == [
-		['-b', 'c', 'test', fastc_project, plain],
+	assert project_test_runs(['-b', 'c', 'test', wasm_project, plain], 2) == [
+		['-b', 'c', 'test', wasm_project, plain],
 	]
 }
 
@@ -110,7 +110,7 @@ fn test_unknown_project_backend_is_reported_with_its_manifest() {
 	res := os.exec([@VEXE, root])
 	assert res.exit_code == 1
 	assert res.output.contains(os.join_path(os.real_path(root), 'v.mod'))
-	assert res.output.contains('unknown backend `pascal`; expected c, fastc, arm64, x64, wasm')
+	assert res.output.contains('unknown backend `pascal`; expected c, arm64, x64, wasm')
 	// An explicit backend does not read the manifest's choice.
 	assert with_project_backend(['-b', 'c', root]) == ['-b', 'c', root]
 }

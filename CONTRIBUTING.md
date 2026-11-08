@@ -85,7 +85,7 @@ The main files are:
    the reachable declarations.
 
 7. `vlib/v/gen/c` is the primary C backend. Other backends and lowerings live under
-   `vlib/v/gen/`, including FastC, WebAssembly, and ARM64 via SSA, MIR, and instruction
+   `vlib/v/gen/`, including WebAssembly and ARM64 via SSA, MIR, and instruction
    selection. WebAssembly also consumes SSA; see [the backend guide](doc/wasm.md).
 
 The rest of the directories are vlib modules: `builtin/` (strings, arrays,

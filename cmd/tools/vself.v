@@ -8,7 +8,6 @@ import v.util.vflags
 const args_ = arguments()
 const is_debug = args_.contains('-debug')
 const full_v_cli_source = 'cmd/v'
-const standalone_v3_source = 'vlib/v/v.v'
 
 // support a renamed `v` executable too:
 const vexe = os.getenv_opt('VEXE') or { @VEXE }
@@ -34,23 +33,8 @@ fn main() {
 	repeat_count, mut args := extract_repeat_count(args_[1..], command_index)
 	mut effective_args := effective_self_build_args(args)
 	self_backend := self_build_backend(effective_args)
-	fastc_self_build := self_backend == 'fastc'
 	arm64_self_build := self_backend == 'arm64'
 	c_self_build := self_backend == 'c'
-	if c_self_build && '-prod' in effective_args && self_build_trains_fastc(effective_args) {
-		// A lazy backend is built without optimization. Production compilers must
-		// carry FastC themselves so both Clang optimization and PGO cover it.
-		args << ['-compile-backend', 'fastc']
-		effective_args = effective_self_build_args(args)
-	}
-	if fastc_self_build && '-prod' in effective_args {
-		eprintln('`v self -b fastc` does not support `-prod`; remove `-prod`.')
-		exit(1)
-	}
-	if fastc_self_build {
-		args = normalize_fastc_backend_args(args)
-		effective_args = effective_self_build_args(args)
-	}
 	if c_self_build && !has_self_build_configuration_arg(effective_args) {
 		// compiling by default, i.e. `v self`:
 		unam := os.uname()
@@ -81,7 +65,7 @@ fn main() {
 		args << self_build_backend_skips(effective_args)
 	}
 	effective_args = effective_self_build_args(args)
-	if !fastc_self_build && ('-prod' in effective_args || arm64_self_build)
+	if ('-prod' in effective_args || arm64_self_build)
 		&& (!arm64_self_build
 			|| ('-memory-limit' !in effective_args && '--memory-limit' !in effective_args))
 		&& '-no-memory-limit' !in effective_args
@@ -107,20 +91,9 @@ fn main() {
 		effective_args = effective_self_build_args(args)
 	}
 	obinary := self_build_output(args)
-	if fastc_self_build && repeat_count > 1 && obinary == '' {
-		unsupported := unsupported_fastc_repeat_args(args)
-		if unsupported.len > 0 {
-			eprintln('`v self -b fastc xN` cannot preserve these options across repeated replacement builds: ${unsupported.join(' ')}')
-			eprintln('Remove the options, use `x1`, or specify `-o` to keep the original compiler.')
-			exit(1)
-		}
-	}
 	mut compile_args := clone_args(args)
 	if obinary == '' {
 		compile_args << ['-o', 'v2']
-	}
-	if fastc_self_build {
-		compile_args << '-selfhost'
 	}
 	final_binary := if obinary != '' { obinary } else { 'v2' }
 	// Train Clang production compilers on self-compilation. Ordinary rebuilds and
@@ -131,9 +104,8 @@ fn main() {
 	} else {
 		''
 	}
-	// Only explicit FastC builds are standalone. Regular replacements must retain
-	// cmd/v so commands such as self, up, fmt, and version remain available.
-	compilation_source := if fastc_self_build { standalone_v3_source } else { full_v_cli_source }
+	// Replacements retain cmd/v so commands such as self, up, fmt, and version remain available.
+	compilation_source := full_v_cli_source
 	for run_idx in 0 .. repeat_count {
 		run_label := if repeat_count > 1 { ' [${run_idx + 1}/${repeat_count}]' } else { '' }
 		options := if args.len > 0 { '(${compile_args.join(' ')})' } else { '' }
@@ -146,7 +118,7 @@ fn main() {
 				eprintln('PGO self-build failed; falling back to a regular self-build.')
 			}
 		}
-		if fastc_self_build || arm64_self_build {
+		if arm64_self_build {
 			// Native self-build failures must retain the backend diagnostic. Retrying
 			// through the portable C bootstrap cannot validate native self-hosting.
 			run_cmd(cmd) or {
@@ -231,7 +203,6 @@ fn self_build_backend_skips(args []string) []string {
 	mut skips := []string{}
 	mut needs_ssa := false
 	for backend, aliases in {
-		'fastc': ['fastc']
 		'arm64': ['arm64', 'aarch64']
 		'x64':   ['x64', 'amd64', 'x86_64', 'x86-64']
 		'wasm':  ['wasm', 'wasm32']
@@ -249,62 +220,6 @@ fn self_build_backend_skips(args []string) []string {
 		skips << ['-d', 'skip_ssa']
 	}
 	return skips
-}
-
-fn normalize_fastc_backend_args(args []string) []string {
-	mut normalized := []string{cap: args.len}
-	mut i := 0
-	for i < args.len {
-		arg := args[i]
-		if arg in ['-b', '-backend'] && i + 1 < args.len {
-			i += 2
-			continue
-		}
-		normalized << arg
-		if (arg == '-cf' || pref.option_may_consume_value(arg)) && i + 1 < args.len {
-			normalized << args[i + 1]
-			i += 2
-		} else {
-			i++
-		}
-	}
-	normalized << ['-b', 'fastc']
-	return normalized
-}
-
-fn unsupported_fastc_repeat_args(args []string) []string {
-	mut unsupported := []string{}
-	mut i := 0
-	for i < args.len {
-		arg := args[i]
-		if arg in ['-b', '-gc'] && i + 1 < args.len {
-			value := args[i + 1]
-			supported := match arg {
-				'-b' { value == 'fastc' }
-				'-gc' { value == 'none' }
-				else { false }
-			}
-
-			if !supported {
-				unsupported << '${arg} ${value}'
-			}
-			i += 2
-			continue
-		}
-		if arg in ['-silent', '-keepc', '-nocache'] {
-			i++
-			continue
-		}
-		mut option := arg
-		if (arg == '-cf' || pref.option_may_consume_value(arg)) && i + 1 < args.len {
-			option += ' ${args[i + 1]}'
-			i += 2
-		} else {
-			i++
-		}
-		unsupported << option
-	}
-	return unsupported
 }
 
 fn effective_self_build_args(args []string) []string {
@@ -666,9 +581,6 @@ fn compile_with_pgo(vroot string, vexe string, args []string, out_binary string,
 		return false
 	}
 	mut training_args := ['-nocache', '-gc', 'none', '-prealloc', '-building-v', '-o', training_output]
-	if self_build_trains_fastc(effective_self_build_args(args)) {
-		training_args << ['-compile-backend', 'fastc']
-	}
 	no_parallel := '-no-parallel' in effective_self_build_args(args)
 	if no_parallel {
 		training_args << '-no-parallel'
@@ -688,28 +600,6 @@ fn compile_with_pgo(vroot string, vexe string, args []string, out_binary string,
 			eprintln('PGO step failed while generating the serial profiling data.')
 			eprintln(err.msg())
 			return false
-		}
-	}
-	if self_build_trains_fastc(effective_self_build_args(args))
-		&& os.is_executable(os.join_path(vroot, 'thirdparty', 'tcc', 'tcc.exe')) {
-		// Including FastC in the generated compiler does not execute its backend.
-		// Train it too, while retaining the normal C backend's profile above.
-		mut fastc_training_args := with_output_arg(training_args, os.join_path(pgo_workspace,
-			'cmd_v_fastc_training.c'))
-		fastc_training_args << ['-b', 'fastc', '-no-memory-limit']
-		fastc_training_cmd := 'env -u VFLAGS -u VEXE -u LLVM_PROFILE_FILE V_MACOS_V3_NO_FALLBACK=1 ' +
-			compose_v_cmd(pgo_binary, fastc_training_args, full_v_cli_source)
-		run_cmd(fastc_training_cmd) or {
-			eprintln('PGO step failed while generating the FastC profiling data.')
-			eprintln(err.msg())
-			return false
-		}
-		if !no_parallel && os.getenv('VJOBS') != '1' {
-			run_cmd('env VJOBS=1 ${fastc_training_cmd}') or {
-				eprintln('PGO step failed while generating the serial FastC profiling data.')
-				eprintln(err.msg())
-				return false
-			}
 		}
 	}
 	if cc_kind == 'clang' {
@@ -732,30 +622,6 @@ fn compile_with_pgo(vroot string, vexe string, args []string, out_binary string,
 		return false
 	}
 	return true
-}
-
-fn self_build_trains_fastc(args []string) bool {
-	mut includes_fastc := '-prod' in args
-	for i, arg in args {
-		if arg == '-old-compiler' {
-			return false
-		}
-		if arg in ['-d', '-define'] && i + 1 < args.len
-			&& args[i + 1].all_before('=').trim_space() == 'skip_fastc' {
-			return false
-		}
-		if arg.starts_with('-d') && arg.len > 2 && arg[2..].all_before('=') == 'skip_fastc' {
-			return false
-		}
-		if arg in ['-all-backends', '--all-backends'] {
-			includes_fastc = true
-		}
-		if arg in ['-compile-backend', '--compile-backend'] && i + 1 < args.len
-			&& args[i + 1].split(',').any(it.trim_space() == 'fastc') {
-			includes_fastc = true
-		}
-	}
-	return includes_fastc
 }
 
 fn bootstrap_self_build(vroot string, args []string, final_binary string) ! {

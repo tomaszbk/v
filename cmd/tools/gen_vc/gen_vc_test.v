@@ -33,7 +33,6 @@ fn test_check_snapshot_accepts_a_good_snapshot_and_names_each_defect() {
 			v_c,
 			v_win_c.replace_once('no_backtrace,cross', 'no_backtrace'),
 		]
-		'v_win.c contains the FastC backend':           [v_c, v_win_c + 'void fastc__gen(void);\n']
 		'v.c has only':                                 [
 			v_c.replace('// filler\n', ''),
 			v_win_c,

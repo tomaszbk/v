@@ -2,12 +2,7 @@ module main
 
 import os
 
-$if !fastc_selfhost ? {
-	import v.driver
-}
-$if fastc_selfhost ? {
-	import v.fastcdriver
-}
+import v.driver
 
 $if gcboehm ? {
 	$compile_error('V must be built without a garbage collector; use `-gc none` or `-prealloc`')
@@ -39,9 +34,5 @@ fn main() {
 		// with less work than unmapping each block in the exit handler.
 		unsafe { prealloc_keep_memory_at_exit() }
 	}
-	$if fastc_selfhost ? {
-		fastcdriver.run(os.args[1..])
-	} $else {
-		driver.run(os.args[1..])
-	}
+	driver.run(os.args[1..])
 }

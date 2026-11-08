@@ -191,8 +191,8 @@ fn test_unterminated_string_ending_with_a_backslash() {
 }
 
 fn test_backend() {
-	content := vmod.decode("Module {\n\tname: 'app'\n\tbackend: 'fastc'\n}")!
-	assert content.backend == 'fastc'
+	content := vmod.decode("Module {\n\tname: 'app'\n\tbackend: 'wasm'\n}")!
+	assert content.backend == 'wasm'
 	assert content.unknown == {}
 	assert vmod.decode("Module {\n\tname: 'app'\n}")!.backend == ''
 }

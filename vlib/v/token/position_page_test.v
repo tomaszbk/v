@@ -41,9 +41,4 @@ fn test_line_pages_are_invalidated_when_lines_are_appended_or_reset() {
 	assert f.line_pages.len == 0
 	assert f.find_line(source.len + 9) == 41
 	assert f.find_line(source.len + 10) == 42
-	f.index_line_starts(source)
-	f.index_lines_without_digest(source)
-	assert f.line_pages.len == 0
-	assert f.find_line(0) == 1
-	assert f.find_line(source.len) == 1
 }

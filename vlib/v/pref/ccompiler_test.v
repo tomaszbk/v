@@ -48,7 +48,6 @@ fn test_tcc_prod_detection_does_not_match_unrelated_names_or_backends() {
 	assert !tcc_with_prod_requested(['-prod', '-cc', 'distcc'])
 	assert !tcc_with_prod_requested(['-prod', '-cc', 'notcc'])
 	assert !tcc_with_prod_requested(['-prod', '-cc', 'tcc', '-b', 'arm64'])
-	assert !tcc_with_prod_requested(['-prod', '-cc', 'tcc', '-b', 'fastc'])
 	assert tcc_with_prod_requested(['-prod', '-cc', 'tcc', '-b', 'arm64', '-b', 'c'])
 	assert !tcc_with_prod_requested(['-cc', '-prod'])
 }

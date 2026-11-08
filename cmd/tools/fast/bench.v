@@ -246,8 +246,7 @@ fn build_v3_stage_compiler(dir string, date time.Time, args []string) !string {
 	os.rm(stage_v) or {}
 	prod := if args.contains('-noprod') { '' } else { '-prod' }
 	elog('  building standalone v3 self-compiler ...')
-	res := os.exec(['${vprod}', '-gc', 'none', ...(os.split_args(prod) or { panic(err) }), '-d',
-		'skip_fastc', '-o', '${stage_v}', 'vlib/v/v.v'])
+	res := os.exec(['${vprod}', '-gc', 'none', ...(os.split_args(prod) or { panic(err) }), '-o', '${stage_v}', 'vlib/v/v.v'])
 	if res.exit_code != 0 || !os.is_executable(stage_v) {
 		return error('standalone v3 build failed (exit ${res.exit_code}) in ${dir}:\n${res.output}')
 	}

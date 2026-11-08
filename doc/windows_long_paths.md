@@ -19,7 +19,7 @@ such an executable can create, check and open files past `MAX_PATH`.
   in control. Include `longPathAware` there if the program also needs long paths.
 * Executables linked by MSVC get no manifest: they load `dbghelp.dll` at startup, and its
   initialization would hang on a long `TMP` (see below) before any V code runs.
-* Executables built with the FastC backend (`-b fastc`), shared libraries, and Windows
+* Shared libraries and Windows
   executables cross-compiled on another system get no manifest either.
 * If the manifest cannot be added, the build still succeeds. V then prints a warning with
   `-v` or `-showcc`, or when the build directory had to move (see below).
@@ -57,8 +57,7 @@ the same fix.
 ## Build directories
 
 `tcc.exe` is not long-path aware, and `CreateProcessW` cannot start a program whose working folder
-is past `MAX_PATH`. When the C build directory next to the output (also the one of
-`-b fastc`), or the TinyCC preflight directory under the temporary folder, would be 240
+is past `MAX_PATH`. When the C build directory next to the output, or the TinyCC preflight directory under the temporary folder, would be 240
 characters or longer, V uses a short name
 for it under `%LOCALAPPDATA%\v3cc`, which only the user can write to. That per-build directory
 is removed after the build; the `v3cc` folder itself stays. Shorter directories keep their

@@ -12,10 +12,6 @@ fn test_windows_workflow_validation_plans() {
 		self_tests := job.steps.filter(it.id == 'self_tests')
 		assert self_tests.len == 1
 		assert self_tests[0].script.trim_space() == 'v -silent test-self vlib'
-		fastc := job.steps.filter(it.id == 'build_and_run_hello_world_with_b_fastc')
-		assert fastc.len == 1
-		assert 'VFLAGS' in fastc[0].env
-		assert fastc[0].env['VFLAGS'] == ''
 		assert !job.steps.any(it.id in ['install_dependencies', 'install_openssl', 'build',
 			'build_with_makev_bat_tcc'])
 		assert !job.steps.any(it.script.contains('v -autofree'))

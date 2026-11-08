@@ -32,8 +32,8 @@ fn test_core_header_ownership_preserves_application_and_thirdparty_headers() {
 	assert !g.core_native_header_is_redeclared('/vroot/vlib/v/cmdexec/cmdexec_pipe.c.v', '<poll.h>')
 	a.cached_header_sources['/cache/cmdexec.vh'] = '/vroot/vlib/v/cmdexec/cmdexec_pipe.c.v'
 	assert g.core_native_header_is_redeclared('/cache/cmdexec.vh', '"/vroot/vlib/v/cmdexec/cmdexec_poll.h"')
-	assert g.core_native_header_is_redeclared('/vroot/vlib/v/gen/fastc/unit_compile_nix.c.v', '<signal.h>')
-	assert !g.core_native_header_is_redeclared('/project/v/gen/fastc/unit_compile_nix.c.v', '<signal.h>')
+	assert g.core_native_header_is_redeclared('/vroot/vlib/v/gen/c/output_nix.c.v', '<sys/uio.h>')
+	assert !g.core_native_header_is_redeclared('/project/v/gen/c/output_nix.c.v', '<sys/uio.h>')
 	assert !g.core_native_header_is_redeclared('/project/time/timerfd.c.v', '<sys/timerfd.h>')
 	assert !g.core_native_header_is_redeclared('/vroot/vlib/time/timerfd.c.v', '<custom.h>')
 	assert !g.core_native_header_is_redeclared('/vroot/vlib/compress/brotli/brotli.c.v', '<stdio.h>')

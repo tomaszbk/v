@@ -30,8 +30,7 @@ are not explicitly initialized; literal defaults, including signed numeric const
 This check is conservative. Operations whose allocation behavior cannot be proved are rejected,
 even when a particular execution would allocate nothing. This includes indirect function calls,
 interface dispatch, bound method values, unexpanded compile-time code, custom operators, and
-copies or returns of owning aggregates. The standalone FastC backend rejects V allocation contracts;
-use the C backend. Contracts on function aliases and interface declarations are unsupported and
+copies or returns of owning aggregates. Contracts on function aliases and interface declarations are unsupported and
 produce an error. Annotate V or C function declarations instead.
 
 Automatic ownership and cleanup (`-ownership`, `-d ownership`, `-autofree`), profiling

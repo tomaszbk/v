@@ -25,7 +25,7 @@ fn test_v3_embed_incbin_supported_keeps_the_array_form_where_no_object_is_linked
 		[])
 	// other backends, MSVC, and targets whose object format the host assembler
 	// does not produce
-	assert !v3_embed_incbin_supported('linux', 'linux', 'gcc', 'fastc', false, false, false,
+	assert !v3_embed_incbin_supported('linux', 'linux', 'gcc', 'wasm', false, false, false,
 		false, [])
 	assert !v3_embed_incbin_supported('windows', 'windows', 'msvc', 'c', false, false, false,
 		false, [])

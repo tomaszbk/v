@@ -63,7 +63,6 @@ fn test_linux_tinyc_self_build_does_not_enable_prealloc() {
 				'/tmp/vself_' + '${compiler}' + '_test'])
 		assert result.exit_code == 0, result.output
 		assert !result.output.contains('-new-compiler'), result.output
-		assert !result.output.contains('-b fastc'), result.output
 		assert !result.output.contains('-prealloc'), result.output
 		assert_vself_preserves_full_cli(result.output)
 	}
@@ -74,7 +73,6 @@ fn test_linux_tinyc_self_build_does_not_enable_prealloc() {
 				'/tmp/vself_vflags_' + '${compiler}' + '_test'])
 		assert result.exit_code == 0, result.output
 		assert !result.output.contains('-new-compiler'), result.output
-		assert !result.output.contains('-b fastc'), result.output
 		assert !result.output.contains('-prealloc'), result.output
 		assert !result.output.contains('-cc'), result.output
 		assert_vself_preserves_full_cli(result.output)
@@ -84,7 +82,6 @@ fn test_linux_tinyc_self_build_does_not_enable_prealloc() {
 			'/tmp/vself_clang_test'])
 	assert clang_result.exit_code == 0, clang_result.output
 	assert !clang_result.output.contains('-new-compiler'), clang_result.output
-	assert !clang_result.output.contains('-b fastc'), clang_result.output
 	assert clang_result.output.contains('-prealloc'), clang_result.output
 	assert_vself_preserves_full_cli(clang_result.output)
 	clang_override_result :=
@@ -92,7 +89,6 @@ fn test_linux_tinyc_self_build_does_not_enable_prealloc() {
 			'-o', '/tmp/vself_vflags_clang_test'])
 	assert clang_override_result.exit_code == 0, clang_override_result.output
 	assert !clang_override_result.output.contains('-new-compiler'), clang_override_result.output
-	assert !clang_override_result.output.contains('-b fastc'), clang_override_result.output
 	assert clang_override_result.output.contains('-prealloc'), clang_override_result.output
 	assert_vself_preserves_full_cli(clang_override_result.output)
 	old_result :=
@@ -100,7 +96,6 @@ fn test_linux_tinyc_self_build_does_not_enable_prealloc() {
 			'/tmp/vself_old_test'])
 	assert old_result.exit_code == 0, old_result.output
 	assert !old_result.output.contains('-new-compiler'), old_result.output
-	assert !old_result.output.contains('-b fastc'), old_result.output
 	assert_vself_preserves_full_cli(old_result.output)
 }
 
@@ -119,7 +114,6 @@ fn test_linux_default_self_build_preserves_full_cli() {
 		os.exec(['env', '-u', 'CC', 'VFLAGS=', 'VEXE=' + '${noop}', '${tool}', 'self', '-o',
 			'/tmp/vself_v3_c_backend_test'])
 	assert result.exit_code == 0, result.output
-	assert !result.output.contains('-b fastc'), result.output
 	assert result.output.contains('-prealloc'), result.output
 	assert_vself_preserves_full_cli(result.output)
 	prod_result :=
@@ -152,7 +146,6 @@ fn test_macos_default_self_build_compiler_selection() {
 		os.exec(['env', '-u', 'CC', 'VFLAGS=', 'VEXE=' + '${noop}', '${tool}', 'self', '-o',
 			'/tmp/vself_macos_prealloc_test'])
 	assert default_result.exit_code == 0, default_result.output
-	assert !default_result.output.contains('-b fastc'), default_result.output
 	assert default_result.output.contains('-cc tcc'), default_result.output
 	assert default_result.output.contains('-prealloc'), default_result.output
 	assert_vself_preserves_full_cli(default_result.output)
@@ -161,7 +154,6 @@ fn test_macos_default_self_build_compiler_selection() {
 			'/tmp/vself_macos_prealloc_test'])
 	assert override_result.exit_code == 0, override_result.output
 	assert !override_result.output.contains('-new-compiler'), override_result.output
-	assert !override_result.output.contains('-b fastc'), override_result.output
 	assert override_result.output.contains('-cc cc'), override_result.output
 	assert override_result.output.contains('-prealloc'), override_result.output
 	assert_vself_preserves_full_cli(override_result.output)
@@ -176,7 +168,6 @@ fn test_macos_default_self_build_compiler_selection() {
 			'-o', '/tmp/vself_macos_old_test'])
 	assert old_result.exit_code == 0, old_result.output
 	assert !old_result.output.contains('-new-compiler'), old_result.output
-	assert !old_result.output.contains('-b fastc'), old_result.output
 	assert_vself_preserves_full_cli(old_result.output)
 }
 
@@ -314,71 +305,28 @@ fn test_self_build_defaults_to_c_backend() {
 		return
 	}
 	noop := os.find_abs_path_of_executable('echo') or { return }
-	tool := os.join_path(os.vtmp_dir(), 'vself_fastc_backend_test')
+	tool := os.join_path(os.vtmp_dir(), 'vself_c_backend_default_test')
 	defer {
 		os.rm(tool) or {}
 	}
 	build := os.exec([vexe, '-o', '${tool}', os.join_path(vroot, 'cmd', 'tools', 'vself.v')])
 	assert build.exit_code == 0, build.output
-	// Ordinary rebuilds stay small; production builds optimize and train FastC.
-	default_result :=
-		os.exec(['env', 'VFLAGS=', 'VEXE=' + '${noop}', '${tool}', 'self', '-o',
-			'/tmp/vself_fastc_default_test'])
-	assert default_result.exit_code == 0, default_result.output
-	assert !default_result.output.contains('-compile-backend'), default_result.output
-	for backend in ['fastc', 'arm64', 'x64', 'wasm', 'eval', 'ssa'] {
-		assert default_result.output.contains('-d skip_${backend}'), default_result.output
-	}
-	assert_vself_preserves_full_cli(default_result.output)
-	prod_result :=
-		os.exec(['env', 'VFLAGS=', 'VEXE=' + '${noop}', '${tool}', 'self', '-prod', '-o',
-			'/tmp/vself_fastc_prod_test'])
-	assert prod_result.exit_code == 0, prod_result.output
-	assert prod_result.output.contains('-compile-backend fastc'), prod_result.output
-	assert !prod_result.output.contains('-d skip_fastc'), prod_result.output
-	for backend in ['arm64', 'x64', 'wasm', 'eval', 'ssa'] {
-		assert prod_result.output.contains('-d skip_${backend}'), prod_result.output
-	}
-	assert_vself_preserves_full_cli(prod_result.output)
-	prod_vflags_result := os.exec(['env', 'VFLAGS=-prod', 'VEXE=${noop}', tool, 'self', '-o',
-		'/tmp/vself_fastc_prod_vflags_test'])
-	assert prod_vflags_result.exit_code == 0, prod_vflags_result.output
-	assert prod_vflags_result.output.contains('-compile-backend fastc'), prod_vflags_result.output
-	assert !prod_vflags_result.output.contains('-d skip_fastc'), prod_vflags_result.output
-	for opt_in in [['-compile-backend', 'fastc'], ['-all-backends']] {
-		result := os.exec(['env', 'VFLAGS=', 'VEXE=${noop}', tool, 'self', ...opt_in, '-o',
-			'/tmp/vself_backend_opt_in_test'])
+	// Ordinary and production rebuilds keep only the C backend.
+	for extra in [[]string{}, ['-prod']] {
+		result := os.exec(['env', 'VFLAGS=', 'VEXE=' + '${noop}', '${tool}', 'self', ...extra,
+			'-o', '/tmp/vself_c_backend_default_test'])
 		assert result.exit_code == 0, result.output
-		assert result.output.contains(opt_in.join(' ')), result.output
-		assert !result.output.contains('-d skip_fastc'), result.output
+		assert !result.output.contains('-compile-backend'), result.output
+		for backend in ['arm64', 'x64', 'wasm', 'eval', 'ssa'] {
+			assert result.output.contains('-d skip_${backend}'), result.output
+		}
+		assert_vself_preserves_full_cli(result.output)
 	}
 	wasm_result := os.exec(['env', 'VFLAGS=-compile-backend wasm', 'VEXE=${noop}', tool, 'self',
 		'-o', '/tmp/vself_wasm_opt_in_test'])
 	assert wasm_result.exit_code == 0, wasm_result.output
 	assert !wasm_result.output.contains('-d skip_wasm'), wasm_result.output
 	assert !wasm_result.output.contains('-d skip_ssa'), wasm_result.output
-	assert wasm_result.output.contains('-d skip_fastc'), wasm_result.output
-	for opt_out in [['-d', 'skip_fastc'], ['-dskip_fastc'], ['-old-compiler']] {
-		mut args := ['env', 'VFLAGS=', 'VEXE=' + '${noop}', '${tool}', 'self']
-		args << opt_out
-		args << ['-o', '/tmp/vself_fastc_opt_out_test']
-		result := os.exec(args)
-		assert result.exit_code == 0, result.output
-		assert !result.output.contains('-compile-backend'), result.output
-		prod_opt_out := os.exec(['env', 'VFLAGS=', 'VEXE=${noop}', tool, 'self', '-prod', ...opt_out,
-			'-o', '/tmp/vself_fastc_prod_opt_out_test'])
-		assert prod_opt_out.exit_code == 0, prod_opt_out.output
-		assert !prod_opt_out.output.contains('-compile-backend'), prod_opt_out.output
-	}
-	vflags_result :=
-		os.exec(['env', 'VFLAGS=-d skip_fastc', 'VEXE=' + '${noop}', '${tool}', 'self', '-o',
-			'/tmp/vself_fastc_vflags_test'])
-	assert vflags_result.exit_code == 0, vflags_result.output
-	assert !vflags_result.output.contains('-compile-backend'), vflags_result.output
-	prod_skip_result := os.exec(['env', 'VFLAGS=-d skip_fastc', 'VEXE=${noop}', tool, 'self', '-prod',
-		'-o', '/tmp/vself_fastc_prod_skip_test'])
-	assert prod_skip_result.exit_code == 0, prod_skip_result.output
-	assert !prod_skip_result.output.contains('-compile-backend'), prod_skip_result.output
 }
 
 fn test_self_bootstrap_handles_the_old_peak_rss_return_type() ! {
@@ -451,7 +399,7 @@ fn test_arm64_self_build_preserves_native_options_and_full_cli() {
 	}
 	build := os.exec([vexe, '-nocache', '-o', tool, os.join_path(vroot, 'cmd', 'tools', 'vself.v')])
 	assert build.exit_code == 0, build.output
-	for backend_args in [['-b', 'arm64'], ['-backend', 'arm64'], ['-b', 'fastc', '-b', 'arm64']] {
+	for backend_args in [['-b', 'arm64'], ['-backend', 'arm64'], ['-b', 'wasm', '-b', 'arm64']] {
 		mut args := ['env', 'VFLAGS=', 'VEXE=${noop}', tool, 'self']
 		args << backend_args
 		args << ['x2', '-o', '/tmp/vself_arm64_options_test']
@@ -460,7 +408,6 @@ fn test_arm64_self_build_preserves_native_options_and_full_cli() {
 		assert result.output.count('cmd/v') == 2, result.output
 		assert !result.output.contains('-cc'), result.output
 		assert !result.output.contains('-prealloc'), result.output
-		assert !result.output.contains('-compile-backend fastc'), result.output
 		assert result.output.contains('-gc none'), result.output
 		assert result.output.contains('-nocache'), result.output
 		assert result.output.contains('-no-memory-limit'), result.output
@@ -488,7 +435,6 @@ fn test_arm64_self_build_preserves_native_options_and_full_cli() {
 	assert vflags_result.exit_code == 0, vflags_result.output
 	assert !vflags_result.output.contains('-cc'), vflags_result.output
 	assert !vflags_result.output.contains('-prealloc'), vflags_result.output
-	assert !vflags_result.output.contains('-compile-backend fastc'), vflags_result.output
 	assert_vself_preserves_full_cli(vflags_result.output)
 	c_override_result := os.exec(['env', 'VFLAGS=-b arm64', 'VEXE=${noop}', tool, 'self', '-b',
 		'c', '-o', '/tmp/vself_arm64_c_override_test'])

@@ -107,11 +107,11 @@ fn test_encode_preserves_backend() {
 	description: ''
 	version: '0.0.1'
 	license: 'MIT'
-	backend: 'fastc'
+	backend: 'wasm'
 	dependencies: []
 }"
 	manifest := vmod.decode(source)!
-	assert manifest.backend == 'fastc'
+	assert manifest.backend == 'wasm'
 	assert vmod.encode(manifest) == source
 	assert !vmod.encode(vmod.decode("Module { name: 'app' }")!).contains('backend')
 }

@@ -10,7 +10,7 @@ fn testsuite_end() {
 
 fn x64_test_compiler_path() string {
 	if !os.exists(x64_test_compiler) {
-		result := os.exec([@VEXE, '-gc', 'none', '-d', 'skip_fastc', '-compile-backend', 'x64',
+		result := os.exec([@VEXE, '-gc', 'none', '-compile-backend', 'x64',
 			'-o', x64_test_compiler, os.join_path(@VEXEROOT, 'cmd', 'v')])
 		assert result.exit_code == 0, result.output
 	}

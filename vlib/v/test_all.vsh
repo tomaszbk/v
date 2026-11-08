@@ -33,9 +33,6 @@ const temporarily_disabled_unit_tests = [
 	// The suite assumes V3 scans and inlines C headers, an implementation that was
 	// intentionally removed when C headers became authoritative for declarations.
 	'vlib/v/compiler_tests/c_inline_header_context_codegen_test.v',
-	// Its FastC expectations no longer match what the generator emits, and some of the
-	// mismatches are codegen regressions rather than stale expectations.
-	'vlib/v/gen/fastc/fastc_test.v',
 ]
 
 // These cases specifically exercise the removed header scanning and headerless-C

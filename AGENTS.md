@@ -692,7 +692,7 @@ worker count and external C compiler, and state that scope explicitly.
 The V compiler has the following stages, orchestrated by `v.driver`:
 `v.scanner` -> `v.parser`/`v.flat` -> `v.types` -> `v.transform` ->
 `v.markused` -> `v.gen.c`.
-Additional backends and lowerings include FastC, WebAssembly, SSA, MIR,
+Additional backends and lowerings include WebAssembly, SSA, MIR,
 instruction selection, and native ARM64 generation.
 
 ### Key Directories
@@ -711,7 +711,6 @@ instruction selection, and native ARM64 generation.
   * transform/ - AST simplification
   * markused/ - Dead code eliminator
   * gen/c/ - C code generation (primary backend, known as cgen)
-  * gen/fastc/ - Scanner-to-C fast path
   * gen/arm64/ - Native ARM64 backend
   * gen/wasm/ - WebAssembly backend
 

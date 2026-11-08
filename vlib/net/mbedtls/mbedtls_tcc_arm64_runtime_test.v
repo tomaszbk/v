@@ -1,8 +1,8 @@
 import os
 import strings
 
-// Exercise the ordinary compiler's linker, including the default skip_fastc
-// build. Calling the FastC signer directly would miss the regression in #31486.
+// Exercise the ordinary compiler's linker. Calling the Mach-O signer directly
+// would miss the regression in #31486.
 fn test_tcc_macos_driver_preserves_zero_globals_and_psa_keys() {
 	$if !(macos && arm64) {
 		return

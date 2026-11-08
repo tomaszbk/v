@@ -35,8 +35,8 @@ by value; nested dynamic arrays inside them still share backing storage.
 
 Map fields also retain their ordinary shared storage when the containing struct is appended.
 
-String elements copy their descriptors and retain the same byte storage in both the C and FastC
-backends. Append `text.clone()` when the bytes need independent storage.
+String elements copy their descriptors and retain the same byte storage in the C
+backend. Append `text.clone()` when the bytes need independent storage.
 
 Request independent storage explicitly, for example `rows << row.clone()` for an array element.
 For a map field, pass `value.m.clone()` in the appended struct initializer.

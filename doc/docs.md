@@ -5316,9 +5316,6 @@ Ownership and `-autofree` builds also track pointer-variant borrowing and cleanu
 some escaping local references. Autofree uses the shared lifetime analysis with its compatibility
 copy policy. Default GC builds without either flag do not enable these additional checks.
 
-The experimental [FastC backend](fastc.md) currently retains the older boxed sum representation
-and does not yet provide independent copies of value variants. Use the default C backend for
-the value semantics described here.
 
 Use references for recursive fields, as in this binary tree:
 
@@ -8408,13 +8405,13 @@ project that locks other revisions of the same packages switches them back. Use
    An unrelated enclosing Git checkout does not override this root. Without a
    manifest, a discovered Git root is used instead.
 
-   `backend: 'fastc'` makes the project build with the [FastC backend](fastc.md)
+   `backend: 'wasm'` makes the project build with the WebAssembly backend
    by default. It applies to every build, run, and test whose input file or
-   folder belongs to that `v.mod`, the same as passing `-b fastc`. An explicit
+   folder belongs to that `v.mod`, the same as passing `-b wasm`. An explicit
    `-b` on the command line still wins, so `v -b c .` uses the C backend. Code
    given with `-e` or on standard input belongs to no project, and each target
    of `v test` uses the backend of its own `v.mod`. The accepted values are `c`,
-   `fastc`, `arm64`, `x64`, and `wasm`.
+   `arm64`, `x64`, and `wasm`.
 
    The name of your package should be used with the `module` directive
    at the top of all files in your package. For `mypackage.v`:

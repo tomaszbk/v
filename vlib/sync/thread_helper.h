@@ -69,10 +69,8 @@ V_SYNC_THREAD_SCOPE int v_sync_thread_create_detached_with_stack(void *start, vo
 	return 0;
 }
 #else
-#ifndef V_FASTC_NO_HEADERS
 #include <pthread.h>
 #include <stdlib.h>
-#endif
 
 V_SYNC_THREAD_SCOPE int v_sync_thread_create_detached_with_stack(void *start, void *arg, size_t stack_size) {
 	pthread_attr_t attr;

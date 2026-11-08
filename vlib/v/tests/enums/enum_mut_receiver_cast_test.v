@@ -1,6 +1,6 @@
 // A `mut` receiver or parameter is held as a pointer to the caller's value. A cast of it,
 // such as `int(c)` on a `mut c Color`, converts the value, not the pointer. Inside `unsafe`,
-// an integer cast keeps the address instead (see vlib/v/gen/fastc/pointer_cast_bits_test.v),
+// an integer cast keeps the address instead,
 // so the casts below that need the value are made outside it.
 enum Color {
 	red

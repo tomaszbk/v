@@ -77,7 +77,7 @@ fn test_vlibc_rejects_unsupported_backend_and_target() {
 	defer { os.rmdir_all(root) or {} }
 	source := os.join_path(root, 'main.v')
 	os.write_file(source, 'import os\nfn main() { println(os.args.len) }')!
-	for target_flags in [['-os', 'windows'], ['-b', 'js'], ['-b', 'fastc'],
+	for target_flags in [['-os', 'windows'], ['-b', 'js'],
 		['-os', 'solaris', '-arch', 'arm64']] {
 		for define in ['vlibc', 'vlibc=1'] {
 			mut args := [@VEXE, '-nocache', '-d', define]

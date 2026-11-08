@@ -474,7 +474,7 @@ fn main() {
 		|| os.getenv('V_MACOS_V3_NO_FALLBACK') == '1'
 	if strict_v3 {
 		// Apply environment flags to test compilation, without leaking a host C
-		// compiler choice into nested compiler invocations (for example FastC).
+		// compiler choice into nested compiler invocations.
 		if vargs.len < requested_args.len || vargs[..requested_args.len] != requested_args {
 			vargs = requested_args.clone()
 			vargs << os.args[1..args_idx]

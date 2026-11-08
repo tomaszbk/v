@@ -35,13 +35,11 @@ fn test_run_topic_mentions_conditional_cleanup() {
 	assert res.output.contains('If the executable already existed before the command')
 }
 
-fn test_build_topic_lists_fastc_backend() {
+fn test_build_topic_lists_backends() {
 	res := os.exec([@VEXE, 'help', 'build'])
 	assert res.exit_code == 0, res.output
-	assert res.output.contains('* `fastc`'), res.output
-	assert res.output.contains('available on macOS, Linux, and Windows'), res.output
-	assert res.output.contains('`v -compile-backend fastc self`'), res.output
-	assert res.output.contains('full compiler when an omitted backend is selected'), res.output
+	assert res.output.contains('* `c` (default)'), res.output
+	assert !res.output.contains('fastc'), res.output
 	assert res.output.contains('See `v help vsh`'), res.output
 }
 

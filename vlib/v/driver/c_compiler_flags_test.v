@@ -397,7 +397,6 @@ fn test_macos_linux_cross_compile_uses_bundled_amd64_sysroot() {
 	assert v3_macos_linux_cross_compile(host, target, 'c', 'clang')
 	assert v3_macos_linux_cross_compile(host, target, 'c', '/usr/bin/clang')
 	assert !v3_macos_linux_cross_compile(host, target, 'c', 'x86_64-linux-gnu-gcc')
-	assert !v3_macos_linux_cross_compile(host, target, 'fastc', 'clang')
 	$if macos {
 		assert c_compiler_target_args(target, 'clang', true, '/tmp/linuxroot')! == [
 			'-target',
@@ -1738,12 +1737,6 @@ fn test_x64_backend_aliases_are_normalized() {
 	assert normalize_backend_name('x64') == 'x64'
 }
 
-fn test_v3_fastc_default_linker_flags() {
-	assert v3_fastc_default_linker_flags('windows', true) == []
-	assert v3_fastc_default_linker_flags('linux', false) == ['-lm']
-	assert v3_fastc_default_linker_flags('linux', true) == ['-lpthread', '-lm']
-}
-
 fn test_v3_windows_executable_linker_flags() {
 	expected := ['-municode', '-Wl,--stack=33554432']
 	assert v3_windows_executable_linker_flags('windows', 'tinyc', false, false, .auto, false) == expected
@@ -1782,21 +1775,6 @@ fn test_v3_cgen_metadata_preserves_windows_gui_entry_point() {
 	decoded := decode_v3_cgen_metadata(encoded) or { panic('could not decode Cgen metadata') }
 	assert decoded.windows_gui_entry_point
 	assert decoded.flags == ['-lgdi32']
-}
-
-fn test_v3_fastc_rejects_windows_gui_subsystem() {
-	root := os.join_path(os.vtmp_dir(), 'v3_fastc_windows_subsystem_${os.getpid()}')
-	os.rmdir_all(root) or {}
-	os.mkdir_all(root)!
-	defer {
-		os.rmdir_all(root) or {}
-	}
-	source := os.join_path(root, 'main.v')
-	os.write_file(source, 'fn main() {}\n')!
-	build := cmdexec.run(v3_driver_test_executable(), ['-new-compiler', '-nocache', '-b', 'fastc',
-		'-os', 'windows', '-subsystem', 'windows', source])
-	assert build.exit_code != 0, build.output
-	assert build.output.contains('the V3 fastc backend does not support `-subsystem windows`'), build.output
 }
 
 fn test_add_c_language_runtime_link_flags() {
@@ -1851,7 +1829,7 @@ fn test_v3_cache_failure_artifacts_needs_a_cached_path_and_a_whole_file_failure(
 }
 
 fn test_v3_cache_failure_artifacts_reads_multiline_duplicate_symbols() {
-	cache_dir := os.join_path(os.vtmp_dir(), 'v3_fastc_unit_cache')
+	cache_dir := os.join_path(os.vtmp_dir(), 'v3_thirdparty_objs')
 	os.mkdir_all(cache_dir)!
 	object := os.join_path(cache_dir, 'duplicate_${os.getpid()}.o')
 	defer { os.rm(object) or {} }
@@ -1863,34 +1841,8 @@ fn test_v3_cache_failure_artifacts_reads_multiline_duplicate_symbols() {
 	assert v3_cache_failure_artifacts(ld64) == [canonical]
 }
 
-fn test_v3_fastc_cache_failure_maps_restored_build_object_to_owned_entry() {
-	root := os.join_path(os.vtmp_dir(), 'v3_fastc_failure_map_${os.getpid()}')
-	cache_dir := os.join_path(os.vtmp_dir(), 'v3_fastc_unit_cache')
-	os.mkdir_all(cache_dir)!
-	cache_object := os.join_path(cache_dir, 'unit_${os.getpid()}.o')
-	previous := os.getenv_opt('V3CACHE')
-	os.setenv('V3CACHE', root, true)
-	defer {
-		if value := previous {
-			os.setenv('V3CACHE', value, true)
-		} else {
-			os.unsetenv('V3CACHE')
-		}
-		os.rm(cache_object) or {}
-		os.rmdir_all(root) or {}
-	}
-	os.write_file(cache_object, 'broken')!
-	build_object := os.join_path(root, 'build', 'unit.o')
-	output := "ld: '${build_object}': file format not recognized"
-	assert v3_cache_failure_artifacts(output) == []
-	mapped := v3_fastc_cache_failure_output(output, {
-		build_object: cache_object
-	})
-	assert v3_cache_failure_artifacts(mapped) == [os.real_path(cache_object)]
-}
-
 fn test_v3_cache_error_artifacts_reads_paths_out_of_toolchain_diagnostics() {
-	cache_dir := os.join_path(os.vtmp_dir(), 'v3_fastc_unit_cache')
+	cache_dir := os.join_path(os.vtmp_dir(), 'v3_thirdparty_objs')
 	os.mkdir_all(cache_dir)!
 	first := os.join_path(cache_dir, 'unit_1.o')
 	second := os.join_path(cache_dir, 'unit_2.o')

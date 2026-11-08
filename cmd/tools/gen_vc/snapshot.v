@@ -66,12 +66,6 @@ fn check_snapshot(commit string, v_c string, v_win_c string) ! {
 			|| !content.contains('#define CUSTOM_DEFINE_cross') {
 			return error('${name} was not generated with `-cross`')
 		}
-		// FastC's libtcc linking and Mach-O signing are host specific, so e.g. macOS `make` could
-		// not compile a snapshot generated on Linux. The compiler built from the snapshot rebuilds
-		// cmd/v natively, which keeps FastC.
-		if content.contains('fastc__') {
-			return error('${name} contains the FastC backend')
-		}
 		lines := content.count('\n')
 		if lines <= snapshot_min_lines {
 			return error('${name} has only ${lines} lines')

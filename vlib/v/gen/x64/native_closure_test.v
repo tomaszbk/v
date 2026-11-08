@@ -127,7 +127,7 @@ fn main() {
 	mut compiled := os.exec([compiler, '-gc', 'none', '-b', 'x64', '-o', output, path])
 	if compiled.output.contains('X64 support is not compiled into this executable') {
 		// C-only bootstrap compilers omit X64 dispatch; build the backend for this regression.
-		bootstrap := os.exec([compiler, '-gc', 'none', '-d', 'skip_fastc', '-compile-backend',
+		bootstrap := os.exec([compiler, '-gc', 'none', '-compile-backend',
 			'x64', '-o', test_compiler, os.join_path(@VEXEROOT, 'vlib', 'v', 'v.v')])
 		assert bootstrap.exit_code == 0, bootstrap.output
 		compiled = os.exec([test_compiler, '-gc', 'none', '-b', 'x64', '-o', output, path])

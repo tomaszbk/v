@@ -29,7 +29,7 @@ fn test_native_backend_is_refused_except_for_vfmt() {
 
 	// Unrelated backends are untouched.
 	assert !native_backend_rejected('run', ['-b', 'c', 'main.v'])
-	assert !native_backend_rejected('run', ['-b', 'fastc', 'main.v'])
+	assert !native_backend_rejected('run', ['-b', 'wasm', 'main.v'])
 	assert !native_backend_rejected('run', ['-b', 'x64', 'main.v'])
 }
 
@@ -168,11 +168,11 @@ fn test_tools_that_consume_prefix_compiler_options_receive_them() {
 }
 
 fn test_self_launcher_keeps_replacement_backend_options_out_of_helper_build() {
-	prefix := ['-b', 'fastc', '-os', 'linux', '-arch', 'arm64', '-silent']
+	prefix := ['-b', 'arm64', '-os', 'linux', '-arch', 'arm64', '-silent']
 	assert external_tool_compile_args('vself', prefix) == ['-silent', '-g', '-gc', 'none']
 	assert external_tool_runtime_args('self', prefix, ['self']) == [
 		'-b',
-		'fastc',
+		'arm64',
 		'-os',
 		'linux',
 		'-arch',

@@ -528,14 +528,6 @@ fn main() { mut out := []u8{}; handler(mut out, 1) }
 			source:   "struct SmallError { n int }\nfn (e SmallError) msg() string { return 'small' }\nfn (e SmallError) code() int { return e.n }\n@[noalloc]\nfn handler(value &SmallError) !&SmallError { return value }\nfn main() { _ = handler(&SmallError{n: 7}) or { &SmallError{n: 0} } }\n"
 		},
 	]
-	// The standalone FastC parser must reject contracts it cannot check.
-	fastc_source := os.join_path(root, 'fastc.v')
-	os.write_file(fastc_source, '@[noalloc]\nfn handler() int { return 1 }\nfn main() { _ = handler() }\n') or { panic(err) }
-	fastc_result := os.exec([@VEXE, '-b', 'fastc', '-o', os.join_path(root, 'fastc.c'), fastc_source])
-	if !fastc_result.output.contains('fastc support is not compiled') {
-		assert fastc_result.exit_code != 0 && fastc_result.output.contains('noalloc'), fastc_result.output
-	}
-
 	for case in cases {
 		source := os.join_path(root, '${case.name}.c.v')
 		os.write_file(source, case.source) or { panic(err) }

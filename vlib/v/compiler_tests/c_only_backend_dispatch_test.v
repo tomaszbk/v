@@ -26,23 +26,17 @@ fn test_c_only_compiler_builds_and_reuses_full_backend_compiler() {
 	assert c_build.exit_code == 0, c_build.output
 	assert !os.exists(cache), c_build.output
 	// Forwarding VFLAGS and CLI flags must select the last backend exactly once.
-	environment['VFLAGS'] = '-b wasm'
-	fastc_output := os.join_path(root, 'fastc.c')
-	first := cmdexec.run_in_merged_with_env(compiler, ['-b', 'fastc', '-o', fastc_output, source], root, environment)
-	assert first.exit_code == 0, first.output
-	assert os.is_file(fastc_output), first.output
-	assert first.output.contains('recompiling `v3_full`'), first.output
-	second := cmdexec.run_in_merged_with_env(compiler, ['-b', 'fastc', '-o', fastc_output, source], root, environment)
-	assert second.exit_code == 0, second.output
-	assert !second.output.contains('recompiling `v3_full`'), second.output
-	// The cached compiler includes other backends as well.
+	environment['VFLAGS'] = '-b c'
 	wasm_source := os.join_path(root, 'empty.v')
 	os.write_file(wasm_source, 'fn main() {}\n')!
 	wasm_output := os.join_path(root, 'empty.wasm')
-	wasm := cmdexec.run_in_merged_with_env(compiler, ['-b', 'wasm', '-o', wasm_output, wasm_source], root, environment)
-	assert wasm.exit_code == 0, wasm.output
-	assert !wasm.output.contains('recompiling `v3_full`'), wasm.output
+	first := cmdexec.run_in_merged_with_env(compiler, ['-b', 'wasm', '-o', wasm_output, wasm_source], root, environment)
+	assert first.exit_code == 0, first.output
+	assert first.output.contains('recompiling `v3_full`'), first.output
 	assert os.read_bytes(wasm_output)![..4] == [u8(0), `a`, `s`, `m`]
+	second := cmdexec.run_in_merged_with_env(compiler, ['-b', 'wasm', '-o', wasm_output, wasm_source], root, environment)
+	assert second.exit_code == 0, second.output
+	assert !second.output.contains('recompiling `v3_full`'), second.output
 	// Native compilation must run through the same full compiler.
 	$if macos && arm64 {
 		native := cmdexec.run_in_merged_with_env(compiler, ['-b', 'arm64', 'run', source], root, environment)
@@ -55,7 +49,7 @@ fn test_c_only_compiler_builds_and_reuses_full_backend_compiler() {
 	os.mkdir(uncached_tmp)!
 	environment['VTMP'] = uncached_tmp
 	environment['VTOOLS_NO_CACHE'] = '1'
-	uncached := cmdexec.run_in_merged_with_env(compiler, ['-b', 'fastc', '-o', fastc_output, source], root, environment)
+	uncached := cmdexec.run_in_merged_with_env(compiler, ['-b', 'wasm', '-o', wasm_output, wasm_source], root, environment)
 	assert uncached.exit_code == 0, uncached.output
 	assert uncached.output.contains('building `v3_full`'), uncached.output
 	assert os.ls(uncached_tmp)!.filter(it.starts_with('.v-toolcache-stage-')) == []

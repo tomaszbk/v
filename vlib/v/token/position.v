@@ -154,8 +154,8 @@ pub fn (mut fs FileSet) add_file(filename string, size int) &File {
 	return file
 }
 
-// File.unindexed creates a file record for scanners whose diagnostics report
-// raw byte offsets and never resolve line positions (FastC). It allocates only
+// File.unindexed creates a file record whose diagnostics report raw byte
+// offsets and never resolve line positions. It allocates only
 // the record itself and leaves the line table empty, so such a file must not
 // be used for position lookups.
 pub fn File.unindexed(name string, size int) &File {
@@ -281,22 +281,6 @@ fn (mut f File) index_line_offsets(src string) {
 // changed: a 64-bit wyhash of its bytes.
 pub fn quick_sum(data &u8, len int) u64 {
 	return hash.wyhash_c(data, u64(len), 0)
-}
-
-// index_lines_without_digest resets the line table without indexing. FastC is
-// its only caller: it builds a fresh file per source file for every collection
-// and generation pass, its scanner reads `src` directly, and its diagnostics
-// report raw byte offsets rather than line/column positions. Building the
-// per-line offset table (and the growing []int backing it) on every pass was
-// pure overhead, so the table is left empty; a position lookup on such a file
-// would resolve to line 1, which FastC never requests. The unused `src`
-// parameter keeps the call sites and signature stable.
-pub fn (mut f File) index_lines_without_digest(src string) {
-	_ := src
-	f.line_offsets = [i32(0)]
-	f.line_pages = []i32{}
-	f.has_line_index = false
-	f.has_source_digest = false
 }
 
 // source_sha256 returns the digest bytes of the exact source indexed for this file.

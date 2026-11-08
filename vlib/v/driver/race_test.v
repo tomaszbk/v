@@ -40,7 +40,7 @@ fn test_the_race_define_is_reserved_for_race_builds() {
 
 fn test_race_needs_the_c_backend() {
 	v3_race_check_backend('c')!
-	for backend in ['fastc', 'arm64', 'wasm', 'js'] {
+	for backend in ['arm64', 'wasm', 'js'] {
 		if _ := v3_race_check_backend(backend) {
 			assert false, backend
 		}

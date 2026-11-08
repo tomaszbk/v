@@ -393,7 +393,7 @@ hello world
 
 `v self` defaults to `-gc none` and includes only the C backend. Selecting an omitted backend
 automatically builds and runs a cached full compiler. Later requests reuse it while its sources
-are current. Use `v -all-backends self` or `v -compile-backend fastc self` to include optional
+are current. Use `v -all-backends self` or `v -compile-backend wasm self` to include optional
 backends in the main executable. Pass `-gc <mode>` if you need a different GC mode.
 On non-Windows hosts, `v -prod self` uses profile-guided optimization (PGO) when the selected C
 compiler is Clang and `llvm-profdata` is available. Clang's reported installation directory and
@@ -412,7 +412,7 @@ the full compiler with the selected native backend. A backend-specific `self x2`
 the compiler twice, so the second build runs the compiler produced by the first native
 build. Use `-o v_arm64` or `-o v_x64` to keep the current compiler and write a separate
 executable. Native self-builds use `-gc none` and retain commands such as `self`, `fmt`,
-and `version`. The native compiler includes the C backend and leaves out FastC by default.
+and `version`. The native compiler includes the C backend.
 For x64, add `-prod` to enable SSA optimization, register allocation and optimized C helpers.
 Very large x64 modules may skip the global SSA pass to bound compiler memory. The ARM64
 backend retains its existing optimization behavior.

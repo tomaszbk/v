@@ -69,13 +69,6 @@ NB: the build flags are shared with the run command too:
     Specifies the backend that will be used for building the executable.
     Current list of supported backends:
     * `c` (default)       - V outputs C source code, which is then passed to a C compiler.
-    * `fastc`             - V parses supported source directly to C without an AST and compiles
-                            it with the bundled TinyCC; available on macOS, Linux, and Windows
-                            hosts. C-only compilers automatically build and run a cached
-                            full compiler when an omitted backend is selected.
-                            Use `v -compile-backend fastc self` to include FastC in `v` itself.
-                            Supports array/map literals, checked array indexing, and `in`/`!in`.
-                            See doc/fastc.md for supported constructs and current limitations.
     * `go`                - V outputs Go source code, which is then passed to a Go compiler.
     * `js`                - V outputs JS source code which can be passed to NodeJS to be ran.
     * `js_browser`        - V outputs JS source code ready for the browser.
@@ -147,7 +140,7 @@ NB: the build flags are shared with the run command too:
     Note that most V warnings turn to errors, if you pass -prod, so you will have
     to fix them first.
     TinyCC is not a -prod compiler: `-cc tcc`, or any compiler that resolves to TinyCC,
-    stops with `tcc is not allowed with -prod`. `-b fastc` is not supported with `-prod` either.
+    stops with `tcc is not allowed with -prod`.
     Note: gcc versions > 12.0 often have issues with inlining, that manifest with `-prod`.
     To work around them, you can use `-prod -cflags -fno-inline-small-functions` .
 

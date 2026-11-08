@@ -13,7 +13,6 @@ backends: a direct flat-AST-to-C backend, a scanner-to-C fast path, a native
 ARM64 backend via SSA IR with a built-in linker, and a direct
 flat-AST-to-WebAssembly backend. With `-prod`, the ARM64 backend runs SSA
 optimization, MIR lowering, and instruction selection.
-Driver builds that omit FastC also omit its native bridge imports.
 Cached module interfaces retain the hook declarations used by generated call tracing.
 GC thread bridges use the platform's `pthread_t` type for join, detach, and cancellation.
 On native Linux, TinyCC builds use the platform C compiler for the bundled Boehm GC dependency.
@@ -49,7 +48,7 @@ fields or passed to generics declared in another module.
 On macOS ARM64, include the native backend with `v -compile-backend arm64 self`, then use
 `v -b arm64 self x2` to rebuild the full CLI twice with that backend. The second build runs
 the compiler produced by the first build. Native self-builds disable GC and include the C
-backend; FastC is omitted by default because native linking does not include libtcc.
+backend.
 A compiler built without the backend reports that for `-b arm64` and exits with an error.
 The native runtime initializes globals, runtime constants, and module state before `main`.
 Native macOS executables use a 64 MiB main stack, matching the C backend's linker setting
@@ -275,195 +274,7 @@ production self-builds therefore compile only changed units. `-nocache` disables
 uses one C unit per compiler job to avoid repeatedly parsing the shared declarations. Other
 parallel C builds are limited to eight jobs.
 
-## Fast C backend
-
-`-b fastc` selects the embedded V3 driver and its AST-free parser for the shortest edit-run cycle.
-FastC resolves the entry file and imported modules, then emits GNU C while consuming scanner tokens.
-It never invokes the flat parser, semantic checker, transformer, mark-used pass, or conventional C
-generator. For same-target builds, bundled TinyCC validates the emitted translation unit before any
-C file or executable is published. This validates C syntax and linkage, not V type semantics.
-Unsupported V syntax and same-target TinyCC errors are reported directly; FastC never retries
-through an AST-based backend.
-
-FastC currently emits primitive functions and parameters, inferred local declarations, ordinary
-expressions including comparison and logical operators, string interpolation for strings and
-non-floating primitive values, `if`/`else`, and condition, C-style, infinite, and range `for` loops.
-GNU `typeof` carries `:=` declarations into C. FastC infers representation metadata only when it is
-needed to select a C spelling or runtime helper; it does not validate V type compatibility for
-calls, returns, assignments, conditions, casts, operators, matches, ranges, or literal elements.
-TinyCC may therefore accept source that the regular V checker rejects through C implicit
-conversions. Use the regular backend when semantic type validation is required. Range bounds are
-evaluated once, from left to right. The parser still rejects mutation of immutable or unknown local
-names instead of relying on C's weaker assignment rules.
-With the builtin runtime, collection string conversion preserves the target's integer width.
-
-Syntax without a direct FastC lowering is rejected. In ordinary non-selfhost builds this includes
-float printing, C-string and embedded-NUL string literals, runes, assertions, `sizeof`, shift,
-division, modulo, indexing, parallel assignment, mixed-precedence expressions, oversized decimal
-literals, and high-bit hexadecimal or binary literals. These restrictions avoid emitting C that
-cannot provide the required runtime behavior.
-FastC transports header paths, link inputs, frameworks, and preprocessor defines from `#flag`, and
-resolves `#pkgconfig` options into its fixed TinyCC invocation. Other compile options remain
-unsupported.
-Native C and object files shared by multiple imported modules are passed to the linker once.
-Archive and library flags keep their original order and repetitions.
-
-FastC requires exactly one `.v` entry file. Executables are host-target only; `-o file.c` also
-permits an explicit cross target and publishes its generated C without host TinyCC validation.
-Production, test, shared/live, ownership/autofree, object-file, profiling/coverage, strict C,
-custom compiler, custom-builtin, `no_main`, `-Wimpure-v`, translated, and REPL modes are currently
-rejected.
-
-Builds of the full `cmd/v` CLI (`make`, `makev.bat`, `v self`, `v up`) keep FastC, so default V
-executables accept `-b fastc`; `-d skip_fastc` leaves it out. Portable `-cross` C (the `vc/v.c` and
-`vc/v_win.c` bootstrap snapshots) leaves it out too, because FastC's libtcc linking and Mach-O
-signing are host specific; the compiler that `make` and `makev.bat` build from a snapshot rebuilds
-`cmd/v` natively and keeps it. A standalone `vlib/v/v.v` C-backend self-host prunes FastC along
-with the other optional backends. Pass `-compile-backend fastc` or `-all-backends` when that
-compiler should retain `-b fastc`.
-
-FastC builds programs on macOS, Linux, and Windows hosts; the C step always uses the bundled
-TinyCC (`thirdparty/tcc/tcc.exe`). The FastC self-host compiler described below lowers `spawn` to
-pthreads and uses header-free C ABI tables for macOS and glibc Linux, so `-selfhost -b fastc` and
-`v self -b fastc` reject Windows targets.
-
-`-selfhost -b fastc -o v4 vlib/v/v.v` builds V3 using only the scanner-to-C path. The generated
-compiler uses the small `v.fastcdriver` entry point and can build further FastC generations without
-the flat AST or conventional C backend. Set `V_MACOS_V3_NO_FALLBACK=1` while validating a chain to
-turn any attempted compatibility fallback into a hard failure.
-
-Set `FASTC_BENCH=1` when running a standalone FastC self-host compiler to print generation time
-and generation-only `loc/s`. `FASTC_BENCH_REPEAT=N` reports the fastest generation of N child
-runs. These generation rates exclude TinyCC compilation and linking.
-`FASTC_BENCH_PHASES=1` prints the time of every generation phase, `FASTC_BENCH_FILES=1` the
-generation time of every source file, and `FASTC_BENCH=1 FASTC_BENCH_LOOP=N` repeats generation N
-times in-process so an external sampler can profile it. The compiler's own C preamble and runtime
-(hashing, option boxing, tuple slots) are emitted by the generator that built it, so such changes
-take effect one generation later: measure the compiler built by the modified compiler, not the
-modified compiler itself.
-
-`FASTC_BENCH=1` also prints a FastC total that includes TinyCC compilation and linking.
-The direct ARM64 total includes Mach-O generation, linking, and signing.
-The standalone `vlib/v/v.v` self-host workload retains only the FastC driver and backend:
-
-```sh
-./v -prod -cc clang -o ./vnew cmd/v
-FASTC_BENCH=1 ./vnew -nocache -b fastc -selfhost -o /tmp/v3-fastc vlib/v/v.v
-```
-
-Compiling the full `cmd/v` CLI with its default backend selection is a larger workload.
-Build the production host compiler once, then use the same binary and source snapshot for
-FastC and normal C backend measurements. On macOS, an external timer includes process startup,
-TinyCC compilation, linking, signing, final output publication, and process exit:
-
-```sh
-./v -prod -cc clang self
-FASTC_BENCH=1 /usr/bin/time -l ./v -b fastc -nocache -o /tmp/v-fastc cmd/v
-/usr/bin/time -l ./v -b c -cc tcc -nocache -o /tmp/v-c cmd/v
-```
-
-Divide physical lines in each build's selected V sources by the external elapsed time.
-The full CLI's internal FastC total omits early command-line processing and final output
-publication.
-`-nocache` makes both backends rebuild their generated C; record resolver memo usage separately.
-See [FastC throughput measurements](../../doc/fastc.md) for warmups, paired runs, and cache policy.
-
-Self-host generations box `?`/`!` payloads out of a per-thread bump chunk rather than `malloc`, keep
-one file record per scanner pass, and honor `@[direct_array_access]` for string and array indexing.
-Multi-return components larger than 32 bytes are boxed instead of copied into the tuple slot, so a
-returned `map` or large struct can no longer overflow it.
-
-Per-file generation, constant parsing, and the declaration and signature collection passes claim
-their work items from a shared atomic counter (largest files first) instead of a static split, so
-workers on faster cores take more files; the serial merge and output order is restored by index.
-The first parallel pass also records which declaration keywords (`interface`, `$if`, type keywords,
-generic `fn` syntax) each file mentions, and the later collection passes skip files that cannot
-contain what they scan for.
-
-Source resolution reads the program on worker threads before the ordering walk runs: each
-imported module directory is listed on a thread and its files are read in chunks on further
-threads, never more than the worker limit (CPU count or `VJOBS`) at once. The main thread joins
-listings first and then the chunks in start order, resolving the imports of each chunk as it
-lands, so reading one module overlaps with discovering the next. A resolve memo in `os.vtmp_dir()`
-(`fastc_resolve_<hash>.memo`, keyed by the entry files, vroot, target and defines) records what
-the previous resolution of the same entry touched, so the next run lists every directory, looks
-up every module and stats every file in one batch instead of level by level along the import
-chain; a file's content is taken from the memo's blob only when its size, mtime, ctime and inode
-still match and it was last modified at least two seconds before the memo was written, and it is
-read again otherwise. The memo also keeps each listed directory's file list and the entry
-module's file list together with the directory's own stamp, so an unchanged directory is stat'ed
-instead of listed again (adding, removing or renaming an entry changes that stamp, and the same
-two-second rule applies); module lookups are recorded once per cache key, the memo's blob is read
-in ranges by the same probe workers. The ordering walk itself is unchanged and replays over that
-data, so the output is identical with and without the memo (`V3_FASTC_NO_RESOLVE_MEMO=1` disables
-it). The type declarations are rendered on a worker while the signatures are collected, the
-generic-method scan and the declaration index share one pass, while workers split oversized files
-into generation fragments and build the by-name struct field index as the declaration phases
-run, and the generated C is returned as ordered pieces (whole per-file bodies are shared rather
-than copied into one buffer; only bodies cut around C directive lines are copied) that the drivers
-write directly. Function bodies are pre-scanned for channel `select` statements only in files
-whose bytes contain the word `select`. The declaration index records the text spans of each file's
-constant and global declarations: a large file's constants are parsed as separate parallel
-candidates (merged in source order), and the global phase parses only the recorded global
-declarations instead of whole files.
-
-A self-host build (`-selfhost`) for 64-bit macOS or glibc Linux emits C with no `#include`
-at all: `gen/fastc/c_abi.v` holds, per target, the C library types, struct layouts, macros,
-globals and function prototypes the emitted code uses, and that prelude replaces the header block
-of the preamble; V's own C helper headers (`vlib/os/execute_capture_nix.h`, ...) are inlined
-after it, and `#include` lines from V sources are left out. TinyCC then parses about 42K lines
-instead of the 110K that the system headers expanded to. The build passes
-`-Werror=implicit-function-declaration` (and no `-w`, which would silence it), so a C function
-missing from the table fails the build instead of being called through an implicit `int`
-prototype that truncates pointer results; `c_abi_test.v` compiles the table
-against the host headers and checks every layout, size, value and prototype. The stitch also
-drops the indexed functions (and enum `str`/print helpers) that nothing reachable from `main`,
-the lifecycle hooks or the non-body pieces refers to, which the source-level name-grouped
-reachability keeps: each worker records its definitions and the mangled names they mention, and
-the assembly cuts the unreachable spans out of the pieces (about 9% of the self-host C).
-
-The TinyCC step itself is split: `fastc_write_c_units` cuts the pieces into up to 16
-translation units (the shared head of typedefs, prototypes and runtime in every unit, the
-dispatch tables and lifecycle functions only in the first, the file bodies grouped by size; the
-globals are definitions in the first unit and `extern` declarations in the others),
-`fastc_compile_c_units` compiles them with concurrent `tcc -c` processes started through
-`posix_spawn` (forking the large compiler process costs more; Windows uses `os.Process`), and one
-`tcc` call links the objects (`VJOBS=1`, `V3_FASTC_NO_PARALLEL=1`, or `-no-parallel` keeps the
-single-file build; both give the same C with `-keepc`). On macOS TinyCC runs Apple's `codesign`
-after linking, which costs ~50 ms per build: the drivers put a no-op `codesign` first on its PATH
-and ad-hoc sign the executable themselves (`gen/fastc/macho_sign.v`, SHA-256 page hashes through
-CommonCrypto, patched into the file in place). The SDK path is taken from `SDKROOT` or the
-toolchain selected by `xcrun`; conventional SDK locations are used only as a fallback.
-
-Default self-host builds content-cache the split TinyCC objects and the linked, signed executable
-under `os.vtmp_dir()`. The keys cover the exact generated units, TinyCC build, compile options, and
-link options. The executable key is calculated directly from the generated pieces and unit layout,
-so a warm hit is restored before temporary C files are written or object files are read. A cached
-executable is restored as an independent copy, so replacing or modifying the output cannot change
-the cache. Pass `-nocache` or `--no-cache` through the full V driver to bypass both caches.
-
-The standalone compiler supports `self` directly and defaults that command to FastC. For example,
-`./v self x5` replaces the compiler through five descendant FastC generations, with each installed
-generation compiling the next one. `-b fastc`, `-gc none`, `-cc tinyc|tcc`, `-keepc`, `-silent`,
-and a single-generation `-o` destination are accepted.
-
-Building the FastC self-host compiler with `-d arm64` selects its scanner-direct native path. That
-path resolves sources with FastC's scanner passes, emits SSA while consuming parser tokens, and
-passes the result to `v.gen.arm64` for Mach-O output. It creates neither Flat AST nor C source and
-does not run TinyCC. The native parser lives in `gen/fastc/arm64_d_arm64.v`; without the define,
-that file and the ARM64/SSA imports are excluded and FastC retains its lightweight C path.
-
-In selfhost mode, `t := spawn f(args)` and `t.wait()` lower to a generated pthread creator, run
-wrapper, and join helper per spawned function: `thread` values are a typed wrapper around
-`pthread_t` plus a heap block that packs the arguments and receives the result. Spawned threads
-use an 8 MiB stack; `-thread-stack-size` is not yet supported by FastC. Thread allocation,
-creation, and join failures are checked. Since V's `spawn` expression has no error return, these
-runtime failures print a diagnostic and abort; packed arguments are released if thread creation
-fails. Variadic, option/result, multi-return, and `mut`-argument callees, Windows targets, and
-non-selfhost mode are rejected. Because bundled TinyCC has no thread-local storage, FastC compiler
-generations build without the `prealloc` bump arena and use plain thread-safe `malloc`; the
-FastC generation pipeline itself runs its per-file and reference-scan phases on spawned threads
-in every generation.
+## Type system
 
 The type system (`types/`) uses a `Type` sum type with 20 variants instead of
 string-based type checks. Primitive types use a `Properties` flag enum with
@@ -777,14 +588,12 @@ the plan and run the complete diagnostic and generation pipeline normally.
 If the C toolchain rejects a cached V artifact as missing or malformed, V3 warns, removes the
 affected cache entry and its metadata, then restarts the build once. If the retry still fails, the
 warning names the rejected artifact; run `./v wipe-cache` to clear all caches before retrying.
-This recovery applies only to V-owned cache files. `-nocache` disables the module and FastC caches,
+This recovery applies only to V-owned cache files. `-nocache` disables the module caches,
 but third-party object cache entries may still be repaired.
 
 ## Architecture
 
 ```
-source -> scanner -> fastc parser/C emitter -> TinyCC
-
 source + vlib/builtin -> scanner -> flat parser -> flat AST -> imports
   -> check -> transform -> annotate types -> markused -> gen C -> cc
                                           \-> SSA build -> ARM64 gen -> link

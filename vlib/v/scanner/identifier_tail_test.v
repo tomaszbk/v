@@ -25,7 +25,7 @@ fn test_identifier_tail_keeps_prefixes_keywords_and_semicolons() {
 	source := "_a0Z abc123 return_value @type r'raw' c'x' js'js'\nreturn"
 	mut files := token.FileSet.new()
 	file := files.add_file('identifier_tokens.v', source.len)
-	mut s := new_scanner(&pref.Preferences{ backend: 'fastc' }, .normal)
+	mut s := new_scanner(&pref.Preferences{}, .normal)
 	s.init(file, source)
 	for expected in [token.Token.name, .name, .name, .name, .string, .char, .string, .semicolon,
 		.key_return, .semicolon, .eof] {

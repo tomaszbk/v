@@ -18,11 +18,6 @@ struct OptionalBackend {
 
 const optional_backends = [
 	OptionalBackend{
-		name:   'fastc'
-		dir:    'gen/fastc'
-		symbol: 'fastc__generate_files_with_source_paths('
-	},
-	OptionalBackend{
 		name:   'wasm'
 		dir:    'gen/wasm'
 		symbol: 'wasm__SSAGen__gen('
@@ -119,11 +114,6 @@ fn test_selfhost_default_prunes_optional_backends() {
 	assert !c_src.contains('lhs_fixed.elem_type; __sum.typ'), 'fixed-array equality fallback used zero-value sum-type sentinel'
 }
 
-fn test_selfhost_compile_backend_fastc_opts_fastc_back_in() {
-	build := selfhost_to_c('fastc', ['-compile-backend', 'fastc'])
-	assert_backends(build, 'FastC opt-in', ['fastc'])
-}
-
 fn test_selfhost_compile_backend_wasm_opts_wasm_back_in() {
 	if os.getenv('V3_TEST_WASM') != '1' {
 		eprintln('> skipping wasm self-host opt-in check; set V3_TEST_WASM=1 to run')
@@ -143,8 +133,8 @@ fn test_cmd_v_defaults_to_c_only() {
 }
 
 fn test_cmd_v_skip_wasm_also_prunes_ssa() {
-	build := compiler_to_c('cmd_v_skip_wasm', ['-compile-backend', 'fastc', '-d', 'skip_wasm'], cmd_v_src)
-	assert_backends(build, 'cmd/v -d skip_wasm', ['fastc'])
+	build := compiler_to_c('cmd_v_skip_wasm', ['-compile-backend', 'eval', '-d', 'skip_wasm'], cmd_v_src)
+	assert_backends(build, 'cmd/v -d skip_wasm', ['eval'])
 }
 
 fn test_cmd_v_all_backends_keeps_every_backend() {

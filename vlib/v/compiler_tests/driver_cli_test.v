@@ -2389,7 +2389,7 @@ fn main() {
 		source], 'option `-target-libc-headers` does not support portable cross output')
 	assert_driver_cli_failure(v3_bin, ['-target-libc-headers', '-cross', '-o', c_output, source],
 		'option `-target-libc-headers` does not support portable cross output')
-	for backend in ['fastc', 'arm64', 'wasm', 'eval', 'js'] {
+	for backend in ['arm64', 'wasm', 'eval', 'js'] {
 		assert_driver_cli_failure(v3_bin, ['-b', backend, '-target-libc-headers', '-o', c_output,
 			source], 'option `-target-libc-headers` requires the C backend')
 	}

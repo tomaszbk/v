@@ -236,7 +236,7 @@ fn test_self_c_keeps_only_the_compiler_owned_guard_include() {
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }
 	c_file := os.join_path(root, 'v.c')
-	for mode in [['-gc', 'none', '-prealloc', '-compile-backend', 'fastc'], ['-cross'],
+	for mode in [['-gc', 'none', '-prealloc'], ['-cross'],
 		['-os', 'cross']] {
 		mut args := ['-nocache']
 		args << mode
@@ -357,7 +357,7 @@ fn test_runtime_bindings_survive_unrelated_system_headers() {
 	os.mkdir_all(root)!
 	defer { os.rmdir_all(root) or {} }
 	source := os.join_path(root, 'main.c.v')
-	os.write_file(source, '#include <time.h>\nimport os\nimport os.filelock\nimport v.bench\nimport v.gen.fastc\nfn main() {\n _ = fastc.fastc_compile_c_units\n mut b := bench.new()\n b.disable_memory_limit()\n b.start_memory_monitor()\n b.stop_memory_monitor()\n mut file_lock := filelock.new(os.join_path(os.temp_dir(), "runtime_headers_${os.getpid()}"))\n assert file_lock.try_acquire()\n assert file_lock.release()\n println("OK")\n}\n')!
+	os.write_file(source, '#include <time.h>\nimport os\nimport os.filelock\nimport v.bench\nfn main() {\n mut b := bench.new()\n b.disable_memory_limit()\n b.start_memory_monitor()\n b.stop_memory_monitor()\n mut file_lock := filelock.new(os.join_path(os.temp_dir(), "runtime_headers_${os.getpid()}"))\n assert file_lock.try_acquire()\n assert file_lock.release()\n println("OK")\n}\n')!
 	run := cmdexec.run(@VEXE, ['-nocache', '-gc', 'none', '-cc', 'clang', '-no-retry-compilation',
 		'run', source])
 	assert run.exit_code == 0, run.output

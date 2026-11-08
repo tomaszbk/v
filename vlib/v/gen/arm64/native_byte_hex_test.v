@@ -16,7 +16,7 @@ fn exec_native(args []string) os.Result {
 		if !result.output.contains('ARM64 support is not compiled into this executable') {
 			return result
 		}
-		bootstrap := os.exec([@VEXE, '-gc', 'none', '-d', 'skip_fastc', '-compile-backend', 'arm64',
+		bootstrap := os.exec([@VEXE, '-gc', 'none', '-compile-backend', 'arm64',
 			'-o', native_test_compiler, os.join_path(@VEXEROOT, 'vlib', 'v', 'v.v')])
 		assert bootstrap.exit_code == 0, bootstrap.output
 	}

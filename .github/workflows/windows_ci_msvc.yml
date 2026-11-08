@@ -120,28 +120,9 @@ jobs:
         run: |
           .\.github\workflows\setup_windows_tool_cache.ps1 -Verify
           v -silent test-cleancode
-      - name: Build and run hello world with -b fastc
-        id: build_and_run_hello_world_with_b_fastc
-        if: ${{ success() && !cancelled() && steps.all_code_is_formatted.outcome == 'success' }}
-        env:
-          # FastC always compiles with the bundled TinyCC and rejects `-cc`.
-          VFLAGS: ''
-        run: |
-          .\v.exe -b fastc -o hello_fastc.exe examples\hello_world.v
-          if ($LASTEXITCODE -ne 0) {
-            throw "v -b fastc failed with exit code $LASTEXITCODE"
-          }
-          $output = (.\hello_fastc.exe | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "hello_fastc.exe failed with exit code $LASTEXITCODE"
-          }
-          if ($output -ne 'Hello, World!') {
-            throw "unexpected -b fastc hello world output: '$output'"
-          }
-          Remove-Item hello_fastc.exe, hello_fastc.c -ErrorAction SilentlyContinue
       - name: Pkg-config regressions (MSVC)
         id: pkg_config_regressions_msvc_dynamic_isolation
-        if: ${{ success() && !cancelled() && steps.build_and_run_hello_world_with_b_fastc.outcome == 'success' }}
+        if: ${{ success() && !cancelled() && steps.all_code_is_formatted.outcome == 'success' }}
         run: |
           $tests = @(
             'vlib/v/pref/pkgconfig_test.v'

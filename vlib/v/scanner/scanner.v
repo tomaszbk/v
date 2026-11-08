@@ -74,18 +74,6 @@ pub fn new_scanner(prefs &pref.Preferences, mode Mode) Scanner {
 	}
 }
 
-// skip_block_to resumes scanning at `offset`, right after the `}` that closes
-// a top-level block whose contents the caller does not need to lex (the
-// FastC declaration passes record function bodies once and skip them in the
-// later passes); the scanner state is what scanning that `}` leaves.
-pub fn (mut s Scanner) skip_block_to(offset int) {
-	s.offset = offset
-	s.pos = offset - 1
-	s.lit = ''
-	s.insert_semi = true
-	s.after_dot = false
-}
-
 // init resets the scanner for src, ignoring a leading UTF-8 byte order mark.
 pub fn (mut s Scanner) init(file &token.File, src string) {
 	// Keep the original buffer and byte positions for source spans and diagnostics.
@@ -487,13 +475,6 @@ pub fn (mut s Scanner) scan() token.Token {
 			}
 		}
 		tok := token.Token.from_string_tinyv(s.lit)
-		// FastC reads tokens without a parser, so it receives an escaped keyword
-		// (`@type`, `@none`) as the plain identifier it names; `@FILE` and the other
-		// compile-time values are not keywords and keep their `@`.
-		if c == `@` && tok == .name && s.lit.len > 1 && !isnil(s.pref) && s.pref.backend == 'fastc'
-			&& token.Token.from_string_tinyv(s.lit[1..]).is_keyword() {
-			s.lit = s.lit[1..]
-		}
 		if tok in [.key_break, .key_continue, .key_nil, .key_none, .key_return, .key_false, .key_true,
 			.name]
 			|| (follows_dot && tok.is_keyword()) {

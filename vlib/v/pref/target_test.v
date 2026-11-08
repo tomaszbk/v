@@ -177,8 +177,6 @@ fn test_c_compiler_comptime_flags_use_effective_compiler() {
 	prefs.backend = 'arm64'
 	assert comptime_flag_value(prefs, 'tinyc')
 	assert !comptime_flag_value(prefs, 'gcc')
-	prefs.backend = 'fastc'
-	assert comptime_flag_value(prefs, 'tinyc')
 	prefs.ccompiler = 'gcc'
 	assert !comptime_flag_value(prefs, 'tinyc')
 }
@@ -392,7 +390,6 @@ fn test_native_backend_tests_answer_to_both_spellings() {
 	assert is_test_file_for_backend('foo_test.native.v', 'arm64')
 	assert is_test_file_for_backend('foo_test.native.v', 'x64')
 	assert !is_test_file_for_backend('foo_test.native.v', 'c')
-	assert !is_test_file_for_backend('foo_test.native.v', 'fastc')
 	assert !is_test_file_for_backend('foo_test.native.v', 'js')
 	assert !is_test_file_for_backend('foo_test.native.v', 'wasm')
 	for arch in ['amd64', 'arm64'] {

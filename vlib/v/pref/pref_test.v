@@ -153,8 +153,7 @@ fn test_detect_vroot_from_outside_a_checkout() {
 
 // A `modules` directory is not a lookup root: what it holds is `modules.<name>`,
 // even to the files inside it. A directory carrying a `v.mod` is a project root
-// whatever it is named, though, and this walk is all some callers have -- the
-// FastC backend asks here directly, without a project-root probe of its own.
+// whatever it is named, though, and this walk is all some callers have.
 fn test_get_module_path_skips_a_modules_namespace_but_not_a_project_root() {
 	root := os.join_path(os.vtmp_dir(), 'v3_pref_modules_root_${os.getpid()}')
 	os.rmdir_all(root) or {}

@@ -54,8 +54,6 @@ pub mut:
 	user_defines   []string
 	compile_values map[string]string
 	backend        string = 'c'
-	// fastc_native_bridge selects separate native ownership for executable output.
-	fastc_native_bridge   bool
 	ccompiler             string = 'gcc'
 	c99                   bool
 	force_bounds_checking bool
@@ -1632,7 +1630,7 @@ pub fn comptime_flag_value(p &Preferences, name string) bool {
 		}
 		'tinyc' {
 			return p.backend in ['arm64', 'x64']
-				|| (p.backend in ['c', 'fastc'] && p.ccompiler == 'tinyc')
+				|| (p.backend == 'c' && p.ccompiler == 'tinyc')
 		}
 		'no_backtrace' {
 			return p.backend in ['arm64', 'x64'] || name in p.user_defines

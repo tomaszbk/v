@@ -33,9 +33,6 @@ import v.build_constraint
 import v.vmod
 
 // vfmt off
-$if !skip_fastc ? {
-	import v.gen.fastc
-}
 
 $if !skip_eval ? {
 	import v.eval
@@ -388,14 +385,7 @@ fn tcc_atomic_arg(prefs &pref.Preferences, tcc_path string, tcc_includes string)
 	os.mkdir_all(cache_dir) or { return atomic_s }
 	build_path := '${object_path}.tmp.${os.getpid()}'
 	args << ['-c', atomic_s, '-o', build_path]
-	mut result := os.Result{}
-	$if !skip_fastc ?&& !windows {
-		// This runs after generation: use posix_spawn instead of forking the
-		// compiler's large address space just to assemble the atomic helpers.
-		result = fastc.fastc_run_command(tcc_path, args)
-	} $else {
-		result = cmdexec.run(tcc_path, args)
-	}
+	result := cmdexec.run(tcc_path, args)
 	if result.exit_code != 0 || !os.is_file(build_path) {
 		os.rm(build_path) or {}
 		return atomic_s
@@ -1567,8 +1557,7 @@ fn v3_cached_tcc_executable_path(manager &modulecache.Manager, source_identity s
 // TinyCC runs, and the executable gets the same kind of ad-hoc signature in this
 // process; Apple's tool still signs a file that the signer here does not handle.
 // The signer also repairs TinyCC's chained fixups, which otherwise map file bytes
-// over zero-initialized globals on macOS 27. Keep it available in the default
-// compiler, which is built without the optional FastC backend (#31486).
+// over zero-initialized globals on macOS 27 (#31486).
 fn run_v3_tcc_executable_link(tcc_path string, tcc_args []string, cc_dir string, output string) os.Result {
 	if os.user_os() == 'macos' && os.getenv('V3_TCC_APPLE_CODESIGN') != '1' {
 		shim := machosign.codesign_shim_dir()
@@ -3663,18 +3652,6 @@ fn add_v3_default_linker_flags(mut flags []string, target_os string, is_o bool) 
 	}
 }
 
-fn v3_fastc_default_linker_flags(target_os string, uses_threads bool) []string {
-	if target_os == 'windows' {
-		return []
-	}
-	mut flags := []string{}
-	if uses_threads {
-		flags << '-lpthread'
-	}
-	flags << '-lm'
-	return flags
-}
-
 fn v3_windows_executable_linker_flags(target_os string, c_compiler string, is_shared bool, is_o bool, subsystem pref.Subsystem, windows_gui_app bool) []string {
 	if target_os == 'windows' && c_compiler != 'msvc' && !is_shared && !is_o {
 		mut flags := ['-municode']
@@ -4510,7 +4487,7 @@ fn v3_crun_build_identity(state &V3ModuleCacheState, prefs &pref.Preferences, us
 }
 
 fn cli_usage() string {
-	return 'usage: v3 [run|crun|test] <file.v|directory> [options]\n' + '  -o <output>                  output binary or C file\n' + '  -b <c|fastc|arm64|x64|wasm|eval> backend\n' + '  -os <name> -arch <name>      target platform\n' + '  -cc <compiler>               C compiler executable\n' + '  -cflags <flags>              extra C compiler options\n' + '  -ldflags <flags>             extra options appended to the link command\n' + '  -syscalls                    libc-linked build with os on raw syscalls (C backend)\n' + '  -thread-stack-size <bytes>   spawned-thread stack size\n' + '  -hot-fn <name>              extract raw machine code for one function (hot reload, arm64)\n' + '  -prod -c99 -shared -strict   C build modes\n' + '  -v                           verbose stage profiling\n' + '  -show-timings                compiler stage timings without verbose traces\n' + '  -show-instructions           -show-timings plus retired CPU instructions per stage (macOS)\n' + '  -silent                      suppress benchmark output\n' + '  -showcc                      print C compiler commands\n' + '  -trace-calls                 trace function entries to stderr\n' + '  -trace-fns <patterns>        restrict tracing to functions or modules\n' + '  -race                        detect data races at runtime (ThreadSanitizer)\n' + '  -profile [file]              write V1-compatible function profile data\n' + '  -profile-fns <names>         profile only named functions and their callees\n' + '  -profile-no-inline           omit @[inline] functions from the profile\n' + '  -no-memory-limit             disable the 10176 MiB user-build memory safety limit\n' + '  -memory-limit <size>         set a custom user-build memory safety limit\n                               to specify unit append K|M|G (or k|m|g) (default: M)\n' + '  -d <name>                    compile-time define'
+	return 'usage: v3 [run|crun|test] <file.v|directory> [options]\n' + '  -o <output>                  output binary or C file\n' + '  -b <c|arm64|x64|wasm|eval> backend\n' + '  -os <name> -arch <name>      target platform\n' + '  -cc <compiler>               C compiler executable\n' + '  -cflags <flags>              extra C compiler options\n' + '  -ldflags <flags>             extra options appended to the link command\n' + '  -syscalls                    libc-linked build with os on raw syscalls (C backend)\n' + '  -thread-stack-size <bytes>   spawned-thread stack size\n' + '  -hot-fn <name>              extract raw machine code for one function (hot reload, arm64)\n' + '  -prod -c99 -shared -strict   C build modes\n' + '  -v                           verbose stage profiling\n' + '  -show-timings                compiler stage timings without verbose traces\n' + '  -show-instructions           -show-timings plus retired CPU instructions per stage (macOS)\n' + '  -silent                      suppress benchmark output\n' + '  -showcc                      print C compiler commands\n' + '  -trace-calls                 trace function entries to stderr\n' + '  -trace-fns <patterns>        restrict tracing to functions or modules\n' + '  -race                        detect data races at runtime (ThreadSanitizer)\n' + '  -profile [file]              write V1-compatible function profile data\n' + '  -profile-fns <names>         profile only named functions and their callees\n' + '  -profile-no-inline           omit @[inline] functions from the profile\n' + '  -no-memory-limit             disable the 10176 MiB user-build memory safety limit\n' + '  -memory-limit <size>         set a custom user-build memory safety limit\n                               to specify unit append K|M|G (or k|m|g) (default: M)\n' + '  -d <name>                    compile-time define'
 }
 
 fn normalize_backend_name(name string) string {
@@ -7338,7 +7315,6 @@ fn v3_select_implicit_c_compiler(c_compiler string, c_compiler_explicit bool, im
 
 // v3_tcc_prod_rejected reports whether a `-prod` C build would compile with TinyCC.
 // Probe the actual compiler for production builds because its name may suggest Clang or GCC.
-// FastC refuses `-prod` on its own, earlier.
 fn v3_tcc_prod_rejected(is_prod bool, backend string, effective_c_compiler string, c_compiler string) bool {
 	return is_prod && backend == 'c'
 		&& (effective_c_compiler == 'tinyc' || pref.ccompiler_is_tinycc(c_compiler))
@@ -9279,510 +9255,6 @@ fn add_v3_profile_used_fns(mut used_fns map[string]bool) {
 	}
 }
 
-fn v3_fastc_cache_failure_output(output string, cached_objects map[string]string) string {
-	mut mapped := output
-	for build_object, cache_object in cached_objects {
-		mapped = mapped.replace(build_object, cache_object)
-	}
-	return mapped
-}
-
-$if !skip_fastc ? {
-	struct V3FastCCompileResult {
-		success        bool
-		command        string
-		output         string
-		cached_objects map[string]string
-	}
-
-	fn publish_v3_fastc_c_source(pieces []string, output_file string, c_to_stdout bool) ! {
-		if c_to_stdout {
-			for piece in pieces {
-				print(piece)
-			}
-			return
-		}
-		staged_output := '${output_file}.stage.${tempname.unique_token()}'
-		fastc.write_c_pieces(staged_output, pieces) or {
-			os.rm(staged_output) or {}
-			return error('error writing fastc output ${output_file}: ${err.msg()}')
-		}
-		os.mv(staged_output, output_file) or {
-			os.rm(staged_output) or {}
-			return error('error finalizing fastc output ${output_file}: ${err.msg()}')
-		}
-	}
-
-	fn canonical_v3_fastc_output_path(path string) string {
-		if path == '' {
-			return ''
-		}
-		if os.exists(path) {
-			return os.real_path(path)
-		}
-		absolute_path := os.abs_path(path)
-		canonical_parent := os.real_path(os.dir(absolute_path))
-		return os.join_path_single(canonical_parent, os.file_name(absolute_path))
-	}
-
-	fn v3_fastc_aggregate_host_support_args(vroot string, build_dir string, compile_args []string, final_args []string, macos_sdk_root string, tcc_base_arg string, tcc_include_arg string) []string {
-		// These owned helpers use compatible SDK declarations and distinct C
-		// namespaces. Unknown inputs or preprocessing options keep their TUs.
-		if vroot.contains_any('"\\\r\n') {
-			return final_args
-		}
-		mut include_paths := [tcc_include_arg[2..], '/usr/local/include',
-			os.join_path(vroot, 'thirdparty/legacy/include/LegacySupport'),
-			os.join_path(vroot, 'thirdparty/tcc/include'),
-			os.join_path(vroot, 'thirdparty/stdatomic/nix')]
-		if macos_sdk_root != '' {
-			include_paths << os.join_path(macos_sdk_root, 'usr/include')
-		}
-		mut path_option := ''
-		for arg in compile_args {
-			if path_option != '' {
-				if (path_option == '-I' && arg !in include_paths)
-					|| (path_option == '-B' && arg != tcc_base_arg[2..]) {
-					return final_args
-				}
-				path_option = ''
-				continue
-			}
-			if arg in ['-I', '-B'] {
-				path_option = arg
-				continue
-			}
-			if (arg.starts_with('-I') && arg[2..] in include_paths)
-				|| (arg.starts_with('-B') && arg == tcc_base_arg)
-				|| arg in ['-std=gnu11', '-DCUSTOM_DEFINE_no_backtrace',
-					'-Werror=implicit-function-declaration'] {
-				continue
-			}
-			return final_args
-		}
-		if path_option != '' {
-			return final_args
-		}
-		native_paths := [
-			'vlib/builtin/segfault_handler_nix.c',
-			'vlib/os/execute_capture_nix.c',
-			'vlib/v/modulecache/file_metadata.c',
-			'vlib/runtime/free_memory_darwin.c',
-			'vlib/v/bench/peak_rss.c',
-			'vlib/v/pthread_helper.c',
-			'vlib/sync/thread_helper.c',
-		]
-		if final_args.len < native_paths.len {
-			return final_args
-		}
-		for i, path in native_paths {
-			if final_args[i] != os.join_path(vroot, path) {
-				return final_args
-			}
-		}
-		for arg in final_args[native_paths.len..] {
-			if c_flag_is_c_source_file(arg) {
-				return final_args
-			}
-		}
-		mut source := strings.new_builder(1024)
-		source.writeln('// Owned macOS compiler helpers, in original native-input order.')
-		cleanup_macros := [
-			['V_PARALLEL_CC', 'V_PARALLEL_CC_OUT_0', 'V_PARALLEL_CC_STATIC_STORAGE_HANDLED',
-				'V_SEGFAULT_HANDLER_ACTIVE', 'V_SEGFAULT_HANDLER_SYMBOLS',
-				'V_SEGFAULT_HANDLER_SANITIZED', 'V_SIGNAL_STACK_MAGIC', 'V_STACK_OVERFLOW_SLACK',
-				'V_STACK_OVERFLOW_MAX_LINES'],
-			['V_OS_EXECUTE_SCOPE'],
-			[]string{},
-			[]string{},
-			['V_PEAK_RSS_SCOPE', 'V_PEAK_RSS_INT'],
-			['V_PTHREAD_SCOPE'],
-			['V_SYNC_THREAD_SCOPE', 'V_THREAD_STACK_SIZE'],
-		]
-		for i, path in native_paths {
-			source.writeln('#include "${os.join_path(vroot, path)}"')
-			for macro_name in cleanup_macros[i] {
-				source.writeln('#undef ${macro_name}')
-			}
-		}
-		wrapper := os.join_path(build_dir, 'host_support_darwin.c')
-		os.write_file(wrapper, source.str()) or { return final_args }
-		mut aggregate_args := [wrapper]
-		aggregate_args << final_args[native_paths.len..]
-		return aggregate_args
-	}
-
-	// compile_v3_fastc_clang_source keeps FastC generation and uses Clang for native interop.
-	fn compile_v3_fastc_clang_source(pieces []string, units fastc.FastcUnitLayout, bin_file string, prefs &pref.Preferences, environment_flags []string, source_flags []string, user_flags []string, link_flags []string, sdk_root string, compiler string, is_debug bool, uses_threads bool) V3FastCCompileResult {
-		build_dir := os.join_path_single(os.dir(os.abs_path(bin_file)), '.fastc-clang-${tempname.unique_token()}')
-		os.mkdir_all(build_dir) or { return V3FastCCompileResult{ command: compiler, output: err.msg() } }
-		defer { cleanup_c_build_dir(build_dir) }
-		mut flags := environment_flags.clone()
-		flags << source_flags
-		flags << user_flags
-		mut object_stats := CObjectCacheStats{}
-		native_target_args := if sdk_root != '' { ['-isysroot', sdk_root] } else { []string{} }
-		wrapv_flag := c_wrapv_flag(prefs.normalized_target_os())
-		mut optimization_flags := [if prefs.is_prod { '-O2' } else { '-O0' }]
-		if wrapv_flag != '' { optimization_flags << wrapv_flag }
-		flags = prepare_c_flags_for_link(flags, environment_flags, []string{},
-			optimization_flags, true, false, '', native_target_args,
-			prefs.target, compiler, true, build_dir, mut object_stats) or {
-			return V3FastCCompileResult{ command: compiler, output: err.msg() }
-		}
-		mut compile_flags := ['-std=gnu11', if prefs.is_prod { '-O2' } else { '-O0' },
-			'-Werror=implicit-function-declaration', '-Wno-incompatible-function-pointer-types',
-			'-Wno-typedef-redefinition']
-		if wrapv_flag != '' { compile_flags << wrapv_flag }
-		if sdk_root != '' { compile_flags << ['-isysroot', sdk_root] }
-		if is_debug { compile_flags << '-g' }
-		compile_flags << c_object_compile_flags(flags)
-		if c_flags_need_objective_c(flags) { compile_flags << ['-x', 'objective-c'] }
-		// Objective-C includes can define private helpers used throughout the V program.
-		// Keep their declarations and definitions in the same translation unit.
-		mut paths := fastc.fastc_write_c_units(os.join_path_single(build_dir, 'src'), pieces, units, if c_flags_need_objective_c(flags) {
-			1
-		} else {
-			fastc.fastc_tcc_job_count(prefs)
-		}) or {
-			return V3FastCCompileResult{ command: compiler, output: err.msg() }
-		}
-		if paths.len == 0 {
-			path := os.join_path_single(build_dir, 'src.c')
-			fastc.write_c_pieces(path, pieces) or { return V3FastCCompileResult{ command: compiler, output: err.msg() } }
-			paths << path
-		}
-		mut objects := []string{}
-		mut output := ''
-		for path in paths {
-			object := path + '.o'
-			mut args := compile_flags.clone()
-			args << ['-c', path, '-o', object]
-			result := cmdexec.run(compiler, args)
-			output += result.output
-			if result.exit_code != 0 {
-				return V3FastCCompileResult{ command: cmdexec.display(compiler, args), output: output }
-			}
-			objects << object
-		}
-		mut args := objects.clone()
-		args << flags.filter(c_flag_is_c_source_file(it))
-		args << c_object_compile_flags(flags)
-		args << c_dylib_link_flags(flags)
-		args << v3_fastc_default_linker_flags(prefs.normalized_target_os(), uses_threads)
-		args << link_flags
-		if prefs.normalized_target_os() != 'windows' { args << '-pthread' }
-		if sdk_root != '' { args << ['-isysroot', sdk_root] }
-		staged := os.join_path_single(build_dir, 'program')
-		args << ['-o', staged]
-		result := cmdexec.run(compiler, args)
-		output += result.output
-		command := cmdexec.display(compiler, args)
-		if result.exit_code != 0 { return V3FastCCompileResult{ command: command, output: output } }
-		os.mv(staged, bin_file) or { return V3FastCCompileResult{ command: command, output: err.msg() } }
-		return V3FastCCompileResult{ success: true, command: command, output: output }
-	}
-
-	fn compile_v3_fastc_source(pieces []string, generated_units fastc.FastcUnitLayout, bin_file string, prefs &pref.Preferences, environment_c_flags []string, source_c_flags []string, user_c_flags []string, link_ld_flags []string, macos_sdk_root string, is_debug bool, uses_threads bool, cache_enabled bool, payload_cache_enabled bool, mut prestarted fastc.FastcPrestartedCUnits) V3FastCCompileResult {
-		bench_phases := os.getenv('FASTC_BENCH_PHASES') != ''
-		cc_sw := time.new_stopwatch()
-		tcc_dir := os.join_path(prefs.vroot, 'thirdparty', 'tcc')
-		tcc_path := os.join_path_single(tcc_dir, 'tcc.exe')
-		if !os.is_executable(tcc_path) {
-			return V3FastCCompileResult{}
-		}
-		tcc_resources := v3_tcc_resource_flags(prefs.vroot)
-		mut cc_args := environment_c_flags.clone()
-		cc_args << ['-std=gnu11', tcc_resources.base_arg, tcc_resources.include_arg,
-			tcc_resources.library_arg]
-		cc_args << v3_tcc_host_system_flags(prefs.normalized_target_os(), macos_sdk_root)
-		cc_args << v3_tcc_dylib_native_flags(source_c_flags)
-		// A call without a prototype would silently truncate a pointer result
-		// (the C carries no headers): it is an error, not a warning.
-		if '-Werror=implicit-function-declaration' !in cc_args {
-			cc_args << '-Werror=implicit-function-declaration'
-		}
-		if 'no_backtrace' !in prefs.user_defines
-			&& v3_tcc_backtrace_enabled(prefs.normalized_target_os(), prefs.normalized_target_arch(), false) {
-			cc_args << '-bt25'
-		}
-		if is_debug {
-			cc_args << '-g'
-		}
-		// Keep archives and other link-only source directives after the generated
-		// object inputs. Only their state-affecting options are applied while
-		// preparing libtcc; static archives remain order-sensitive link operands.
-		compile_base_args := c_object_compile_flags(cc_args)
-		user_compile_args := c_object_compile_flags(user_c_flags)
-		mut compile_args := compile_base_args.clone()
-		compile_args << user_compile_args
-		jobs := fastc.fastc_tcc_job_count(prefs)
-		// Embedded files of a split build compile as their own cached object.
-		payload := fastc.fastc_split_payload_unit(pieces, generated_units, jobs)
-		units := payload.units
-		mut uses_prestarted := false
-		$if macos {
-			uses_prestarted = fastc.fastc_prestarted_c_units_match(&prestarted, compile_args, jobs)
-			if !uses_prestarted {
-				fastc.fastc_discard_prestarted_c_units(mut prestarted)
-			}
-		}
-		mut build_dir := prestarted.build_dir
-		if !uses_prestarted {
-			// tcc runs in this directory, so a long output path moves it to the short root.
-			build_dir, _ = v3_short_build_dir(os.join_path_single(os.dir(os.real_path(bin_file)),
-				'.${os.file_name(bin_file)}.fastc.${tempname.unique_token()}'))
-		}
-		if !uses_prestarted {
-			v3_mkdir_all_shared(build_dir) or { return V3FastCCompileResult{} }
-		}
-		defer {
-			cleanup_c_build_dir(build_dir)
-		}
-		source_file := os.join_path_single(build_dir, 'src.c')
-		staged_output_name := c_compiler_output_name_for_target(prefs.normalized_target_os(), false, false)
-		staged_binary := os.join_path_single(build_dir, staged_output_name)
-		unit_prefix := os.join_path_single(build_dir, 'src')
-		mut rendering_units := fastc.FastcRenderingCUnits{}
-		mut feeding_units := fastc.FastcFeedingCUnits{}
-		mut feeds_prestarted := false
-		$if macos {
-			if !cache_enabled && prefs.building_v {
-				if uses_prestarted {
-					feeding_units = fastc.fastc_begin_render_prestarted_c_units(mut prestarted, unit_prefix, pieces, units, jobs) or {
-						fastc.write_c_pieces(source_file, pieces) or {}
-						return V3FastCCompileResult{
-							command: cmdexec.display(tcc_path, compile_args)
-							output:  err.msg()
-						}
-					}
-					feeds_prestarted = true
-				} else {
-					rendering_units =
-						fastc.fastc_begin_render_c_units(unit_prefix, pieces, units, jobs)
-				}
-			}
-		}
-		payload_compile := spawn fastc.fastc_payload_object(tcc_path, compile_args, payload.source,
-			build_dir, payload_cache_enabled)
-		// The program's translation units are compiled by concurrent TinyCC
-		// processes and linked; a program that does not split is compiled as
-		// one file.
-		if bench_phases {
-			eprintln('fastc-phase tcc.setup ${cc_sw.elapsed().microseconds()}us')
-		}
-		base_link_args := c_dylib_link_flags(cc_args)
-		user_link_args := c_dylib_link_flags(user_c_flags)
-		native_sources := cc_args.filter(c_flag_is_c_source_file(it))
-		// Native helpers must introduce their references before static archives
-		// are searched, including the bundled GC's C wrappers on Linux.
-		mut final_args := native_sources.clone()
-		final_args << user_c_flags.filter(c_flag_is_c_source_file(it))
-		final_args << base_link_args
-		final_args << user_link_args
-		final_args << v3_fastc_default_linker_flags(prefs.normalized_target_os(), uses_threads)
-		atomic_arg := tcc_atomic_arg(prefs, tcc_path, tcc_resources.include_arg)
-		if atomic_arg.len > 0 {
-			final_args << atomic_arg
-		}
-		final_args << link_ld_flags
-		mut aggregated_host_support := false
-		if prefs.building_v && prefs.normalized_target_os() == 'macos'
-			&& prefs.normalized_target_arch() == 'arm64' && !is_debug
-			&& environment_c_flags.len == 0 && user_c_flags.len == 0 && link_ld_flags.len == 0 {
-			final_args = v3_fastc_aggregate_host_support_args(prefs.vroot, build_dir, compile_args, final_args, macos_sdk_root, tcc_resources.base_arg, tcc_resources.include_arg)
-			aggregated_host_support = final_args.len > 0
-				&& final_args[0] == os.join_path(build_dir, 'host_support_darwin.c')
-		}
-		generation_link_cache_key := fastc.fastc_generation_link_cache_key(tcc_path, compile_args, final_args, pieces, units, jobs, cache_enabled && !final_args.any(fastc.fastc_flag_is_native_input(it)))
-		// The pieces already identify the payload, wherever its object is stored.
-		payload_object := payload_compile.wait()
-		if payload_object.error != '' {
-			return V3FastCCompileResult{
-				command: cmdexec.display(tcc_path, compile_args)
-				output:  payload_object.error
-			}
-		}
-		if payload_object.path != '' {
-			final_args << payload_object.path
-		}
-		if fastc.fastc_restore_link_cache(generation_link_cache_key, staged_binary) {
-			if bench_phases {
-				now_us := cc_sw.elapsed().microseconds()
-				eprintln('fastc-phase tcc.units_written ${now_us}us units=0')
-				eprintln('fastc-phase tcc.units_compiled ${now_us}us')
-				eprintln('fastc-phase tcc.linked ${now_us}us')
-				eprintln('fastc-phase tcc.signed ${now_us}us')
-			}
-			os.mv(staged_binary, bin_file) or {
-				return V3FastCCompileResult{
-					output: err.msg()
-				}
-			}
-			return V3FastCCompileResult{
-				success: true
-			}
-		}
-		mut unit_paths := []string{}
-		if feeds_prestarted {
-			unit_paths = feeding_units.paths.clone()
-		} else if rendering_units.paths.len > 0 {
-			unit_paths = rendering_units.paths.clone()
-		}
-		if unit_paths.len == 0 {
-			unit_paths = fastc.fastc_write_c_units(unit_prefix, pieces, units, jobs) or {
-				return V3FastCCompileResult{}
-			}
-		}
-		if unit_paths.len < 2 {
-			fastc.write_c_pieces(source_file, pieces) or { return V3FastCCompileResult{} }
-		}
-		if bench_phases {
-			eprintln('fastc-phase tcc.units_written ${cc_sw.elapsed().microseconds()}us units=${unit_paths.len}')
-		}
-		mut shim_dir := fastc.FastcCodesignShim{}
-		defer {
-			fastc.fastc_remove_codesign_shim_dir(shim_dir)
-		}
-		mut result := os.Result{}
-		mut command := ''
-		mut sign_in_process := false
-		mut cached_objects := map[string]string{}
-		link_cache_key := generation_link_cache_key
-		mut link_cache_restored := false
-		if unit_paths.len > 1 {
-			prepared_units := fastc.fastc_prepare_c_units(tcc_path, compile_args, unit_paths, cache_enabled)
-			cached_objects = prepared_units.cache_objects()
-			link_inputs := prepared_units.objects.clone()
-			mut display_args := compile_args.clone()
-			display_args << ['-o', staged_binary]
-			display_args << link_inputs
-			display_args << final_args
-			command = cmdexec.display(tcc_path, display_args)
-			if fastc.fastc_restore_link_cache(link_cache_key, staged_binary) {
-				link_cache_restored = true
-				result = os.Result{}
-				if bench_phases {
-					eprintln('fastc-phase tcc.units_compiled ${cc_sw.elapsed().microseconds()}us')
-				}
-			} else {
-				mut prepared_link := fastc.fastc_prepare_link(tcc_path, os.join_path_single(tcc_dir, 'lib'), compile_args, final_args)
-				preload_link := (feeds_prestarted || rendering_units.paths.len > 0)
-					&& fastc.fastc_prepared_link_accepts_inputs(&prepared_link)
-				mut native_compile := fastc.FastcNativeCompile{}
-				defer {
-					fastc.fastc_discard_native_compile(mut native_compile)
-				}
-				if preload_link && !cache_enabled && aggregated_host_support {
-					native_compile = fastc.fastc_begin_native_compile(tcc_path, compile_args,
-						final_args[0], os.join_path(build_dir, 'host_support_darwin.o'))
-				}
-				if feeds_prestarted {
-					if !uses_prestarted {
-						fastc.fastc_discard_link(mut prepared_link)
-						return V3FastCCompileResult{
-							command: cmdexec.display(tcc_path, compile_args)
-							output:  'prestarted TinyCC units were not available'
-						}
-					}
-					fastc.fastc_finish_prestarted_c_units(mut prestarted, mut feeding_units, prepared_units, mut prepared_link, preload_link) or {
-						fastc.fastc_discard_link(mut prepared_link)
-						fastc.write_c_pieces(source_file, pieces) or {}
-						return V3FastCCompileResult{
-							command: cmdexec.display(tcc_path, compile_args)
-							output:  err.msg()
-						}
-					}
-				} else if rendering_units.paths.len > 0 {
-					fastc.fastc_compile_rendering_c_units(tcc_path, compile_args, mut rendering_units, prepared_units, mut prepared_link, preload_link) or {
-						fastc.fastc_discard_link(mut prepared_link)
-						fastc.write_c_pieces(source_file, pieces) or {}
-						return V3FastCCompileResult{
-							command: cmdexec.display(tcc_path, compile_args)
-							output:  err.msg()
-						}
-					}
-				} else {
-					fastc.fastc_compile_c_units(tcc_path, compile_args, unit_paths, prepared_units) or {
-						fastc.fastc_discard_link(mut prepared_link)
-						fastc.write_c_pieces(source_file, pieces) or {}
-						return V3FastCCompileResult{
-							command: cmdexec.display(tcc_path, compile_args)
-							output:  err.msg()
-						}
-					}
-				}
-				if bench_phases {
-					eprintln('fastc-phase tcc.units_compiled ${cc_sw.elapsed().microseconds()}us')
-				}
-				sign_in_process = fastc.fastc_prepared_link_skips_codesign(&prepared_link)
-				if !sign_in_process {
-					// The executable-based linker still needs the PATH shim; the prepared
-					// libtcc linker suppresses its codesign call without a subprocess.
-					shim_dir = fastc.fastc_codesign_shim_dir()
-					sign_in_process = shim_dir.dir != ''
-				}
-				finish_inputs := if preload_link { []string{} } else { link_inputs }
-				mut finish_final_args := final_args
-				if native_object := fastc.fastc_finish_native_compile(mut native_compile) {
-					finish_final_args = final_args.clone()
-					finish_final_args[0] = native_object
-				}
-				result = fastc.fastc_finish_link(mut prepared_link, finish_inputs, finish_final_args, staged_binary)
-			}
-			if bench_phases {
-				eprintln('fastc-phase tcc.linked ${cc_sw.elapsed().microseconds()}us')
-			}
-		} else {
-			cc_args = compile_base_args.clone()
-			cc_args << user_compile_args
-			cc_args << ['-o', staged_output_name, 'src.c']
-			cc_args << final_args
-			command = cmdexec.display(tcc_path, cc_args)
-			shim_dir = fastc.fastc_codesign_shim_dir()
-			sign_in_process = shim_dir.dir != ''
-			result = cmdexec.run_in(tcc_path, cc_args, build_dir)
-		}
-		if result.exit_code != 0 || !os.is_file(staged_binary) {
-			if keep_dir := os.getenv_opt('V3_FASTC_KEEP_FAILED_C') {
-				if keep_dir.len > 0 {
-					os.cp(source_file, keep_dir) or {}
-				}
-			}
-			return V3FastCCompileResult{
-				command:        command
-				output:         result.output
-				cached_objects: cached_objects
-			}
-		}
-		if sign_in_process {
-			fastc.fastc_sign_macho_adhoc(staged_binary) or {
-				return V3FastCCompileResult{
-					command: command
-					output:  'could not sign ${staged_binary}: ${err.msg()}'
-				}
-			}
-		}
-		if !link_cache_restored {
-			fastc.fastc_publish_link_cache(link_cache_key, staged_binary)
-		}
-		if bench_phases {
-			eprintln('fastc-phase tcc.signed ${cc_sw.elapsed().microseconds()}us')
-		}
-		os.mv(staged_binary, bin_file) or {
-			return V3FastCCompileResult{
-				command: command
-				output:  err.msg()
-			}
-		}
-		return V3FastCCompileResult{
-			success: true
-			command: command
-			output:  result.output
-		}
-	}
-}
-
 // v3_parallel_transform_allowed reports whether transform may run in parallel,
 // together with the markused and transform preparation threads the driver
 // overlaps with checking. Both preparation threads read the checker beside the
@@ -10667,7 +10139,7 @@ pub fn run(args []string) {
 		// Cached module bodies were generated without function-entry hooks.
 		no_cache = true
 	}
-	if is_prof && backend !in ['c', 'fastc'] {
+	if is_prof && backend != 'c' {
 		eprintln('option `-profile` is only supported by the C backend')
 		exit(1)
 	}
@@ -10706,7 +10178,7 @@ pub fn run(args []string) {
 	should_run = should_run && !skip_running
 	native_linux_object := backend == 'arm64' && target_os == 'linux' && explicit_output
 		&& output_file.ends_with('.o')
-	if is_o && !native_linux_object && (backend !in ['c', 'fastc'] || !explicit_output
+	if is_o && !native_linux_object && (backend != 'c' || !explicit_output
 		|| (!output_file.ends_with('.c') && !output_file.ends_with('.o'))) {
 		eprintln('option `-is_o` requires the C backend and an explicit `.c` or `.o` output file')
 		exit(1)
@@ -10813,7 +10285,7 @@ pub fn run(args []string) {
 	if os.getenv(v3_embedded_env) != '1' {
 		maybe_delegate_v3_to_vvmrc(input_file, verbose)
 	}
-	// JS and FastC dispatch before the common runtime-injection validation below.
+	// JS dispatches before the common runtime-injection validation below.
 	if 'vlibc' in user_defines && backend != 'c' {
 		eprintln('`-d vlibc` requires the C backend and a supported Unix amd64/arm64 target')
 		exit(1)
@@ -10864,7 +10336,7 @@ pub fn run(args []string) {
 		// executable before that executable can perform ownership analysis itself.
 		// Both compiler entry points count: `vlib/v/v.v` is the bare frontend, while
 		// `cmd/v` is the driver that `-autofree` users actually run.
-		if define_name == 'ownership' && backend != 'fastc' && !ownership_checker_compiled()
+		if define_name == 'ownership' && !ownership_checker_compiled()
 			&& !input_is_v3_compiler_entry(input_file) && !input_is_cmd_v(input_file) {
 			eprintln('ownership support is not compiled into this v3 executable')
 			exit(1)
@@ -10877,16 +10349,16 @@ pub fn run(args []string) {
 		eprintln(err.msg())
 		exit(1)
 	}
-	if ownership_mode && backend != 'fastc' && !ownership_checker_compiled() {
+	if ownership_mode && !ownership_checker_compiled() {
 		eprintln('ownership support is not compiled into this v3 executable')
 		exit(1)
 	}
 	if ownership_mode {
 		record_user_define(mut user_defines, mut compile_values, 'ownership')
 	}
-	if backend !in ['c', 'fastc', 'arm64', 'x64', 'wasm', 'eval']
+	if backend !in ['c', 'arm64', 'x64', 'wasm', 'eval']
 		&& !(backend == 'js' && is_checker_fixture) {
-		eprintln('unknown backend `${backend}`; expected c, fastc, arm64, x64, wasm, or eval')
+		eprintln('unknown backend `${backend}`; expected c, arm64, x64, wasm, or eval')
 		exit(1)
 	}
 	if hot_fn != '' && backend != 'arm64' {
@@ -10899,7 +10371,7 @@ pub fn run(args []string) {
 	}
 	for requested in compile_backends {
 		for name in requested.split(',') {
-			if name.trim_space() !in ['c', 'fastc', 'arm64', 'aarch64', 'x64', 'amd64', 'x86_64',
+			if name.trim_space() !in ['c', 'arm64', 'aarch64', 'x64', 'amd64', 'x86_64',
 				'x86-64', 'wasm', 'wasm32', 'eval'] {
 				eprintln('unknown compile backend `${name.trim_space()}`')
 				exit(1)
@@ -10996,14 +10468,8 @@ pub fn run(args []string) {
 		eprintln('option `-target-libc-headers` does not support Windows targets')
 		exit(1)
 	}
-	if target_libc_headers && backend != 'c'
-		&& !(backend == 'fastc' && (output_file == '-' || output_file.ends_with('.c'))
-			&& (target.os != pref.host_target().os || target.arch != pref.host_target().arch)) {
+	if target_libc_headers && backend != 'c' {
 		eprintln('option `-target-libc-headers` requires the C backend')
-		exit(1)
-	}
-	if backend == 'fastc' && target.os == 'windows' && subsystem == .windows {
-		eprintln('the V3 fastc backend does not support `-subsystem windows`')
 		exit(1)
 	}
 	// V's platform `int` is 64-bit on 64-bit targets and 32-bit on 32-bit ones;
@@ -11021,20 +10487,6 @@ pub fn run(args []string) {
 	}
 	cmd_v_module_input := input_loads_cmd_v_module(input_file)
 	compiler_tree_input := input_is_compiler_tree(input_file)
-	fastc_test_file := backend == 'fastc' && (is_v3_test_file(input_file, backend, target)
-		|| is_v3_test_file(input_file, 'c', target))
-	// fastc_real_builtin_program marks an ordinary program that sets `building_v` only to
-	// reach FastC's full runtime. It keeps the program's own allocator and defines.
-	mut fastc_real_builtin_program := false
-	if backend == 'fastc' && ('fastc_real_builtin' in user_defines || os.is_dir(input_file)
-		|| fastc_test_file) {
-		// Opt-in: compile an ordinary program through FastC's real-`builtin` path
-		// (real `struct string`, error system, and the full runtime) instead of the
-		// bootstrap `const char*` runtime. Directory entries use the same path, and so
-		// does a test file, whose harness reports through V strings and errors.
-		fastc_real_builtin_program = !building_v && !cmd_v_build
-		building_v = true
-	}
 	// Large serial compiler-module builds create the same transform and C-generation
 	// scratch state as parallel builds. Keep that state disposable; `-no-parallel`
 	// controls worker creation independently from arena lifetime.
@@ -11061,7 +10513,7 @@ pub fn run(args []string) {
 	// A compiler build defaults to the parallel generator and the prealloc arena. A
 	// program keeps its collector: prealloc never frees, so the program's own `GC_free`
 	// or `free` of a V allocation would release arena memory.
-	if (building_v || cmd_v_build) && !fastc_real_builtin_program && !target_libc_headers {
+	if (building_v || cmd_v_build) && !target_libc_headers {
 		if no_parallel {
 			// This controls the current build only. Keep parallel support in the output
 			// compiler so its module graph does not depend on how it was bootstrapped.
@@ -11075,8 +10527,7 @@ pub fn run(args []string) {
 		// -no-prealloc opts out, and a race build keeps the C allocator (see
 		// v3_race_check_prealloc). Bundled TinyCC lacks language-level thread-local
 		// storage, so its arena root uses a native thread slot instead. This keeps
-		// worker-thread generations safe in both C backends (see the C generator's
-		// pthread-key slot and fastc_write_prealloc_tls_global).
+		// worker-thread generations safe (see the C generator's pthread-key slot).
 		if !no_prealloc && !race && 'prealloc' !in user_defines {
 			user_defines << 'prealloc'
 		}
@@ -11102,12 +10553,12 @@ pub fn run(args []string) {
 	} else if backend == 'wasm' {
 		// Honor the exact -o path; the wasm backend writes output_file directly.
 		bin_file = output_file.all_before_last('.wasm')
-	} else if backend in ['c', 'fastc'] && output_file == '-' {
+	} else if backend == 'c' && output_file == '-' {
 		c_only = true
 		c_to_stdout = true
 		bin_file = ''
 		output_file = os.join_path_single(os.vtmp_dir(), 'v3_stdout_${os.getpid()}_${tempname.unique_token()}.c')
-	} else if backend in ['c', 'fastc'] && output_file.ends_with('.c') {
+	} else if backend == 'c' && output_file.ends_with('.c') {
 		c_only = true
 		bin_file = output_file.all_before_last('.c')
 	} else {
@@ -11117,7 +10568,7 @@ pub fn run(args []string) {
 		}
 		output_file = bin_file + '.c'
 	}
-	if backend in ['c', 'fastc'] {
+	if backend == 'c' {
 		target_bin_file := c_executable_bin_file_for_target(bin_file, target.os, is_shared, is_o, c_only)
 		// The executable suffix does not belong to the requested generated C path.
 		bin_file = target_bin_file
@@ -11129,7 +10580,7 @@ pub fn run(args []string) {
 	}
 	binary_existed_before := os.exists(bin_file)
 	mut remove_binary_after_run := should_run && !explicit_output
-		&& (fastc_test_file || (!is_crun && !is_direct_vsh && !keep_c && !binary_existed_before))
+		&& !is_crun && !is_direct_vsh && !keep_c && !binary_existed_before
 
 	// Decide which backend modules to compile into the output. Standalone compilers
 	// default to C; optional backends and their SSA dependencies can be skipped. This
@@ -11142,7 +10593,6 @@ pub fn run(args []string) {
 	// in; the active `-b` target backend is always force-included.
 	// `cmd/v` defaults to C too, and builds a cached full compiler on demand when
 	// another backend is requested. Explicit skip defines remove optional backends.
-	mut include_fastc := all_backends
 	mut include_arm64 := all_backends
 	mut include_x64 := all_backends
 	mut include_wasm := all_backends
@@ -11150,9 +10600,6 @@ pub fn run(args []string) {
 	for cb in compile_backends {
 		for name in cb.split(',') {
 			match name.trim_space() {
-				'fastc' {
-					include_fastc = true
-				}
 				'arm64', 'aarch64' {
 					include_arm64 = true
 				}
@@ -11172,9 +10619,6 @@ pub fn run(args []string) {
 		}
 	}
 	match backend {
-		'fastc' {
-			include_fastc = true
-		}
 		'arm64' {
 			include_arm64 = true
 		}
@@ -11190,9 +10634,6 @@ pub fn run(args []string) {
 		else {}
 	}
 
-	if !include_fastc {
-		user_defines << 'skip_fastc'
-	}
 	if !include_arm64 {
 		user_defines << 'skip_arm64'
 	}
@@ -11211,21 +10652,6 @@ pub fn run(args []string) {
 	}
 	if !include_eval {
 		user_defines << 'skip_eval'
-	}
-	fastc_compiler_entry := backend == 'fastc' && input_is_v3_compiler_entry(input_file)
-	fastc_selfhost_build := backend == 'fastc' && (is_selfhost || fastc_compiler_entry)
-	if fastc_selfhost_build {
-		// Select the scanner-to-C driver in the first generated compiler. A direct
-		// `-b fastc vlib/v/v.v` build is a self-host build too; do not require the
-		// internal `-d fastc_selfhost` implementation detail at the command line.
-		// Descendant FastC compilers preserve the same define in v.fastcdriver.
-		record_user_define(mut user_defines, mut compile_values, 'fastc_selfhost')
-	}
-	if fastc_selfhost_build && target.os == 'windows' {
-		// FastC self-hosts lower the compiler's `spawn` calls to pthreads and emit the
-		// header-free macOS/glibc C ABI tables; neither exists for Windows targets.
-		eprintln('the FastC self-host compiler (`v self -b fastc`, `-selfhost -b fastc`) does not support Windows targets; use `v self`, which keeps `-b fastc` for programs')
-		exit(1)
 	}
 	mut b := bench.new()
 	driver_sw := time.new_stopwatch()
@@ -11259,9 +10685,6 @@ pub fn run(args []string) {
 	if raw_vsh_tmp_prefix != '' {
 		prefs.raw_vsh_file = os.real_path(input_file)
 	}
-	if os.getenv('FASTC_BENCH_PHASES') != '' {
-		eprintln('fastc-phase driver.prefs ${driver_sw.elapsed().microseconds()}us')
-	}
 	prefs.target = target
 	prefs.output_cross_c = output_cross_c
 	prefs.thread_stack_size = if thread_stack_size_set {
@@ -11270,12 +10693,7 @@ pub fn run(args []string) {
 		target.default_thread_stack_size()
 	}
 	prefs.backend = backend
-	prefs.vroot = if fastc_compiler_entry {
-		// A directly invoked host compiler may live outside the checkout (for example,
-		// a production benchmark binary in /tmp). The explicit compiler entry owns
-		// this build, so resolve builtin and vlib beside that input instead of VEXE.
-		resolve_vroot_for_input(prefs.vroot, os.real_path(input_file))
-	} else if pref.has_macos_v3_caller_environment() && prefs.vexe.len > 0 {
+	prefs.vroot = if pref.has_macos_v3_caller_environment() && prefs.vexe.len > 0 {
 		// The macOS dispatcher sets VEXE to the invoking compiler. Preserve that
 		// checkout instead of selecting another V checkout around the input. A
 		// compiler produced with `v self -o /other/path` still uses its baked root.
@@ -11360,12 +10778,9 @@ pub fn run(args []string) {
 	}
 	// Compiler flags and native inputs follow the implicit bundled or system TCC,
 	// while retry policy still follows user intent.
-	effective_tcc := backend in ['c', 'fastc'] && effective_c_compiler == 'tinyc'
+	effective_tcc := backend == 'c' && effective_c_compiler == 'tinyc'
 	explicit_tcc := c_compiler_explicit && effective_tcc
 	add_v3_tcc_compat_defines(mut user_defines, target.os, target.arch, is_shared, effective_tcc || tcc_dylib)
-	if os.getenv('FASTC_BENCH_PHASES') != '' {
-		eprintln('fastc-phase driver.defines ${driver_sw.elapsed().microseconds()}us')
-	}
 	prefs.ccompiler = if tcc_dylib { 'tinyc' } else { effective_c_compiler }
 	prefs.no_parallel = current_no_parallel
 	prefs.c99 = c99
@@ -11376,9 +10791,7 @@ pub fn run(args []string) {
 		user_defines << v3_builtin_arena_define
 	}
 	// Older bootstrap compilers still require the stdlib's compatibility headers.
-	if backend != 'fastc' {
-		record_user_define(mut user_defines, mut compile_values, 'v3_c_extern_declarations')
-	}
+	record_user_define(mut user_defines, mut compile_values, 'v3_c_extern_declarations')
 	mut headerless_snapshot := false
 	if cmd_v_build && output_cross_c && backend == 'c' && !no_builtin && !is_o
 		&& !target_libc_headers
@@ -11431,7 +10844,7 @@ pub fn run(args []string) {
 		// reporting the bootstrap snapshot's commit indefinitely.
 		prefs.vcurrent_hash = self_build_current_hash(prefs.vroot)
 	}
-	prefs.selfhost = is_selfhost || fastc_selfhost_build
+	prefs.selfhost = is_selfhost
 	prefs.building_v = building_v
 	prefs.is_prod = is_prod
 	prefs.warn_about_allocs = warn_about_allocs
@@ -11447,278 +10860,7 @@ pub fn run(args []string) {
 	if verbose {
 		eprintln('v.pref.lookup_path: ${os.join_path(prefs.vroot, 'vlib')}')
 	}
-	prefs.supports_inline_asm = is_checker_fixture || (backend == 'fastc' && c_only
-		&& target.arch in ['amd64', 'arm64'])
-	if backend == 'fastc' {
-		$if skip_fastc ? {
-			eprintln('fastc support is not compiled into this v3 executable')
-			eprintln('Rebuild V from source with `v -compile-backend fastc self` or `v -all-backends self`.')
-			eprintln('A standalone `vlib/v/v.v` compiler needs `-compile-backend fastc` (or `-all-backends`) when it is built.')
-			exit(1)
-		} $else {
-			fastc_bench := os.getenv('FASTC_BENCH') != ''
-
-			// FastC is a standalone parser that emits C while consuming scanner tokens.
-			// Never let an unsupported FastC input continue into the AST frontend below.
-			clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
-			if (!(input_file.ends_with('.v') && os.is_file(input_file)) && !os.is_dir(input_file))
-				|| file_list.len > 0 {
-				eprintln('fastc requires exactly one `.v` entry file or source directory')
-				exit(1)
-			}
-			fastc_artifact_file := if c_only {
-				if c_to_stdout { '' } else { output_file }
-			} else {
-				bin_file
-			}
-			if fastc_artifact_file != ''
-				&& canonical_v3_fastc_output_path(fastc_artifact_file) == os.real_path(input_file) {
-				eprintln('fastc output path `${fastc_artifact_file}` aliases input source `${input_file}`')
-				exit(1)
-			}
-			if os.getenv('FASTC_BENCH_PHASES') != '' {
-				eprintln('fastc-phase driver.entry_checks ${driver_sw.elapsed().microseconds()}us')
-			}
-			fastc_host := pref.host_target()
-			fastc_cross_target := target.os != fastc_host.os || target.arch != fastc_host.arch
-			if !c_only && fastc_cross_target {
-				eprintln('fastc can only build executables for the host target; use `-o file.c` for cross-target C output')
-				exit(1)
-			}
-			mut unsupported_modes := []string{}
-			if is_test_command || is_checker_fixture {
-				unsupported_modes << 'test/checker mode'
-			}
-			// A test file builds as a program whose main runs its tests.
-			if fastc_test_file {
-				prefs.is_test = true
-			}
-			if is_prod && !(c_compiler_explicit && effective_c_compiler == 'clang') && !(c_only && fastc_cross_target) {
-				unsupported_modes << '`-prod`'
-			}
-			if is_shared || is_livemain || is_liveshared {
-				unsupported_modes << 'shared/live builds'
-			}
-			if is_o {
-				unsupported_modes << 'object-file output'
-			}
-			if is_prof || coverage_dir.len > 0 {
-				unsupported_modes << 'profiling/coverage'
-			}
-			if ownership_mode || 'ownership' in prefs.user_defines {
-				unsupported_modes << 'ownership/autofree'
-			}
-			if only_check_syntax || check_only {
-				unsupported_modes << 'syntax/check-only mode'
-			}
-			if warn_impure_v {
-				unsupported_modes << '`-Wimpure-v`'
-			}
-			if warn_about_allocs {
-				unsupported_modes << '`-warn-about-allocs`'
-			}
-			if print_fn_names.len > 0 || print_v_files || print_watched_files
-				|| dump_c_flags.len > 0 || generate_c_project.len > 0 {
-				unsupported_modes << 'compiler inspection output'
-			}
-			if c99_explicit || is_strict || check_overflow || check_casts {
-				unsupported_modes << 'strict/checked C modes'
-			}
-			if c_compiler_explicit && effective_c_compiler !in ['clang', 'tinyc'] {
-				unsupported_modes << 'C compilers other than TinyCC or Clang'
-			}
-			if no_builtin || no_preludes {
-				unsupported_modes << 'custom builtin/prelude modes'
-			}
-			if 'no_main' in prefs.user_defines {
-				unsupported_modes << '`-d no_main`'
-			}
-			if translated_mode || is_repl {
-				unsupported_modes << 'translated/REPL mode'
-			}
-			if unsupported_modes.len > 0 {
-				eprintln('fastc parser does not support ${unsupported_modes.join(', ')}')
-				exit(1)
-			}
-			if 'v3_backend' !in prefs.user_defines {
-				prefs.user_defines << 'v3_backend'
-			}
-			if !fastc_cross_target && !c_compiler_explicit {
-				// Same-target FastC output is compiled by bundled TinyCC regardless of
-				// the host default, so compile-time compiler branches must see TinyCC.
-				prefs.ccompiler = 'tinyc'
-				add_v3_tcc_compat_defines(mut prefs.user_defines, target.os, target.arch, false, true)
-			}
-			// FASTC_BENCH_LOOP=N repeats generation in-process so an external
-			// sampler can profile it (see the FastC section of the v3 README).
-			for _ in 0 .. os.getenv('FASTC_BENCH_LOOP').int() {
-				fastc.generate_files_with_source_paths([input_file], prefs) or {
-					eprintln(err.msg())
-					exit(1)
-					return
-				}
-			}
-			mut prestarted_fastc_units := fastc.FastcPrestartedCUnits{}
-			mut prestart_workers := []thread fastc.FastcPrestartedCUnits{}
-			$if macos {
-				if !c_only && !c_compiler_explicit && prefs.building_v && prefs.selfhost && !fastc_cross_target
-					&& (is_debug || no_cache || fastc_bench) {
-					tcc_dir := os.join_path(prefs.vroot, 'thirdparty', 'tcc')
-					tcc_path := os.join_path_single(tcc_dir, 'tcc.exe')
-					prestart_jobs := fastc.fastc_tcc_job_count(prefs)
-					if prestart_jobs >= 2 && os.is_executable(tcc_path) {
-						tcc_resources := v3_tcc_resource_flags(prefs.vroot)
-						mut anticipated_cc_args := environment_c_flags.clone()
-						anticipated_cc_args << ['-std=gnu11', tcc_resources.base_arg,
-							tcc_resources.include_arg, tcc_resources.library_arg]
-						anticipated_cc_args << v3_tcc_host_system_flags(prefs.normalized_target_os(), macos_sdk_root_cache.get())
-						anticipated_cc_args << '-Werror=implicit-function-declaration'
-						if 'no_backtrace' !in prefs.user_defines
-							&& v3_tcc_backtrace_enabled(prefs.normalized_target_os(), prefs.normalized_target_arch(), false) {
-							anticipated_cc_args << '-bt25'
-						}
-						if is_debug {
-							anticipated_cc_args << '-g'
-						}
-						mut anticipated_compile_args := c_object_compile_flags(anticipated_cc_args)
-						anticipated_compile_args << c_object_compile_flags(user_c_flags)
-						prestart_dir, _ := v3_short_build_dir(os.join_path_single(os.dir(os.real_path(bin_file)),
-							'.${os.file_name(bin_file)}.fastc.${tempname.unique_token()}'))
-						prestart_workers << spawn fastc.fastc_prestart_c_units(tcc_path, anticipated_compile_args, prestart_dir, prestart_jobs)
-					}
-				}
-			}
-			defer {
-				$if macos {
-					if prestart_workers.len > 0 {
-						prestarted_fastc_units = prestart_workers[0].wait()
-					}
-					fastc.fastc_discard_prestarted_c_units(mut prestarted_fastc_units)
-				}
-			}
-			if os.getenv('FASTC_BENCH_PHASES') != '' {
-				eprintln('fastc-phase driver.setup ${driver_sw.elapsed().microseconds()}us')
-			}
-			prefs.fastc_native_bridge = !c_only && prefs.normalized_target_os() == 'macos' && prefs.ccompiler == 'tinyc'
-			mut fastc_generation := fastc.generate_files_with_source_paths([input_file], prefs) or {
-				eprintln(err.msg())
-				exit(1)
-				return
-			}
-			if prestart_workers.len > 0 {
-				prestarted_fastc_units = prestart_workers[0].wait()
-				prestart_workers.clear()
-			}
-			if os.getenv('FASTC_BENCH_PHASES') != '' {
-				eprintln('fastc-phase driver.generated ${driver_sw.elapsed().microseconds()}us')
-			}
-			if report_deprecated_integer_types(fastc_generation.deprecated_integer_paths, prefs,
-				warns_are_errors) {
-				exit(1)
-			}
-			fastc_artifact_path := canonical_v3_fastc_output_path(fastc_artifact_file)
-			for source_path in fastc_generation.source_paths {
-				if fastc_artifact_path != '' && fastc_artifact_path == source_path
-					&& source_path != os.real_path(input_file) {
-					eprintln('fastc output path `${fastc_artifact_file}` aliases imported source `${source_path}`')
-					exit(1)
-				}
-			}
-			fastc_pieces := fastc_generation.c_pieces
-			fastc_source_size := fastc_generation.c_size()
-			b.step('fastc parse+gen')
-			if c_only {
-				b.metric('generated C size', fastc_source_size, 'bytes')
-				publish_v3_fastc_c_source(fastc_pieces, output_file, c_to_stdout) or {
-					eprintln(err.msg())
-					exit(1)
-				}
-				b.print_report()
-				clear_macos_v3_compiler_error_fallback(macos_v3_fallback_file)
-				return
-			}
-			fastc_bin_file := bin_file
-			fastc_sdk_root := if prefs.normalized_target_os() == 'macos' {
-				macos_sdk_root_cache.get()
-			} else {
-				''
-			}
-			if keep_c {
-				keep_c_file := keep_c_output_file(bin_file)
-				fastc.write_c_pieces(keep_c_file, fastc_pieces) or {
-					eprintln('failed to retain generated fastc output ${keep_c_file}: ${err.msg()}')
-					exit(1)
-				}
-			}
-			fastc_result := if c_compiler_explicit && effective_c_compiler == 'clang' {
-				compile_v3_fastc_clang_source(fastc_pieces, fastc_generation.units, fastc_bin_file, prefs, environment_c_flags, fastc_generation.c_flags, user_c_flags, link_ld_flags, fastc_sdk_root, c_compiler, is_debug, fastc_generation.uses_threads)
-			} else {
-				compile_v3_fastc_tcc_generation(&fastc_generation, fastc_bin_file, prefs, environment_c_flags, user_c_flags, link_ld_flags, fastc_sdk_root, is_debug, prefs.building_v && !is_debug && !no_cache && !fastc_bench, keep_c, mut prestarted_fastc_units)
-			}
-
-			if (verbose || show_cc) && fastc_result.command.len > 0 {
-				if c_to_stdout {
-					eprintln('  > ${fastc_result.command}')
-				} else {
-					println('  > ${fastc_result.command}')
-				}
-			}
-			if show_c_output && fastc_result.output.len > 0 {
-				header := '======== Output of ${if c_compiler_explicit && effective_c_compiler == 'clang' {
-					'Clang'
-				} else {
-					'TinyCC'
-				}} fastc ========'
-				if c_to_stdout {
-					eprintln(header)
-					eprintln(fastc_result.output.trim_space())
-					eprintln('='.repeat(header.len))
-				} else {
-					println(header)
-					println(fastc_result.output.trim_space())
-					println('='.repeat(header.len))
-				}
-			}
-			if !fastc_result.success {
-				cache_failure_output := v3_fastc_cache_failure_output(fastc_result.output, fastc_result.cached_objects)
-				if v3_recover_from_cache_failure(cache_failure_output, '') {
-					return
-				}
-				if fastc_result.command.len == 0 {
-					eprintln('fastc requires the bundled TinyCC executable')
-				} else if !show_c_output && fastc_result.output.len > 0 {
-					eprintln(fastc_result.output.trim_space())
-				}
-				if v3_cache_failure_artifacts(cache_failure_output).len > 0 {
-					eprintln("Suggestion: the C toolchain keeps rejecting files from V's cache. Run `v wipe-cache`, then repeat your compilation.")
-				}
-				exit(1)
-			}
-			if fastc_bench {
-				total_us := driver_sw.elapsed().microseconds()
-				total_lines := source_file_line_count(fastc_generation.source_paths, map[int]&compiler_token.File{})
-				mloc_per_s := f64(total_lines) / f64(total_us)
-				eprintln('fastc-bench-total: files=${fastc_generation.source_paths.len} lines=${total_lines} total=${f64(total_us) / 1000.0:.2f}ms throughput=${mloc_per_s:.3f} MLOC/s (includes TinyCC)')
-			}
-			b.step('tcc')
-			b.metric('generated C size', fastc_generation.c_size(), 'bytes')
-			if backend_explicit {
-				fastc.write_c_pieces(output_file, fastc_generation.c_pieces) or {
-					eprintln('failed to retain generated fastc output ${output_file}: ${err.msg()}')
-					exit(1)
-				}
-			}
-			if should_run {
-				run_result := run_binary(bin_file, run_args, remove_binary_after_run)
-				if run_result != 0 {
-					exit(run_result)
-				}
-				b.step('run')
-			}
-			b.print_report()
-			return
-		}
-	}
+	prefs.supports_inline_asm = is_checker_fixture
 	// The bundled TinyCC builds the objects of the module cache by default and
 	// links them itself. TinyCC reads only the objects that it wrote, so the build
 	// has to be one that TinyCC completes; the compiler builds itself without them.
@@ -16859,8 +16001,7 @@ fn v3_is_tcc_compilation_failure(c_compiler string, output string) bool {
 
 // v3_cache_artifact_dir_names are the fixed-name persistent caches a build links
 // artifacts out of. Module caches have a hexadecimal root key suffix.
-const v3_cache_artifact_dir_names = ['v3_thirdparty_objs', 'v3_fastc_unit_cache', 'v3_fastc_link_cache',
-	'v3_crun_cache']
+const v3_cache_artifact_dir_names = ['v3_thirdparty_objs', 'v3_crun_cache']
 
 // v3_cache_failure_markers are whole-file rejections: the toolchain could not
 // read or find an input, or saw the same symbol twice. Line-scoped diagnostics
@@ -21728,10 +20869,6 @@ fn real_path_is_in_dir(real_path string, real_dir string) bool {
 // parser honors but the byte-level import scan of discover_eager_selfhost_modules cannot.
 fn skipped_backend_modules(prefs &pref.Preferences) map[string]bool {
 	mut skipped := map[string]bool{}
-	if 'skip_fastc' in prefs.user_defines {
-		skipped['v.gen.fastc'] = true
-		skipped['v.fastcdriver'] = true
-	}
 	if 'skip_arm64' in prefs.user_defines {
 		skipped['v.gen.arm64'] = true
 	}

@@ -172,7 +172,7 @@ fn tool_cache_wipe_targets() []string {
 }
 
 fn is_v3_cache_subdir(name string) bool {
-	if name in ['v3_thirdparty_objs', 'v3_fastc_unit_cache', 'v3_fastc_link_cache', 'v3_crun_cache'] {
+	if name in ['v3_thirdparty_objs', 'v3_crun_cache'] {
 		return true
 	}
 	for prefix in ['v3_module_cache_', 'v3_test_cache_'] {

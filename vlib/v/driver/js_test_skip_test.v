@@ -26,7 +26,7 @@ fn test_js_test_selection_is_disabled_on_every_target() {
 		'android', 'termux', 'ios', 'solaris', 'qnx', 'haiku', 'serenity', 'vinix', 'wasm32_emscripten'] {
 		arch := if target_os == 'wasm32_emscripten' { 'wasm32' } else { 'amd64' }
 		target := pref.target_from(target_os, arch)!
-		for backend in ['c', 'fastc', 'arm64', 'wasm', 'eval', 'js'] {
+		for backend in ['c', 'arm64', 'wasm', 'eval', 'js'] {
 			assert !pref.is_test_file_for_backend(js_test, backend)
 			assert !pref.is_test_file_for_platform(js_test, backend, target)
 			assert pref.get_test_v_files_from_dir_for_target(root, [], backend, target) == [native_test]

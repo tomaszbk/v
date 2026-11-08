@@ -6559,7 +6559,6 @@ fn (g &FlatGen) core_native_source_header_is_redeclared(root string, source stri
 				|| normalized_c_include_arg_path(include_arg) == root + '/vlib/v/pthread_helper.h'
 		}
 		'v/gen/c/output_nix.c.v' { return include_arg == '<sys/uio.h>' }
-		'v/gen/fastc/unit_compile_nix.c.v' { return include_arg == '<signal.h>' }
 		'v/diagserver/diagserver_linux.c.v' {
 			return include_arg in ['<errno.h>', '<signal.h>', '<sys/file.h>', '<sys/wait.h>',
 				'<unistd.h>', '<sys/prctl.h>', '<sys/syscall.h>']
@@ -23884,7 +23883,7 @@ fn (mut g FlatGen) builtin_abi_decls() {
 	// alignment and any effective type of the key storage; optimizing compilers
 	// fold it into a single load, and the hash stays identical across byte
 	// orders. The macro keeps the loads inline for compilers that do not honour
-	// `static inline`, such as TinyCC. This matches the fastc preamble.
+	// `static inline`, such as TinyCC.
 	g.writeln('#define V_WY_LOAD8(p) ((u64)(p)[0] | ((u64)(p)[1] << 8) | ((u64)(p)[2] << 16) | ((u64)(p)[3] << 24) | ((u64)(p)[4] << 32) | ((u64)(p)[5] << 40) | ((u64)(p)[6] << 48) | ((u64)(p)[7] << 56))')
 	g.writeln('static inline u64 wyhash(const void* key, size_t len, u64 seed, const u64* secret) {')
 	g.writeln('\tconst unsigned char* p = (const unsigned char*)key;')

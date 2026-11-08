@@ -149,28 +149,9 @@ jobs:
         run: |
           .\.github\workflows\setup_windows_tool_cache.ps1 -Verify
           v -silent test-cleancode
-      - name: Build and run hello world with -b fastc
-        id: build_and_run_hello_world_with_b_fastc
-        if: ${{ success() && !cancelled() && steps.all_code_is_formatted.outcome == 'success' }}
-        env:
-          # FastC always compiles with the bundled TinyCC and rejects `-cc`.
-          VFLAGS: ''
-        run: |
-          .\v.exe -b fastc -o hello_fastc.exe examples\hello_world.v
-          if ($LASTEXITCODE -ne 0) {
-            throw "v -b fastc failed with exit code $LASTEXITCODE"
-          }
-          $output = (.\hello_fastc.exe | Out-String).Trim()
-          if ($LASTEXITCODE -ne 0) {
-            throw "hello_fastc.exe failed with exit code $LASTEXITCODE"
-          }
-          if ($output -ne 'Hello, World!') {
-            throw "unexpected -b fastc hello world output: '$output'"
-          }
-          Remove-Item hello_fastc.exe, hello_fastc.c -ErrorAction SilentlyContinue
       - name: Pkg-config regressions (TCC)
         id: pkg_config_regression_tcc_dynamic_isolation
-        if: ${{ success() && !cancelled() && steps.build_and_run_hello_world_with_b_fastc.outcome == 'success' }}
+        if: ${{ success() && !cancelled() && steps.all_code_is_formatted.outcome == 'success' }}
         run: |
           .\v.exe -cc tcc -no-retry-compilation test vlib/v/pref/pkgconfig_test.v vlib/v/tests/comptime/comptime_if_pkgconfig_test.v
           if ($LASTEXITCODE -ne 0) {
@@ -185,8 +166,8 @@ jobs:
         if: ${{ success() && !cancelled() && steps.local_windows_ci_runner_regressions.outcome == 'success' }}
         run: |
           # V3 keeps native runtime helpers in separate C objects. Generate
-          # without GC or FastC so this direct link needs only the host runtime.
-          v -gc none -d skip_fastc -o v.c cmd/v
+          # without GC so this direct link needs only the host runtime.
+          v -gc none -o v.c cmd/v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $direct_c_flags = @(
             '-Ithirdparty/stdatomic/win'

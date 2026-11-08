@@ -185,9 +185,7 @@ V_OS_EXECUTE_SCOPE int v_os_exec_capture_start(char *const argv[], int *child_pi
 #endif
 
 // v_os_fd_write_all writes the whole buffer to the fd, retrying short writes.
-// It is defined on all nix platforms because fastc references it
-// unconditionally (see vlib/v/gen/fastc/unit_compile_nix.c.v); guarding it
-// behind __APPLE__ left it undefined at link time on Linux.
+// It is defined on all nix platforms.
 V_OS_EXECUTE_SCOPE void v_os_fd_write_all(int fd, const char *data, size_t len) {
 	while (len > 0) {
 		ssize_t written = write(fd, data, len);

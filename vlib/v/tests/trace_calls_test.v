@@ -158,7 +158,7 @@ fn test_trace_fns_requires_an_argument() {
 }
 
 fn test_trace_calls_rejects_unsupported_backends() {
-	for backend in ['arm64', 'wasm', 'eval', 'fastc'] {
+	for backend in ['arm64', 'wasm', 'eval'] {
 		result := os.exec([vexe, '-new-compiler', '-b', '${backend}', '-trace-calls',
 			'examples/hello_world.v'])
 		assert result.exit_code != 0
