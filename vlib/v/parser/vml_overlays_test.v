@@ -240,3 +240,26 @@ fn test_forward_overlay_component_alias_diagnostic_points_to_vml_property() ! {
 	assert diagnostic.message.contains('component alias `card` before its declaration')
 	assert diagnostic.pos.id in parser.a.template_call_sites
 }
+
+fn test_overlay_component_aliases_are_checked_inside_caller_slot_content() ! {
+	root := os.join_path(os.vtmp_dir(), 'vml_slot_overlay_aliases_${os.getpid()}')
+	os.mkdir_all(root)!
+	defer { os.rmdir_all(root) or {} }
+	os.write_file(os.join_path(root, 'shell.vml'), 'component Shell(content slot) { View { Slot {} } }')!
+	os.write_file(os.join_path(root, 'card.vml'), 'component Card() { View(id: "private") {} }')!
+	view := os.join_path(root, 'view.vml')
+	prefix := 'import Shell\nimport Card\nView { Shell { View {\n'
+	suffix := '\n} } }'
+	os.write_file(view, prefix + '    Card(id: "card")\n    Popover(anchor: "card") {}' + suffix)!
+	valid := parse_compiled_vml_file(view, '', [])!
+	mut compiler := VmlCompiler{}
+	generated := compiler.compile(valid)
+	assert generated.contains('.element().id'), generated
+	os.write_file(view, prefix + '    Popover(anchor: "card") {}\n    Card(id: "card")' + suffix)!
+	parse_compiled_vml_file(view, '', []) or {
+		assert err.msg().contains('component alias `card` before its declaration'), err.msg()
+		assert err.msg().contains(':4:'), err.msg()
+		return
+	}
+	assert false, 'a forward component alias in slot content was accepted'
+}

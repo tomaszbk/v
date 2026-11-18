@@ -430,7 +430,9 @@ fn vml_expr_uses_element_geometry(expr &VmlExpr, scope VmlScope) bool {
 fn validate_vml_geometry_scope(node &VmlNode, parent string, incoming VmlScope, author VmlScope) !VmlScope {
 	if node.caller_content {
 		value := &VmlNode{ ...node, caller_content: false }
-		validate_vml_geometry_scope(value, parent, author, author)!
+		mut lexical := vml_clone_scope(author)
+		lexical.component_aliases << vml_overlay_component_aliases([value])
+		validate_vml_geometry_scope(value, parent, lexical, lexical)!
 		return incoming
 	}
 	mut scope := vml_clone_scope(incoming)
