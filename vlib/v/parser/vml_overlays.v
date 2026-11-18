@@ -27,6 +27,33 @@ fn vml_overlay_local_reference_expr(name string, expr &VmlExpr) bool {
 		&& expr.kind == .literal && expr.quoted && expr.value.len > 0
 }
 
+// A component invocation aliases its actual private root, whose public id is
+// available only after lowering the invocation. Ordinary local ids are known
+// from their author and may still be referenced before their declaration.
+fn vml_overlay_component_aliases(nodes []&VmlNode) []string {
+	mut aliases := []string{}
+	for node in nodes {
+		if node.caller_content || node.tag == 'Repeater' { continue }
+		if node.tag == '__Component' {
+			if node.id.len > 0 { aliases << node.id }
+			continue
+		}
+		aliases << vml_overlay_component_aliases(node.children)
+	}
+	return aliases
+}
+
+fn validate_vml_overlay_component_alias(property VmlProperty, expr &VmlExpr, scope VmlScope) ! {
+	if vml_overlay_local_reference_expr(property.name, expr)
+		&& expr.value in scope.component_aliases && expr.value !in scope.ids {
+		return vml_visual_error(property, 'overlay `${property.name}` references component alias `${expr.value}` before its declaration; declare the component first or pass a resolved control id')
+	}
+	if expr.kind == .conditional {
+		validate_vml_overlay_component_alias(property, expr.right, scope)!
+		validate_vml_overlay_component_alias(property, expr.third, scope)!
+	}
+}
+
 fn vml_overlay_reference_captures(name string, expr &VmlExpr, scope VmlScope) []string {
 	if vml_overlay_local_reference_expr(name, expr) {
 		if named := scope.ids[expr.value] {

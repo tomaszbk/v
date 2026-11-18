@@ -99,6 +99,9 @@ Quoted `anchor`, `owner` and `initial_focus` names resolve within the component'
 namespace, including keyed repeater instances. Values supplied by V expressions
 or an opaque `OverlayConfig` contain resolved control ids; V code can obtain one
 with `component.control_id("local_name")`.
+An overlay's quoted component invocation alias must refer to a component declared
+earlier, because the invocation exposes its actual private root id. Forward
+references to ordinary local controls, including `initial_focus`, remain valid.
 
 `ContextMenu` requests opening through `on_open` after a right click on its anchor;
 the event carries window logical `x`/`y` coordinates for the controlled `point`.
